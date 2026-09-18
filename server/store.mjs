@@ -51,7 +51,9 @@ export function createStore(directory) {
     renameSync(`${path}.tmp`, path);
     state = next;
   }
+  const storedPhrases = JSON.stringify(state.trackedPhrases);
   // Seed the owner's first negative phrases once; afterwards the Phrases tab owns the list.
+  // Seeding must be persisted, or every restart would mint new ids the UI cannot remove.
   state.trackedPhrases ??= DEFAULT_TRACKED_PHRASES.map((phrase) => ({ id: randomUUID(), phrase, kind: 'negative' }));
   state.trackedPhrases = state.trackedPhrases.map((row) => ({ kind: 'negative', ...row }));
   const screen = (message) => screenMessage(message, state.trackedPhrases);
@@ -64,7 +66,8 @@ export function createStore(directory) {
     };
   }
   const rescored = rescreen(state);
-  if (JSON.stringify(rescored) !== JSON.stringify(state)) commit(rescored);
+  if (storedPhrases !== JSON.stringify(state.trackedPhrases) || JSON.stringify(rescored) !== JSON.stringify(state))
+    commit(rescored);
   return {
     snapshot: () => structuredClone(state),
     groups: () => groupOpportunities(structuredClone(state.opportunities), state.groupAssignments),

@@ -2,6 +2,8 @@ import nodemailer from 'nodemailer';
 import { randomUUID } from 'node:crypto';
 
 export const address = (value) => String(value ?? '').match(/[^\s<>"]+@[^\s<>"]+/)?.[0]?.toLowerCase() || '';
+// One @, a dotted domain, nothing SMTP would refuse outright.
+const deliverable = (value) => /^[^\s@<>"(),;:]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(address(value));
 const bracket = (id) => `<${String(id).replace(/[<>]/g, '')}>`;
 
 /**
@@ -11,7 +13,7 @@ const bracket = (id) => `<${String(id).replace(/[<>]/g, '')}>`;
  */
 export function replyEnvelope(row, own) {
   const incoming = (row.history?.length ? row.history : [{ id: row.messageIds.at(-1), from: row.from }])
-    .filter((item) => item.id && address(item.from) && address(item.from) !== own);
+    .filter((item) => item.id && deliverable(item.from) && address(item.from) !== own);
   const latest = incoming.at(-1);
   if (!latest) throw Object.assign(new Error('This pitch has no sender to reply to.'), { status: 409 });
   const root = String(row.threadId).includes('@') ? row.threadId : row.messageIds[0];
@@ -41,8 +43,9 @@ export function createMailer(env = process.env, transport = null) {
           secure: true,
           auth: { user, pass: env.SMTP_PASS },
         }));
+  const from = address(user) || 'preview@jobbylooky.local';
   return {
-    from: address(user) || 'preview@jobbylooky.local',
+    from,
     preview,
     async reply(row, text) {
       const envelope = replyEnvelope(row, address(user));
@@ -50,7 +53,7 @@ export function createMailer(env = process.env, transport = null) {
       return {
         id: String(info.messageId || '').replace(/[<>]/g, ''),
         to: envelope.to,
-        from: address(user),
+        from,
         subject: envelope.subject,
         body: text,
         sentAt: new Date().toISOString(),

@@ -53,3 +53,9 @@ test('a real transport receives the threaded message from the configured account
   assert.equal(sent.id, 'sent@example.com');
   assert.equal(sent.from, 'me@example.com');
 });
+test('malformed sender addresses are never used as a recipient; preview replies name the preview sender', async () => {
+  const bad = { ...row, history: [{ id: 'x@y', from: 'Broken <a@@b>' }] };
+  assert.throws(() => replyEnvelope(bad, 'me@example.com'), /no sender/);
+  const sent = await createMailer({ MAIL_SEND_MODE: 'preview' }).reply(row, 'Hi');
+  assert.equal(sent.from, 'preview@jobbylooky.local');
+});

@@ -255,3 +255,8 @@ test('a preview (unsent) reply never turns a later message into a reply-back', (
     assert.equal(row.status, 'New');
     assert.equal(row.replyReceivedAt, undefined);
   }));
+test('seeded phrases are written on first start, so their ids survive a restart', () =>
+  withStore((store, dir) => {
+    const ids = store.phrases().map((p) => p.id);
+    assert.deepEqual(createStore(dir).phrases().map((p) => p.id), ids);
+  }));
