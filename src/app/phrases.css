@@ -1,0 +1,9 @@
+.phrases { max-width: 560px; padding: 4px 0; }
+.phrases h2 { font-size: 12px; margin: 0 0 10px; }
+.phrases form { display: flex; gap: 8px; margin-bottom: 14px; }
+.phrases input { flex: 1; min-width: 0; background: #0b100d; color: #d1e1d6; border: 1px solid #2c3d33; border-radius: 3px; padding: 6px 8px; font: inherit; font-size: 12px; }
+.phrases ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid #1f2b24; }
+.phrases li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid #1f2b24; font-size: 12px; }
+.phrases .phrase { display: flex; gap: 6px; align-items: center; color: #ffb4ab; font-weight: 700; }
+.phrase-empty { color: #92aa9b; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

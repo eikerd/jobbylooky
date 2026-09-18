@@ -187,3 +187,22 @@ test('imports without an id or a valid date are rejected with a clear 400', () =
     assert.throws(() => store.import({ not: 'a list' }), (error) => error.status === 400);
     assert.equal(store.import([{ ...message, subject: undefined, body: undefined }]), 1);
   }));
+test('tracked phrases are seeded, flag matching pitches as Mismatch and keep decisions', () =>
+  withStore((store, dir) => {
+    store.import([{ ...message, subject: 'Senior Backend JAVA   Engineer (Remote)' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.update(id, { status: 'Maybe' });
+    let row = store.snapshot().opportunities[0];
+    assert.deepEqual(store.phrases().map((p) => p.phrase), ['Backend Java Engineer', 'Java Engineer']);
+    assert.equal(row.fit, 'Mismatch');
+    assert.match(row.reasons[0].text, /Tracked phrase: “Backend Java Engineer”/);
+    assert.match(row.reasons[0].evidence, /Backend JAVA Engineer/);
+    for (const phrase of store.phrases()) store.removePhrase(phrase.id);
+    row = store.snapshot().opportunities[0];
+    assert.ok(!row.reasons.some((reason) => reason.text.startsWith('Tracked phrase')));
+    assert.equal(row.status, 'Maybe');
+    store.addPhrase({ phrase: '  senior backend ' });
+    assert.throws(() => store.addPhrase({ phrase: 'Senior Backend' }), (error) => error.status === 409);
+    assert.throws(() => store.addPhrase({ phrase: 'x' }), (error) => error.status === 400);
+    assert.equal(createStore(dir).snapshot().opportunities[0].fit, 'Mismatch');
+  }));

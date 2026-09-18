@@ -5,7 +5,8 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
 import { formatEmailBody } from './email-body';
-import type { Opportunity, JobGroup } from './models';
+import type { Opportunity, JobGroup, TrackedPhrase } from './models';
+import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
 
@@ -19,9 +20,9 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, Profiles, SourceIcon],
+  imports: [FormsModule, DatePipe, Profiles, SourceIcon, Highlight],
   templateUrl: './app.html',
-  styleUrl: './app.css',
+  styleUrls: ['./app.css', './phrases.css'],
 })
 export class App implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
@@ -39,7 +40,14 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | null>(null);
+  readonly profileMode = computed(() => {
+    const mode = this.directoryMode();
+    return mode === 'recruiters' || mode === 'companies' ? mode : null;
+  });
+  readonly phrases = signal<TrackedPhrase[]>([]);
+  readonly phraseList = computed(() => this.phrases().map((row) => row.phrase));
+  phraseDraft = '';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
   readonly connection = signal<Connection | null>(null);
@@ -122,13 +130,15 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection] = await Promise.all([
+      const [rows, connection, phrases] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
+        this.request<TrackedPhrase[]>('phrases'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision) return;
       this.jobGroups.set(rows);
+      this.phrases.set(phrases);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -161,7 +171,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -179,6 +189,32 @@ export class App implements OnDestroy {
     this.directoryMode.set(null);
     this.folder.set('All opportunities');
     this.select(row);
+  }
+  // Changing a phrase re-screens every pitch on the server, so fits are reloaded too.
+  async addPhrase() {
+    const phrase = this.phraseDraft.trim();
+    if (phrase.length < 2) return;
+    if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase })))
+      this.phraseDraft = '';
+  }
+  removePhrase(row: TrackedPhrase) {
+    void this.changePhrases(() => this.request<TrackedPhrase[]>(`phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
+  }
+  private async changePhrases(change: () => Promise<TrackedPhrase[]>) {
+    if (this.busy()) return false;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      this.phrases.set(await change());
+      this.jobGroups.set(await this.request<JobGroup[]>('groups'));
+      return true;
+    } catch (error) {
+      this.error.set(this.message(error));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
   }
   async save(status = this.editStatus) {
     const row = this.selected();

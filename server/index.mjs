@@ -115,9 +115,14 @@ export const server = createServer(async (req, res) => {
         nextCheck,
       });
     }
+    if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
+      return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
       if (!req.headers['content-type']?.startsWith('application/json'))
         return json(415, { error: 'JSON content is required.' });
+      if (req.method === 'POST' && url.pathname === '/api/phrases')
+        return json(201, store.addPhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')
         return json(200, store.group(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/sync') {

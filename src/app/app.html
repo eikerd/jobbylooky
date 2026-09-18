@@ -33,6 +33,9 @@
       <button type="button" [class.active]="directoryMode() === 'companies'" [attr.aria-current]="directoryMode() === 'companies' ? 'page' : null" (click)="openDirectory('companies')">
         <span class="nav-icon" aria-hidden="true">▦</span>Companies
       </button>
+      <button type="button" [class.active]="directoryMode() === 'phrases'" [attr.aria-current]="directoryMode() === 'phrases' ? 'page' : null" (click)="openDirectory('phrases')">
+        <span class="nav-icon" aria-hidden="true">×</span>Phrases
+      </button>
     </nav>
     <div class="connection">
       <div class="connection-heading">
@@ -54,7 +57,7 @@
   </aside>
   <main>
     <header class="page-header">
-      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
       <div class="header-actions">
         <button
           class="button secondary"
@@ -109,7 +112,26 @@
     }
     @if (loading()) {
       <div class="empty" role="status">Loading your opportunities…</div>
-    } @else if (directoryMode(); as mode) {
+    } @else if (directoryMode() === 'phrases') {
+      <section class="phrases" aria-labelledby="phrases-title">
+        <h2 id="phrases-title">Negative phrases</h2>
+        <form (ngSubmit)="addPhrase()">
+          <label class="visually-hidden" for="new-phrase">Phrase to track</label>
+          <input id="new-phrase" name="phrase" [(ngModel)]="phraseDraft" placeholder="e.g. Java Engineer" maxlength="100" autocomplete="off" />
+          <button class="button primary" type="submit" [disabled]="busy() || phraseDraft.trim().length < 2">Track</button>
+        </form>
+        <ul>
+          @for (row of phrases(); track row.id) {
+            <li>
+              <span class="phrase"><span class="reason-icon fail" aria-hidden="true">×</span>{{ row.phrase }}</span>
+              <button class="button secondary" type="button" [disabled]="busy()" (click)="removePhrase(row)" [attr.aria-label]="'Stop tracking ' + row.phrase">Remove</button>
+            </li>
+          } @empty {
+            <li class="phrase-empty">No phrases tracked.</li>
+          }
+        </ul>
+      </section>
+    } @else if (profileMode(); as mode) {
       <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
     } @else {
       <div class="workspace">
@@ -125,7 +147,7 @@
               (click)="select(row)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">{{ row.title }}</span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading"><app-hl [text]="row.title" [phrases]="phraseList()" /></span></span>
                 <span class="received">
                   <strong>{{ ageLabel(row.receivedAt) }}</strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -188,7 +210,7 @@
                 >
               }
             </div>
-            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'">{{ row.title }}</h2>
+            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phraseList()" /></h2>
             @if (selectedGroup(); as group) {
               @if (group.history.occurrences > 1) {
                 <section class="posting-summary" aria-label="Posting history">
@@ -300,7 +322,7 @@
                     <div>
                       <p>{{ reason.text }}</p>
                       @if (reason.evidence) {
-                        <blockquote>{{ sourceText(reason.evidence) }}</blockquote>
+                        <blockquote><app-hl [text]="sourceText(reason.evidence)" [phrases]="phraseList()" /></blockquote>
                       }
                     </div>
                   </li>
@@ -342,9 +364,9 @@
               <div class="email-reading">
                 @for (block of emailBlocks(); track $index) {
                   @if (block.kind === 'field') {
-                    <p class="email-field">{{ block.label }}: {{ block.value }}</p>
+                    <p class="email-field"><app-hl [text]="block.label + ': ' + block.value" [phrases]="phraseList()" /></p>
                   } @else {
-                    <pre>{{ block.text }}</pre>
+                    <pre><app-hl [text]="block.text" [phrases]="phraseList()" /></pre>
                   }
                 }
               </div>

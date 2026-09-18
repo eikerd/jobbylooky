@@ -36,3 +36,7 @@ export interface JobGroup {
     timeline:{id:string;pitchId:string;from:string;receivedAt:string;gapDays:number|null}[];
   };
 }
+export interface TrackedPhrase {
+  id: string;
+  phrase: string;
+}

@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen, STATUSES } from './screen.mjs';
+import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 
@@ -36,12 +36,19 @@ export function createStore(directory) {
     renameSync(`${path}.tmp`, path);
     state = next;
   }
+  // Seed the owner's first negative phrases once; afterwards the Phrases tab owns the list.
+  state.trackedPhrases ??= DEFAULT_TRACKED_PHRASES.map((phrase) => ({ id: randomUUID(), phrase }));
+  const screen = (message) => screenMessage(message, state.trackedPhrases.map((row) => row.phrase));
   // Apply updated screening preferences to cached mail too, including rows
   // older than the worker's import window. User decisions remain untouched.
-  const rescored = {
-    ...state,
-    opportunities: state.opportunities.map(row => ({ ...row, ...screen({ ...row, isHtml: false }) })),
-  };
+  function rescreen(next) {
+    const phrases = next.trackedPhrases.map((row) => row.phrase);
+    return {
+      ...next,
+      opportunities: next.opportunities.map((row) => ({ ...row, ...screenMessage({ ...row, isHtml: false }, phrases) })),
+    };
+  }
+  const rescored = rescreen(state);
   if (JSON.stringify(rescored) !== JSON.stringify(state)) commit(rescored);
   return {
     snapshot: () => structuredClone(state),
@@ -135,6 +142,22 @@ export function createStore(directory) {
       if (account) next.account = account;
       commit(next);
       return added;
+    },
+    phrases: () => structuredClone(state.trackedPhrases),
+    addPhrase(input) {
+      const phrase = typeof input?.phrase === 'string' ? input.phrase.replace(/\s+/g, ' ').trim() : '';
+      if (phrase.length < 2 || phrase.length > 100)
+        throw Object.assign(new Error('A phrase must be 2–100 characters.'), { status: 400 });
+      if (state.trackedPhrases.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
+        throw Object.assign(new Error('That phrase is already tracked.'), { status: 409 });
+      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase }] }));
+      return structuredClone(state.trackedPhrases);
+    },
+    removePhrase(id) {
+      if (!state.trackedPhrases.some((row) => row.id === id))
+        throw Object.assign(new Error('Phrase not found.'), { status: 404 });
+      commit(rescreen({ ...state, trackedPhrases: state.trackedPhrases.filter((row) => row.id !== id) }));
+      return structuredClone(state.trackedPhrases);
     },
     update(id, patch) {
       const next = structuredClone(state);

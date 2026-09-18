@@ -47,7 +47,29 @@ export function emailText(body, isHtml = false) {
     : body;
 }
 
-export function screen(message) {
+/** Owner-maintained negative phrases; seeded once, then edited in the Phrases tab. */
+export const DEFAULT_TRACKED_PHRASES = ['Backend Java Engineer', 'Java Engineer'];
+
+/** Case-insensitive whole-word match that tolerates any whitespace between words. */
+export function phrasePattern(phrase) {
+  const words = phrase.trim().split(/\s+/).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`(?<![\\w])${words.join('\\s+')}(?![\\w])`, 'i');
+}
+
+function trackedPhraseReasons(text, phrases) {
+  return phrases.flatMap((phrase) => {
+    const pattern = phrasePattern(phrase);
+    const match = pattern.exec(text);
+    if (!match) return [];
+    // Evidence is the whole source line(s) around the match, so a phrase split by a line break still shows.
+    const start = text.lastIndexOf('\n', match.index) + 1;
+    const end = text.indexOf('\n', match.index + match[0].length);
+    const evidence = text.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ').trim();
+    return [{ kind: 'fail', text: `Tracked phrase: “${phrase}”.`, evidence }];
+  });
+}
+
+export function screen(message, trackedPhrases = []) {
   const body = jobSection(plainText(message.body, message.isHtml));
   const title =
     field(body, 'Job Title|Position|Profile|Title|Role(?! Overview)').replace(/^[-:]+\s*/, '') ||
@@ -280,9 +302,14 @@ export function screen(message) {
       text: 'Possible Chase: Raleigh together with an Ohio location matches the pattern you identified. This is an unverified clue; confirm the client with the recruiter.',
       evidence: locationContext,
     });
+  const trackedReasons = trackedPhraseReasons(
+    `${message.subject}\n${plainText(message.body, message.isHtml)}`,
+    trackedPhrases,
+  );
+  reasons.unshift(...trackedReasons);
   const fit = multiRole
     ? 'Review'
-    : javaRequired || microsoftRequired || locationMismatch
+    : javaRequired || microsoftRequired || locationMismatch || trackedReasons.length > 0
       ? 'Mismatch'
       : message.truncated ||
           javaUnclear ||
