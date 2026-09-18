@@ -30,7 +30,8 @@ function validMessages(messages) {
 // Once a reply has gone out, a later message in the thread from someone else is their answer.
 // The owner chose: move New/Pursue to Maybe and badge the row; other decisions stay.
 function noteReplyBack(row, message) {
-  const lastReply = row.replies?.at(-1);
+  // A preview reply was never sent, so nothing that follows can be an answer to it.
+  const lastReply = row.replies?.filter((reply) => !reply.preview).at(-1);
   if (!lastReply || message.receivedAt <= lastReply.sentAt) return;
   const sender = emailAddress(message.from);
   if (!sender || row.replies.some((reply) => reply.from === sender)) return;

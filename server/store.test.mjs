@@ -245,3 +245,13 @@ test('an answer after my reply moves New/Pursue to Maybe and badges the row; oth
     assert.equal(row.status, 'Applied');
     assert.equal(row.replyReceivedAt, '2026-09-19T12:00:00.000Z');
   }));
+test('a preview (unsent) reply never turns a later message into a reply-back', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@p', threadId: 'root@p', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'preview-1@jobbylooky.local', from: '', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z', preview: true });
+    store.import([{ ...message, id: 'later@p', threadId: 'root@p', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'New');
+    assert.equal(row.replyReceivedAt, undefined);
+  }));

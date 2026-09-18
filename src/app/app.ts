@@ -63,6 +63,7 @@ export class App implements OnDestroy {
   phraseDraft = '';
   readonly replying = signal(false);
   replyDraft = '';
+  private replyTemplate = '';
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
@@ -164,7 +165,9 @@ export class App implements OnDestroy {
     return error instanceof Error ? error.message : 'Something went wrong. Please retry.';
   }
   canLeave() {
-    return !this.dirty() || window.confirm('Discard your unsaved changes?');
+    // An edited reply counts as unsaved work; the untouched greeting does not.
+    const replyEdited = this.replying() && this.replyDraft !== this.replyTemplate;
+    return (!this.dirty() && !replyEdited) || window.confirm('Discard your unsaved changes?');
   }
   select(row: Opportunity) {
     if (this.busy() || !this.canLeave()) return;
@@ -210,8 +213,13 @@ export class App implements OnDestroy {
   }
   startReply(row: Opportunity) {
     const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
-    this.replyDraft = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
+    this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
+    this.replyDraft = this.replyTemplate;
     this.replying.set(true);
+  }
+  cancelReply() {
+    if (this.replyDraft !== this.replyTemplate && !window.confirm('Discard this reply?')) return;
+    this.replying.set(false);
   }
   async sendReply() {
     const row = this.selected();

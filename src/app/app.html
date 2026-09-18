@@ -408,7 +408,7 @@
                   <textarea id="reply-body" name="replyBody" rows="7" [(ngModel)]="replyDraft"></textarea>
                   <div class="reply-actions">
                     <button class="button primary" type="submit" [disabled]="busy() || !replyDraft.trim()">Send</button>
-                    <button class="button secondary" type="button" [disabled]="busy()" (click)="replying.set(false)">Cancel</button>
+                    <button class="button secondary" type="button" [disabled]="busy()" (click)="cancelReply()">Cancel</button>
                   </div>
                 </form>
               } @else {
