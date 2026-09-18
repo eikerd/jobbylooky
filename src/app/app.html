@@ -201,6 +201,9 @@
                 @if (row.status !== 'New') {
                   <span class="decision">{{ row.status }}</span>
                 }
+                @if (row.replyReceivedAt) {
+                  <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
+                }
               </span>
               @if (group.history.occurrences > 1) {
                 <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</span>
@@ -385,6 +388,33 @@
                 Pass
               </button>
             </div>
+            <section class="reply" aria-labelledby="reply-title">
+              <h3 id="reply-title">Reply</h3>
+              @if (row.replyReceivedAt) {
+                <p class="reply-back">↩ They replied {{ row.replyReceivedAt | date: 'MMM d, h:mm a' }}</p>
+              }
+              @for (sent of row.replies ?? []; track sent.id) {
+                <div class="sent-reply">
+                  <p class="sent-meta">You wrote {{ sent.sentAt | date: 'MMM d, h:mm a' }} to {{ sent.to }}@if (sent.preview) { · preview, not sent}</p>
+                  <pre>{{ sent.body }}</pre>
+                </div>
+              }
+              @if (!connection()?.canReply) {
+                <p class="reply-off">Sending is not set up on this server.</p>
+              } @else if (replying()) {
+                <form (ngSubmit)="sendReply()">
+                  <p class="reply-to">To {{ row.replies?.at(-1)?.to ?? row.from }}</p>
+                  <label class="visually-hidden" for="reply-body">Reply</label>
+                  <textarea id="reply-body" name="replyBody" rows="7" [(ngModel)]="replyDraft"></textarea>
+                  <div class="reply-actions">
+                    <button class="button primary" type="submit" [disabled]="busy() || !replyDraft.trim()">Send</button>
+                    <button class="button secondary" type="button" [disabled]="busy()" (click)="replying.set(false)">Cancel</button>
+                  </div>
+                </form>
+              } @else {
+                <button class="button secondary" type="button" (click)="startReply(row)">↩ Reply</button>
+              }
+            </section>
             <section class="email-source" aria-labelledby="email-title">
               <h3 id="email-title">Email body</h3>
               @if (row.truncated) {

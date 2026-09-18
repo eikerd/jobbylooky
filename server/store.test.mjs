@@ -226,3 +226,22 @@ test('non-ISO receivedAt values are normalised so thread order stays chronologic
     assert.equal(row.receivedAt.slice(0, 10), new Date('10/01/2026').toISOString().slice(0, 10));
     assert.deepEqual(row.history.map((item) => item.id), ['a@x', 'b@x']);
   }));
+test('an answer after my reply moves New/Pursue to Maybe and badges the row; other statuses stay', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@r', threadId: 'root@r', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    // My own copy arriving in the thread is not their answer.
+    store.import([{ ...message, id: 'mine2@me', threadId: 'root@r', source: 'mail-worker', from: 'Me <me@example.com>', receivedAt: '2026-09-18T11:00:00.000Z' }]);
+    assert.equal(store.snapshot().opportunities[0].status, 'New');
+    store.import([{ ...message, id: 'answer@r', threadId: 'root@r', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    let row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Maybe');
+    assert.equal(row.replyReceivedAt, '2026-09-18T12:00:00.000Z');
+    assert.equal(row.replies.length, 1);
+    store.update(id, { status: 'Applied' });
+    store.import([{ ...message, id: 'again@r', threadId: 'root@r', source: 'mail-worker', receivedAt: '2026-09-19T12:00:00.000Z' }]);
+    row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Applied');
+    assert.equal(row.replyReceivedAt, '2026-09-19T12:00:00.000Z');
+  }));

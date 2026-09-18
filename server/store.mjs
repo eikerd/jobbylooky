@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
+import { address as emailAddress } from './mailer.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -24,6 +25,17 @@ function validMessages(messages) {
       body: String(message.body ?? ''),
     };
   });
+}
+
+// Once a reply has gone out, a later message in the thread from someone else is their answer.
+// The owner chose: move New/Pursue to Maybe and badge the row; other decisions stay.
+function noteReplyBack(row, message) {
+  const lastReply = row.replies?.at(-1);
+  if (!lastReply || message.receivedAt <= lastReply.sentAt) return;
+  const sender = emailAddress(message.from);
+  if (!sender || row.replies.some((reply) => reply.from === sender)) return;
+  row.replyReceivedAt = message.receivedAt;
+  if (['New', 'Pursue'].includes(row.status)) row.status = 'Maybe';
 }
 
 export function createStore(directory) {
@@ -111,6 +123,7 @@ export function createStore(directory) {
         }
         if (existing) {
           existing.messageIds.push(message.id);
+          noteReplyBack(existing, message);
           // Re-evaluate the accumulated thread without discarding the user's decision or notes.
           existing.body += `\n\n${screen(message).body}`;
           existing.receivedAt =
@@ -144,6 +157,14 @@ export function createStore(directory) {
       if (account) next.account = account;
       commit(next);
       return added;
+    },
+    recordReply(id, reply) {
+      const next = structuredClone(state);
+      const row = next.opportunities.find((item) => item.id === id);
+      if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
+      row.replies = [...(row.replies ?? []), reply];
+      commit(next);
+      return structuredClone(row);
     },
     phrases: () => structuredClone(state.trackedPhrases),
     addPhrase(input) {

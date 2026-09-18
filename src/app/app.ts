@@ -15,6 +15,8 @@ interface Connection {
   syncing: boolean;
   error: string;
   lastSync: string | null;
+  canReply?: boolean;
+  replyPreview?: boolean;
 }
 type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
@@ -22,7 +24,7 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
   selector: 'app-root',
   imports: [FormsModule, DatePipe, Profiles, SourceIcon, Highlight],
   templateUrl: './app.html',
-  styleUrls: ['./app.css', './phrases.css'],
+  styleUrls: ['./app.css', './phrases.css', './reply.css'],
 })
 export class App implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
@@ -59,6 +61,8 @@ export class App implements OnDestroy {
     return byPhrase;
   });
   phraseDraft = '';
+  readonly replying = signal(false);
+  replyDraft = '';
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
@@ -174,6 +178,8 @@ export class App implements OnDestroy {
     this.notice.set('');
     this.linking.set(false);
     this.linkTarget = '';
+    this.replying.set(false);
+    this.replyDraft = '';
   }
   changeFolder(folder: Folder) {
     if (this.busy() || !this.canLeave()) return;
@@ -201,6 +207,32 @@ export class App implements OnDestroy {
     this.directoryMode.set(null);
     this.folder.set('All opportunities');
     this.select(row);
+  }
+  startReply(row: Opportunity) {
+    const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
+    this.replyDraft = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
+    this.replying.set(true);
+  }
+  async sendReply() {
+    const row = this.selected();
+    const body = this.replyDraft.trim();
+    if (!row || !body || this.busy()) return;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', { body });
+      this.jobGroups.update((groups) => groups.map((group) => ({
+        ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),
+      })));
+      this.replying.set(false);
+      this.replyDraft = '';
+      this.notice.set(`Reply sent to ${this.sender(updated.replies?.at(-1)?.to ?? row.from)}.`);
+    } catch (error) {
+      this.error.set(this.message(error));
+    } finally {
+      this.busy.set(false);
+    }
   }
   // Changing a phrase re-screens every pitch on the server, so fits are reloaded too.
   async addPhrase() {

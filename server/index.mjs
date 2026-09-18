@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
+import { createMailer } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
 const workerUrl = process.env.MAIL_DATABASE_URL || '';
+const mailer = createMailer();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 if (existsSync(seed)) {
@@ -107,6 +109,8 @@ export const server = createServer(async (req, res) => {
       const { account, lastSync, importedAt } = store.snapshot();
       return json(200, {
         configured: Boolean(workerUrl),
+        canReply: Boolean(mailer),
+        replyPreview: Boolean(mailer?.preview),
         syncing,
         error: syncError,
         account,
@@ -128,6 +132,18 @@ export const server = createServer(async (req, res) => {
       if (req.method === 'POST' && url.pathname === '/api/sync') {
         if (!workerUrl) return json(409, { error: 'The mail-worker database is not connected.' });
         return json(200, { added: await sync() });
+      }
+      const replyPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/reply$/);
+      if (req.method === 'POST' && replyPath) {
+        if (!mailer) return json(409, { error: 'Sending is not set up: SMTP_USER and SMTP_PASS are missing.' });
+        const input = await body(req);
+        if (typeof input.body !== 'string' || !input.body.trim() || input.body.length > 10000)
+          return json(400, { error: 'Write a reply (up to 10,000 characters).' });
+        const id = decodeURIComponent(replyPath[1]);
+        const row = store.snapshot().opportunities.find((item) => item.id === id);
+        if (!row) return json(404, { error: 'Opportunity not found.' });
+        // The recipient always comes from the stored pitch, never from the request.
+        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim())));
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/'))
         return json(

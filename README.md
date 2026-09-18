@@ -19,6 +19,18 @@ Open http://127.0.0.1:4317/jobs/. `npm run dev` rebuilds the Angular app while t
 
 Without `MAIL_DATABASE_URL`, the app still supports pasted emails and previously imported messages, but automatic monitoring is disabled. `PUBLIC_ORIGIN` defaults to the local origin; `BIND_HOST`, `PORT`, and `DATA_DIR` are optional deployment settings.
 
+## Replying to recruiters
+
+A pitch's **Reply** box sends a threaded answer through Gmail SMTP (`In-Reply-To`/`References` with the thread root first, so the mail-worker files the recruiter's answer under the same row). The recipient always comes from the stored pitch. When a later message in that thread arrives from someone else, the row gets a "↩ replied" badge and moves from New or Pursue to Maybe; other statuses are left alone.
+
+Sending needs the Gmail app password, from 1Password (the mail-worker's item), in the environment:
+
+```bash
+SMTP_USER="$(op read op://chungus/mail-worker/IMAP_USER)" SMTP_PASS="$(op read op://chungus/mail-worker/IMAP_PASS)" MAIL_DATABASE_URL=http://192.168.42.180:8082 npm start
+```
+
+Without them the Reply box says sending is not set up. `MAIL_SEND_MODE=preview` records replies without sending anything, for rendering and testing.
+
 ## Existing mail-worker integration
 
 Gmail → Chungus's existing IMAP mail-worker → `budget-lens_mail_messages` → Jobbylooky.

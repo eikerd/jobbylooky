@@ -21,6 +21,17 @@ export interface Opportunity {
   messageIds: string[];
   history?: { id:string; receivedAt:string; from:string }[];
   pay: { min: number; max: number | null; period: string } | null;
+  replies?: SentReply[];
+  replyReceivedAt?: string;
+}
+export interface SentReply {
+  id: string;
+  to: string;
+  from: string;
+  subject: string;
+  body: string;
+  sentAt: string;
+  preview?: boolean;
 }
 export interface JobGroup {
   id: string;
