@@ -1,8 +1,43 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen, STATUSES } from './screen.mjs';
+import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
+import { address as emailAddress } from './mailer.mjs';
+
+/** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
+function validMessages(messages) {
+  if (!Array.isArray(messages))
+    throw Object.assign(new Error('Import must be a list of messages.'), { status: 400 });
+  return messages.map((message, index) => {
+    const valid =
+      typeof message?.id === 'string' && message.id &&
+      typeof message.receivedAt === 'string' && !Number.isNaN(Date.parse(message.receivedAt));
+    if (!valid)
+      throw Object.assign(new Error(`Message ${index + 1} needs an id and a valid receivedAt date.`), { status: 400 });
+    return {
+      ...message,
+      // Lexical sorting and "latest" comparisons below need canonical ISO strings.
+      receivedAt: new Date(Date.parse(message.receivedAt)).toISOString(),
+      threadId: message.threadId || message.id,
+      subject: String(message.subject ?? ''),
+      from: String(message.from ?? ''),
+      body: String(message.body ?? ''),
+    };
+  });
+}
+
+// Once a reply has gone out, a later message in the thread from someone else is their answer.
+// The owner chose: move New/Pursue to Maybe and badge the row; other decisions stay.
+function noteReplyBack(row, message) {
+  // A preview reply was never sent, so nothing that follows can be an answer to it.
+  const lastReply = row.replies?.filter((reply) => !reply.preview).at(-1);
+  if (!lastReply || message.receivedAt <= lastReply.sentAt) return;
+  const sender = emailAddress(message.from);
+  if (!sender || row.replies.some((reply) => reply.from === sender)) return;
+  row.replyReceivedAt = message.receivedAt;
+  if (['New', 'Pursue'].includes(row.status)) row.status = 'Maybe';
+}
 
 export function createStore(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -16,13 +51,23 @@ export function createStore(directory) {
     renameSync(`${path}.tmp`, path);
     state = next;
   }
+  const storedPhrases = JSON.stringify(state.trackedPhrases);
+  // Seed the owner's first negative phrases once; afterwards the Phrases tab owns the list.
+  // Seeding must be persisted, or every restart would mint new ids the UI cannot remove.
+  state.trackedPhrases ??= DEFAULT_TRACKED_PHRASES.map((phrase) => ({ id: randomUUID(), phrase, kind: 'negative' }));
+  state.trackedPhrases = state.trackedPhrases.map((row) => ({ kind: 'negative', ...row }));
+  const screen = (message) => screenMessage(message, state.trackedPhrases);
   // Apply updated screening preferences to cached mail too, including rows
   // older than the worker's import window. User decisions remain untouched.
-  const rescored = {
-    ...state,
-    opportunities: state.opportunities.map(row => ({ ...row, ...screen({ ...row, isHtml: false }) })),
-  };
-  if (JSON.stringify(rescored) !== JSON.stringify(state)) commit(rescored);
+  function rescreen(next) {
+    return {
+      ...next,
+      opportunities: next.opportunities.map((row) => ({ ...row, ...screenMessage({ ...row, isHtml: false }, next.trackedPhrases) })),
+    };
+  }
+  const rescored = rescreen(state);
+  if (storedPhrases !== JSON.stringify(state.trackedPhrases) || JSON.stringify(rescored) !== JSON.stringify(state))
+    commit(rescored);
   return {
     snapshot: () => structuredClone(state),
     groups: () => groupOpportunities(structuredClone(state.opportunities), state.groupAssignments),
@@ -49,7 +94,7 @@ export function createStore(directory) {
     import(messages, { synced = false, account = null } = {}) {
       const next = structuredClone(state);
       let added = 0;
-      for (const message of messages.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
+      for (const message of validMessages(messages).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
         const id = `${message.source || message.account || account || 'manual'}:${message.threadId}`;
         const existing = next.opportunities.find(
           (row) =>
@@ -63,9 +108,14 @@ export function createStore(directory) {
           const recorded = existing.history.find(item => item.id === message.id);
           if (recorded) Object.assign(recorded, occurrence);
           else existing.history.push(occurrence);
-          const address = (value) => value.match(/[^\s<>]+@[^\s<>]+/)?.[0]?.toLowerCase();
+          const address = (value) => String(value ?? '').match(/[^\s<>]+@[^\s<>]+/)?.[0]?.toLowerCase();
           const incomingAddress = address(message.from);
-          if (incomingAddress && existing.from.toLowerCase() === incomingAddress && message.from.toLowerCase() !== incomingAddress) existing.from = message.from;
+          if (
+            incomingAddress &&
+            existing.from?.toLowerCase() === incomingAddress &&
+            message.from.toLowerCase() !== incomingAddress
+          )
+            existing.from = message.from;
         }
         if (existing?.messageIds.includes(message.id)) {
           // A later replay may restore a formerly truncated body. Never replace
@@ -77,6 +127,7 @@ export function createStore(directory) {
         }
         if (existing) {
           existing.messageIds.push(message.id);
+          noteReplyBack(existing, message);
           // Re-evaluate the accumulated thread without discarding the user's decision or notes.
           existing.body += `\n\n${screen(message).body}`;
           existing.receivedAt =
@@ -110,6 +161,33 @@ export function createStore(directory) {
       if (account) next.account = account;
       commit(next);
       return added;
+    },
+    recordReply(id, reply) {
+      const next = structuredClone(state);
+      const row = next.opportunities.find((item) => item.id === id);
+      if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
+      row.replies = [...(row.replies ?? []), reply];
+      commit(next);
+      return structuredClone(row);
+    },
+    phrases: () => structuredClone(state.trackedPhrases),
+    addPhrase(input) {
+      const phrase = typeof input?.phrase === 'string' ? input.phrase.replace(/\s+/g, ' ').trim() : '';
+      if (phrase.length < 2 || phrase.length > 100)
+        throw Object.assign(new Error('A phrase must be 2–100 characters.'), { status: 400 });
+      const kind = input.kind ?? 'negative';
+      if (!PHRASE_KINDS.includes(kind))
+        throw Object.assign(new Error('A phrase is either negative or positive.'), { status: 400 });
+      if (state.trackedPhrases.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
+        throw Object.assign(new Error('That phrase is already tracked.'), { status: 409 });
+      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase, kind }] }));
+      return structuredClone(state.trackedPhrases);
+    },
+    removePhrase(id) {
+      if (!state.trackedPhrases.some((row) => row.id === id))
+        throw Object.assign(new Error('Phrase not found.'), { status: 404 });
+      commit(rescreen({ ...state, trackedPhrases: state.trackedPhrases.filter((row) => row.id !== id) }));
+      return structuredClone(state.trackedPhrases);
     },
     update(id, patch) {
       const next = structuredClone(state);

@@ -14,7 +14,7 @@
       "name": "Jobbylooky browser (server already running)",
       "type": "chrome",
       "request": "launch",
-      "url": "http://127.0.0.1:4317/jobs/",
+      "url": "http://127.0.0.1:4317/jobby/",
       "webRoot": "${workspaceFolder}"
     }
   ]

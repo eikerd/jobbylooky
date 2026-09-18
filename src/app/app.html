@@ -33,6 +33,9 @@
       <button type="button" [class.active]="directoryMode() === 'companies'" [attr.aria-current]="directoryMode() === 'companies' ? 'page' : null" (click)="openDirectory('companies')">
         <span class="nav-icon" aria-hidden="true">▦</span>Companies
       </button>
+      <button type="button" [class.active]="directoryMode() === 'phrases'" [attr.aria-current]="directoryMode() === 'phrases' ? 'page' : null" (click)="openDirectory('phrases')">
+        <span class="nav-icon" aria-hidden="true">×</span>Phrases
+      </button>
     </nav>
     <div class="connection">
       <div class="connection-heading">
@@ -54,7 +57,7 @@
   </aside>
   <main>
     <header class="page-header">
-      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
       <div class="header-actions">
         <button
           class="button secondary"
@@ -109,7 +112,55 @@
     }
     @if (loading()) {
       <div class="empty" role="status">Loading your opportunities…</div>
-    } @else if (directoryMode(); as mode) {
+    } @else if (directoryMode() === 'phrases') {
+      <section class="phrases" aria-labelledby="phrases-title">
+        <h2 id="phrases-title" class="visually-hidden">Tracked phrases</h2>
+        <form (ngSubmit)="addPhrase()">
+          <label class="visually-hidden" for="new-phrase">Phrase to track</label>
+          <input id="new-phrase" name="phrase" [(ngModel)]="phraseDraft" placeholder="e.g. Java Engineer" maxlength="100" autocomplete="off" />
+          <label class="visually-hidden" for="new-phrase-kind">Phrase kind</label>
+          <select id="new-phrase-kind" name="kind" [(ngModel)]="phraseKind">
+            <option value="negative">× Negative</option>
+            <option value="positive">✓ Positive</option>
+          </select>
+          <button class="button primary" type="submit" [disabled]="busy() || phraseDraft.trim().length < 2">Track</button>
+        </form>
+        @for (kind of phraseKinds; track kind) {
+          <h3>{{ kind === 'negative' ? 'Negative phrases' : 'Positive phrases' }}</h3>
+          <ul>
+            @for (row of phrasesOf(kind); track row.id) {
+              @let matches = phraseMatches().get(row.id) ?? [];
+              <li>
+                <div class="phrase-row">
+                  <button type="button" class="phrase" [class.positive]="kind === 'positive'" [attr.aria-expanded]="openPhraseId() === row.id" (click)="togglePhrase(row.id)">
+                    <span [class]="'reason-icon ' + (kind === 'positive' ? 'pass' : 'fail')" aria-hidden="true">{{ kind === 'positive' ? '✓' : '×' }}</span>{{ row.phrase }}
+                  </button>
+                  <span class="phrase-count">{{ matches.length }}</span>
+                  <button class="button secondary" type="button" [disabled]="busy()" (click)="removePhrase(row)" [attr.aria-label]="'Stop tracking ' + row.phrase">Remove</button>
+                </div>
+                @if (openPhraseId() === row.id) {
+                  <ul class="phrase-pitches">
+                    @for (pitch of matches; track pitch.id) {
+                      <li>
+                        <button type="button" (click)="openProfilePitch(pitch.id)">
+                          <span class="pitch-title">{{ pitch.title }}</span>
+                          <span [class]="'fit ' + fitClass(pitch.fit)">{{ pitch.fit }}</span>
+                          <span class="pitch-age">{{ ageLabel(pitch.receivedAt) }}</span>
+                        </button>
+                      </li>
+                    } @empty {
+                      <li class="phrase-empty">No pitches match.</li>
+                    }
+                  </ul>
+                }
+              </li>
+            } @empty {
+              <li class="phrase-empty">None tracked.</li>
+            }
+          </ul>
+        }
+      </section>
+    } @else if (profileMode(); as mode) {
       <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
     } @else {
       <div class="workspace">
@@ -124,33 +175,43 @@
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
               (click)="select(row)"
             >
-              <div class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><h2>{{ row.title }}</h2></span>
+              <span class="row-title">
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading"><app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong>{{ ageLabel(row.receivedAt) }}</strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
                 </span>
-              </div>
-              <p class="company">
+              </span>
+              <span class="company">
                 {{ row.company !== 'Not stated' ? row.company : sender(row.from) }}
-              </p>
-              <div class="row-bottom">
+              </span>
+              <span class="row-bottom">
                 <span>{{ row.location }}</span>
                 <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
+                @if (row.reasons.length) {
+                  <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
+                    @for (reason of row.reasons; track $index) {
+                      <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
+                    }
+                  </span>
+                }
                 @if (group.pitches.length > 1) {
                   <span class="pitch-count">{{ group.pitches.length }} pitches</span>
                 }
                 @if (row.status !== 'New') {
                   <span class="decision">{{ row.status }}</span>
                 }
-              </div>
+                @if (row.replyReceivedAt) {
+                  <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
+                }
+              </span>
               @if (group.history.occurrences > 1) {
-                <p class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</p>
+                <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</span>
               }
               @if (row.followUp) {
-                <p class="follow-up" [class.overdue]="due(row.followUp)">
+                <span class="follow-up" [class.overdue]="due(row.followUp)">
                   Follow up {{ row.followUp | date: 'MMM d' : 'UTC' }}
-                </p>
+                </span>
               }
             </button>
           } @empty {
@@ -181,7 +242,7 @@
                 >
               }
             </div>
-            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'">{{ row.title }}</h2>
+            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phrases()" /></h2>
             @if (selectedGroup(); as group) {
               @if (group.history.occurrences > 1) {
                 <section class="posting-summary" aria-label="Posting history">
@@ -289,13 +350,11 @@
               <ul>
                 @for (reason of row.reasons; track $index) {
                   <li>
-                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{
-                      reason.kind === 'pass' ? '✓' : reason.kind === 'fail' ? '×' : '?'
-                    }}</span>
+                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
                     <div>
                       <p>{{ reason.text }}</p>
                       @if (reason.evidence) {
-                        <blockquote>{{ sourceText(reason.evidence) }}</blockquote>
+                        <blockquote><app-hl [text]="sourceText(reason.evidence)" [phrases]="phrases()" /></blockquote>
                       }
                     </div>
                   </li>
@@ -329,6 +388,33 @@
                 Pass
               </button>
             </div>
+            <section class="reply" aria-labelledby="reply-title">
+              <h3 id="reply-title">Reply</h3>
+              @if (row.replyReceivedAt) {
+                <p class="reply-back">↩ They replied {{ row.replyReceivedAt | date: 'MMM d, h:mm a' }}</p>
+              }
+              @for (sent of row.replies ?? []; track sent.id) {
+                <div class="sent-reply">
+                  <p class="sent-meta">You wrote {{ sent.sentAt | date: 'MMM d, h:mm a' }} to {{ sent.to }}@if (sent.preview) { · preview, not sent}</p>
+                  <pre>{{ sent.body }}</pre>
+                </div>
+              }
+              @if (!connection()?.canReply) {
+                <p class="reply-off">Sending is not set up on this server.</p>
+              } @else if (replying()) {
+                <form (ngSubmit)="sendReply()">
+                  <p class="reply-to">To {{ replyTo() }}</p>
+                  <label class="visually-hidden" for="reply-body">Reply</label>
+                  <textarea id="reply-body" name="replyBody" rows="7" [(ngModel)]="replyDraft"></textarea>
+                  <div class="reply-actions">
+                    <button class="button primary" type="submit" [disabled]="busy() || !replyDraft.trim()">Send</button>
+                    <button class="button secondary" type="button" [disabled]="busy()" (click)="cancelReply()">Cancel</button>
+                  </div>
+                </form>
+              } @else {
+                <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
+              }
+            </section>
             <section class="email-source" aria-labelledby="email-title">
               <h3 id="email-title">Email body</h3>
               @if (row.truncated) {
@@ -337,9 +423,9 @@
               <div class="email-reading">
                 @for (block of emailBlocks(); track $index) {
                   @if (block.kind === 'field') {
-                    <p class="email-field">{{ block.label }}: {{ block.value }}</p>
+                    <p class="email-field"><app-hl [text]="block.label + ': ' + block.value" [phrases]="phrases()" /></p>
                   } @else {
-                    <pre>{{ block.text }}</pre>
+                    <pre><app-hl [text]="block.text" [phrases]="phrases()" /></pre>
                   }
                 }
               </div>

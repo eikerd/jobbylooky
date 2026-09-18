@@ -47,7 +47,32 @@ export function emailText(body, isHtml = false) {
     : body;
 }
 
-export function screen(message) {
+/** Owner-maintained phrases; seeded once, then edited in the Phrases tab. */
+export const DEFAULT_TRACKED_PHRASES = ['Backend Java Engineer', 'Java Engineer'];
+export const PHRASE_KINDS = ['negative', 'positive'];
+
+/** Case-insensitive whole-word match that tolerates any whitespace between words. */
+export function phrasePattern(phrase) {
+  const words = phrase.trim().split(/\s+/).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(`(?<![\\w])${words.join('\\s+')}(?![\\w])`, 'i');
+}
+
+// A bare string is a negative phrase, the original and most common kind.
+const asTracked = (entry) => (typeof entry === 'string' ? { phrase: entry, kind: 'negative' } : entry);
+
+function trackedPhraseReasons(text, trackedPhrases) {
+  return trackedPhrases.map(asTracked).flatMap(({ phrase, kind }) => {
+    const match = phrasePattern(phrase).exec(text);
+    if (!match) return [];
+    // Evidence is the whole source line(s) around the match, so a phrase split by a line break still shows.
+    const start = text.lastIndexOf('\n', match.index) + 1;
+    const end = text.indexOf('\n', match.index + match[0].length);
+    const evidence = text.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ').trim();
+    return [{ kind: kind === 'positive' ? 'pass' : 'fail', text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
+  });
+}
+
+export function screen(message, trackedPhrases = []) {
   const body = jobSection(plainText(message.body, message.isHtml));
   const title =
     field(body, 'Job Title|Position|Profile|Title|Role(?! Overview)').replace(/^[-:]+\s*/, '') ||
@@ -280,7 +305,16 @@ export function screen(message) {
       text: 'Possible Chase: Raleigh together with an Ohio location matches the pattern you identified. This is an unverified clue; confirm the client with the recruiter.',
       evidence: locationContext,
     });
-  const fit = multiRole
+  const trackedReasons = trackedPhraseReasons(
+    `${message.subject}\n${plainText(message.body, message.isHtml)}`,
+    trackedPhrases,
+  );
+  reasons.unshift(...trackedReasons);
+  // An owner-defined negative phrase is decisive even in a multi-role email.
+  const negativePhrase = trackedReasons.some((reason) => reason.kind === 'fail');
+  const fit = negativePhrase
+    ? 'Mismatch'
+    : multiRole
     ? 'Review'
     : javaRequired || microsoftRequired || locationMismatch
       ? 'Mismatch'
@@ -332,11 +366,16 @@ export function screen(message) {
   };
 }
 
+/** Subject terms that mark a pitch. The mail-worker SQL prefilter is built from this list. */
+export const OPPORTUNITY_TERMS = [
+  'developer', 'engineer', 'hiring', 'recruit', 'job', 'opportunity', 'opening', 'position',
+  'UI lead', 'frontend lead',
+];
+const opportunityPattern = new RegExp(`\\b(?:${OPPORTUNITY_TERMS.join('|')})\\b`, 'i');
+
 export function isOpportunity(message) {
   return (
-    /\b(?:developer|engineer|hiring|recruit|job|opportunity|opening|position|UI lead|frontend lead)\b/i.test(
-      message.subject,
-    ) &&
+    opportunityPattern.test(message.subject) &&
     !/\b(?:birthday|impressions|posts got|project available to import|webinar|newsletter|monthly build|hello developer|developer program|subscription|just hired|insights:|hired roles near you)\b/i.test(
       message.subject,
     )

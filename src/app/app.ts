@@ -5,7 +5,8 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
 import { formatEmailBody } from './email-body';
-import type { Opportunity, JobGroup } from './models';
+import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models';
+import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
 
@@ -14,14 +15,16 @@ interface Connection {
   syncing: boolean;
   error: string;
   lastSync: string | null;
+  canReply?: boolean;
+  replyPreview?: boolean;
 }
 type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, Profiles, SourceIcon],
+  imports: [FormsModule, DatePipe, Profiles, SourceIcon, Highlight],
   templateUrl: './app.html',
-  styleUrl: './app.css',
+  styleUrls: ['./app.css', './phrases.css', './reply.css'],
 })
 export class App implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
@@ -39,7 +42,30 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | null>(null);
+  readonly profileMode = computed(() => {
+    const mode = this.directoryMode();
+    return mode === 'recruiters' || mode === 'companies' ? mode : null;
+  });
+  readonly phrases = signal<TrackedPhrase[]>([]);
+  readonly phraseKinds: PhraseKind[] = ['negative', 'positive'];
+  readonly openPhraseId = signal('');
+  /** Pitches per phrase id, from the reasons the server recorded, newest first. */
+  readonly phraseMatches = computed(() => {
+    const byPhrase = new Map<string, Opportunity[]>();
+    const rows = [...this.opportunities()].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+    for (const tracked of this.phrases()) {
+      const key = tracked.phrase.toLowerCase();
+      byPhrase.set(tracked.id, rows.filter((row) => row.reasons.some((reason) => reason.phrase?.toLowerCase() === key)));
+    }
+    return byPhrase;
+  });
+  phraseDraft = '';
+  readonly replying = signal(false);
+  replyDraft = '';
+  readonly replyTo = signal('');
+  private replyTemplate = '';
+  phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
   readonly connection = signal<Connection | null>(null);
@@ -87,8 +113,12 @@ export class App implements OnDestroy {
     window.addEventListener('beforeunload', this.beforeUnload);
   }
   private beforeUnload = (event: BeforeUnloadEvent) => {
-    if (this.dirty()) event.preventDefault();
+    if (this.hasUnsavedWork()) event.preventDefault();
   };
+  // An edited reply counts as unsaved work; the untouched greeting does not.
+  private hasUnsavedWork() {
+    return this.dirty() || (this.replying() && this.replyDraft !== this.replyTemplate);
+  }
   ngOnDestroy() {
     clearInterval(this.poll);
     window.removeEventListener('beforeunload', this.beforeUnload);
@@ -100,8 +130,17 @@ export class App implements OnDestroy {
       body: data === undefined ? undefined : JSON.stringify(data),
       signal: AbortSignal.timeout(120000),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'The request failed.');
+    // A proxy error page or an empty body must not hide the HTTP status behind a SyntaxError.
+    const text = await response.text();
+    let result: { error?: string } | null = null;
+    try {
+      result = text ? JSON.parse(text) : null;
+    } catch {
+      result = null;
+    }
+    if (!response.ok)
+      throw new Error(result?.error || `The request failed (HTTP ${response.status}).`);
+    if (result === null) throw new Error('The server returned an unreadable response.');
     return result as T;
   }
   async load() {
@@ -113,13 +152,15 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection] = await Promise.all([
+      const [rows, connection, phrases] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
+        this.request<TrackedPhrase[]>('phrases'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision) return;
       this.jobGroups.set(rows);
+      this.phrases.set(phrases);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -129,7 +170,7 @@ export class App implements OnDestroy {
     return error instanceof Error ? error.message : 'Something went wrong. Please retry.';
   }
   canLeave() {
-    return !this.dirty() || window.confirm('Discard your unsaved changes?');
+    return !this.hasUnsavedWork() || window.confirm('Discard your unsaved changes?');
   }
   select(row: Opportunity) {
     if (this.busy() || !this.canLeave()) return;
@@ -143,6 +184,8 @@ export class App implements OnDestroy {
     this.notice.set('');
     this.linking.set(false);
     this.linkTarget = '';
+    this.replying.set(false);
+    this.replyDraft = '';
   }
   changeFolder(folder: Folder) {
     if (this.busy() || !this.canLeave()) return;
@@ -152,7 +195,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -170,6 +213,84 @@ export class App implements OnDestroy {
     this.directoryMode.set(null);
     this.folder.set('All opportunities');
     this.select(row);
+  }
+  async startReply(row: Opportunity) {
+    // Ask the server: it picks the recipient with the same rule it sends with.
+    this.error.set('');
+    try {
+      this.replyTo.set((await this.request<{ to: string }>(`opportunities/${encodeURIComponent(row.id)}/reply-to`)).to);
+    } catch (error) {
+      this.error.set(this.message(error));
+      return;
+    }
+    const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
+    this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
+    this.replyDraft = this.replyTemplate;
+    this.replying.set(true);
+  }
+  cancelReply() {
+    if (this.replyDraft !== this.replyTemplate && !window.confirm('Discard this reply?')) return;
+    this.replying.set(false);
+  }
+  async sendReply() {
+    const row = this.selected();
+    const body = this.replyDraft.trim();
+    if (!row || !body || this.busy()) return;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', { body });
+      this.jobGroups.update((groups) => groups.map((group) => ({
+        ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),
+      })));
+      this.replying.set(false);
+      this.replyDraft = '';
+      this.notice.set(`Reply sent to ${this.sender(updated.replies?.at(-1)?.to ?? row.from)}.`);
+    } catch (error) {
+      this.error.set(this.message(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  // Changing a phrase re-screens every pitch on the server, so fits are reloaded too.
+  async addPhrase() {
+    const phrase = this.phraseDraft.trim();
+    if (phrase.length < 2) return;
+    const kind = this.phraseKind;
+    if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
+      this.phraseDraft = '';
+  }
+  phrasesOf(kind: PhraseKind) {
+    return this.phrases().filter((row) => row.kind === kind);
+  }
+  togglePhrase(id: string) {
+    this.openPhraseId.update((open) => (open === id ? '' : id));
+  }
+  removePhrase(row: TrackedPhrase) {
+    void this.changePhrases(() => this.request<TrackedPhrase[]>(`phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
+  }
+  private async changePhrases(change: () => Promise<TrackedPhrase[]>) {
+    if (this.busy()) return false;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      this.phrases.set(await change());
+    } catch (error) {
+      this.error.set(this.message(error));
+      this.busy.set(false);
+      return false;
+    }
+    // The phrase change is committed; a failed reload is reported and the next poll reconciles fits.
+    try {
+      this.jobGroups.set(await this.request<JobGroup[]>('groups'));
+    } catch (error) {
+      this.error.set(`Phrase saved, but the list did not refresh: ${this.message(error)}`);
+    } finally {
+      this.busy.set(false);
+    }
+    return true;
   }
   async save(status = this.editStatus) {
     const row = this.selected();
@@ -273,6 +394,13 @@ export class App implements OnDestroy {
         .replace(/"/g, '')
         .trim() || from
     );
+  }
+  reasonMark(kind: string) {
+    return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
+  }
+  // The row icons are compact; screen readers get the reasons as words.
+  reasonSummary(row: Opportunity) {
+    return row.reasons.map((reason) => `${this.reasonMark(reason.kind)} ${reason.text}`).join('; ');
   }
   fitClass(fit: string) {
     return fit.toLowerCase().replaceAll(' ', '-');

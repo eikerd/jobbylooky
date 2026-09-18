@@ -308,3 +308,15 @@ test('ambiguous or incomplete employment terms do not become blue full-time role
   }
   assert.equal(screen(mail('Full-time Angular Developer', 'Location: Remote', {truncated:true})).employmentType, 'Unknown');
 });
+test('tracked phrases match whole words across whitespace, never inside JavaScript', () => {
+  const base = { subject: 'Angular Developer Remote', from: 'r@example.com', body: 'Fully remote Angular role.', isHtml: false };
+  assert.equal(screen({ ...base, body: 'Team of JavaScript Engineers' }, ['Java Engineer']).reasons.some((r) => r.kind === 'fail' && r.text.includes('Tracked')), false);
+  const hit = screen({ ...base, body: 'Pairs with a java\nengineer daily.' }, ['Java Engineer']);
+  assert.equal(hit.fit, 'Mismatch');
+  assert.equal(hit.reasons[0].evidence, 'Pairs with a java engineer daily.');
+});
+test('a negative tracked phrase forces Mismatch even in a multi-role email; a positive one does not', () => {
+  const body = 'Profile:- Angular Developer\nRequired: Angular\nProfile:- Backend Java Engineer\nStrong Java experience';
+  assert.equal(screen(mail('Angular Developer Remote', body), ['Backend Java Engineer']).fit, 'Mismatch');
+  assert.equal(screen(mail('Angular Developer Remote', body), [{ phrase: 'Angular Developer', kind: 'positive' }]).fit, 'Review');
+});

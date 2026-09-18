@@ -1,0 +1,10 @@
+.reply { border-top: 1px solid #1f2b24; padding-top: 12px; margin-top: 12px; }
+.reply h3 { margin: 0 0 8px; }
+.reply form { display: grid; gap: 8px; }
+.reply textarea { width: 100%; box-sizing: border-box; font-size: 12px; }
+.reply-actions { display: flex; gap: 8px; }
+.reply-to, .sent-meta, .reply-off { font-size: 11px; color: #92aa9b; margin: 0; }
+.reply-back { font-size: 12px; font-weight: 700; color: #a5f5bd; margin: 0 0 8px; }
+.sent-reply { border-left: 2px solid #2c3d33; padding-left: 8px; margin-bottom: 10px; }
+.sent-reply pre { font-size: 11px; margin: 4px 0 0; white-space: pre-wrap; }
+.replied { color: #a5f5bd; font-weight: 700; }

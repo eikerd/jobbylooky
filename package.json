@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "scripts": {
     "start": "node server/index.mjs",
-    "build": "ng build --base-href /jobs/",
-    "dev": "ng build --watch --configuration development --base-href /jobs/",
+    "build": "ng build --base-href /jobby/",
+    "dev": "ng build --watch --configuration development --base-href /jobby/",
     "test": "node --experimental-strip-types --test server/*.test.mjs tests/*.test.ts"
   },
   "private": true,
@@ -16,9 +16,10 @@
     "@angular/forms": "^22.1.0",
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
+    "html-to-text": "^9.0.5",
+    "nodemailer": "^10.0.10",
     "rxjs": "~7.8.0",
-    "tslib": "^2.3.0",
-    "html-to-text": "^9.0.5"
+    "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@angular/build": "^22.1.8",

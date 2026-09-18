@@ -229,7 +229,8 @@ time {
   font-size: 11px;
   color: #92aa9b;
 }
-.opportunity h2 {
+.opportunity .row-heading {
+  display: block;
   font-size: 12px;
   line-height: 1.45;
   letter-spacing: -0.15px;
@@ -539,7 +540,7 @@ textarea {
   justify-content: space-between;
   gap: 12px;
 }
-.row-title h2 {
+.row-title .row-heading {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -637,9 +638,15 @@ textarea {
 .source-title { display:flex; gap:8px; align-items:flex-start; min-width:0; }
 .opportunity.full-time { border-left:2px solid #78b7ff; background:#0d1926; }
 .opportunity.full-time.selected { background:#142b43; box-shadow:inset 2px 0 #78b7ff; }
-.opportunity.full-time h2, .role-title.full-time, .pitch.full-time .pitch-sender { color:#91c5ff; }
+.opportunity.full-time .row-heading, .role-title.full-time, .pitch.full-time .pitch-sender { color:#91c5ff; }
 .location-map { margin:12px 0; min-width:0; }
 .location-map a { display:block; margin-bottom:6px; color:#8de8a8; font-size:11px; }
 .address-thumbnails { display:flex; gap:8px; flex-wrap:wrap; }
 .location-map iframe { display:block; width:200px; max-width:100%; height:200px; border:1px solid #283d2f; }
 .email-field { margin:0; font-size:11px; line-height:1.7; color:#c2d3c7; white-space:nowrap; overflow-x:auto; max-width:100%; }
+
+/* Buttons allow phrasing content only; these spans keep the former block layout. */
+.opportunity .company, .opportunity .recurrence, .opportunity .follow-up { display:block; }
+.row-reasons { display:inline-flex; gap:2px; }
+.row-reasons .reason-icon { width:13px; height:auto; font-size:12px; }
+

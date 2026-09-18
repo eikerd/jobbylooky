@@ -13,14 +13,14 @@ npm run build
 MAIL_DATABASE_URL=http://192.168.42.180:8082 npm start
 ```
 
-Preview: http://127.0.0.1:4317/jobs/. Check for an existing listener before starting another process. `npm run dev` watches the Angular build; the HTTP server is separate. Backend changes require restarting the server. Data is re-screened on startup without changing saved decisions.
+Preview: http://127.0.0.1:4317/jobby/. Check for an existing listener before starting another process. `npm run dev` watches the Angular build; the HTTP server is separate. Backend changes require restarting the server. Data is re-screened on startup without changing saved decisions.
 
 For a fresh clone without the private cache, omit MAIL_DATABASE_URL and paste a synthetic email to test. Never copy the owner's inbox into a fixture, issue, PR, screenshot, or source archive. `data/` holds the private cache and original imports; it is intentionally not in GitHub. Existing data remains on this Mac at `/Users/ernestoikerd/repos/work/jobbylooky/data/`.
 
 ## Architecture
 
 - Angular standalone components: `src/app/app.*` manages folders, pitches, notes and imports; `profiles*` manages recruiter/company views.
-- `server/index.mjs`: native Node HTTP API, static files under `/jobs/`, host/origin checks and minute-based mail sync.
+- `server/index.mjs`: native Node HTTP API, static files under `/jobby/`, host/origin checks and minute-based mail sync.
 - `server/mail-worker.mjs`: SELECT-only reads from the existing libsql mail log, with old/new schema compatibility.
 - `server/store.mjs`: atomic JSON replacement, deduplication, decisions, grouping overrides and startup re-screening.
 - `server/screen.mjs`: deterministic explanations, employment type, geographic preferences and tentative employer clues.
@@ -51,6 +51,6 @@ The app does not send emails, alter Gmail labels, archive messages, or automatic
 
 ## Companion repository and deployment
 
-The companion `eikerd/chungus` change adds full job-body retention, truncation/thread fields, and an nginx `/jobs/` route. It does not alter finance extraction. The latest handoff links both PRs.
+The companion `eikerd/chungus` change adds full job-body retention, truncation/thread fields, and an nginx `/jobs/` route (moved to `/jobby/`, behind basic auth, in the follow-up Chungus PR). It does not alter finance extraction. The latest handoff links both PRs.
 
 For deployment, follow this README and Chungus's own instructions. Use clean merged source, inspect actual server files for drift, and preserve private state. A fresh Docker volume will not contain this Mac's historical imports or decisions; plan that migration explicitly before switching the owner's daily use.

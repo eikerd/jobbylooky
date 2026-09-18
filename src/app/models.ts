@@ -8,7 +8,7 @@ export interface Opportunity {
   receivedAt: string;
   fit: string;
   employmentType?: 'Full-time' | 'Contract' | 'Contract-to-hire' | 'Unknown';
-  reasons: { kind: string; text: string; evidence: string }[];
+  reasons: { kind: string; text: string; evidence: string; phrase?: string }[];
   body: string;
   truncated: boolean;
   status: string;
@@ -21,6 +21,17 @@ export interface Opportunity {
   messageIds: string[];
   history?: { id:string; receivedAt:string; from:string }[];
   pay: { min: number; max: number | null; period: string } | null;
+  replies?: SentReply[];
+  replyReceivedAt?: string;
+}
+export interface SentReply {
+  id: string;
+  to: string;
+  from: string;
+  subject: string;
+  body: string;
+  sentAt: string;
+  preview?: boolean;
 }
 export interface JobGroup {
   id: string;
@@ -35,4 +46,10 @@ export interface JobGroup {
     occurrences:number;
     timeline:{id:string;pitchId:string;from:string;receivedAt:string;gapDays:number|null}[];
   };
+}
+export type PhraseKind = 'negative' | 'positive';
+export interface TrackedPhrase {
+  id: string;
+  phrase: string;
+  kind: PhraseKind;
 }

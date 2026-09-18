@@ -175,3 +175,88 @@ test('employer and Plano flags retain complete pitches and user decisions after 
     assert.ok(restored.reasons.some(reason => reason.kind === 'check' && /client you asked to flag/.test(reason.text)));
     assert.equal(reopened.groups()[0].pitches[0].id, row.id);
   }));
+test('a re-synced message with no sender does not crash the batch', () =>
+  withStore((store) => {
+    assert.equal(store.import([message]), 1);
+    assert.doesNotThrow(() => store.import([{ ...message, from: null }]));
+    assert.equal(store.snapshot().opportunities[0].from, 'recruiter@example.com');
+  }));
+test('imports without an id or a valid date are rejected with a clear 400', () =>
+  withStore((store) => {
+    assert.throws(() => store.import([{ ...message, receivedAt: undefined }]), (error) => error.status === 400 && /receivedAt/.test(error.message));
+    assert.throws(() => store.import({ not: 'a list' }), (error) => error.status === 400);
+    assert.equal(store.import([{ ...message, subject: undefined, body: undefined }]), 1);
+  }));
+test('tracked phrases are seeded, flag matching pitches as Mismatch and keep decisions', () =>
+  withStore((store, dir) => {
+    store.import([{ ...message, subject: 'Senior Backend JAVA   Engineer (Remote)' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.update(id, { status: 'Maybe' });
+    let row = store.snapshot().opportunities[0];
+    assert.deepEqual(store.phrases().map((p) => p.phrase), ['Backend Java Engineer', 'Java Engineer']);
+    assert.equal(row.fit, 'Mismatch');
+    assert.match(row.reasons[0].text, /Tracked phrase: “Backend Java Engineer”/);
+    assert.match(row.reasons[0].evidence, /Backend JAVA Engineer/);
+    for (const phrase of store.phrases()) store.removePhrase(phrase.id);
+    row = store.snapshot().opportunities[0];
+    assert.ok(!row.reasons.some((reason) => reason.text.startsWith('Tracked phrase')));
+    assert.equal(row.status, 'Maybe');
+    store.addPhrase({ phrase: '  senior backend ' });
+    assert.throws(() => store.addPhrase({ phrase: 'Senior Backend' }), (error) => error.status === 409);
+    assert.throws(() => store.addPhrase({ phrase: 'x' }), (error) => error.status === 400);
+    assert.equal(createStore(dir).snapshot().opportunities[0].fit, 'Mismatch');
+  }));
+test('positive phrases add a ✓ reason without overriding the fit; kinds are validated', () =>
+  withStore((store) => {
+    store.import([{ ...message, body: 'Required: Angular and TypeScript. 100% remote.' }]);
+    const before = store.snapshot().opportunities[0].fit;
+    store.addPhrase({ phrase: '100% remote', kind: 'positive' });
+    const row = store.snapshot().opportunities[0];
+    const reason = row.reasons.find((item) => item.phrase === '100% remote');
+    assert.equal(reason.kind, 'pass');
+    assert.equal(row.fit, before);
+    assert.equal(store.phrases().find((p) => p.phrase === '100% remote').kind, 'positive');
+    assert.equal(store.phrases()[0].kind, 'negative');
+    assert.throws(() => store.addPhrase({ phrase: 'Kotlin', kind: 'neutral' }), (error) => error.status === 400);
+  }));
+test('non-ISO receivedAt values are normalised so thread order stays chronological', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'a@x', receivedAt: '9/30/2026' }, { ...message, id: 'b@x', receivedAt: '10/01/2026' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.receivedAt.slice(0, 10), new Date('10/01/2026').toISOString().slice(0, 10));
+    assert.deepEqual(row.history.map((item) => item.id), ['a@x', 'b@x']);
+  }));
+test('an answer after my reply moves New/Pursue to Maybe and badges the row; other statuses stay', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@r', threadId: 'root@r', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    // My own copy arriving in the thread is not their answer.
+    store.import([{ ...message, id: 'mine2@me', threadId: 'root@r', source: 'mail-worker', from: 'Me <me@example.com>', receivedAt: '2026-09-18T11:00:00.000Z' }]);
+    assert.equal(store.snapshot().opportunities[0].status, 'New');
+    store.import([{ ...message, id: 'answer@r', threadId: 'root@r', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    let row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Maybe');
+    assert.equal(row.replyReceivedAt, '2026-09-18T12:00:00.000Z');
+    assert.equal(row.replies.length, 1);
+    store.update(id, { status: 'Applied' });
+    store.import([{ ...message, id: 'again@r', threadId: 'root@r', source: 'mail-worker', receivedAt: '2026-09-19T12:00:00.000Z' }]);
+    row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Applied');
+    assert.equal(row.replyReceivedAt, '2026-09-19T12:00:00.000Z');
+  }));
+test('a preview (unsent) reply never turns a later message into a reply-back', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@p', threadId: 'root@p', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'preview-1@jobbylooky.local', from: '', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z', preview: true });
+    store.import([{ ...message, id: 'later@p', threadId: 'root@p', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'New');
+    assert.equal(row.replyReceivedAt, undefined);
+  }));
+test('seeded phrases are written on first start, so their ids survive a restart', () =>
+  withStore((store, dir) => {
+    const ids = store.phrases().map((p) => p.id);
+    assert.deepEqual(createStore(dir).phrases().map((p) => p.id), ids);
+  }));

@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
+import { createMailer, replyRecipient } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
 const workerUrl = process.env.MAIL_DATABASE_URL || '';
+const mailer = createMailer();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 if (existsSync(seed)) {
@@ -46,9 +48,14 @@ function schedule() {
   }, intervalMs);
   timer.unref();
 }
-const publicOrigin = process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
-const origins = new Set([publicOrigin, `http://127.0.0.1:${port}`, `http://localhost:${port}`]);
-const hosts = new Set([new URL(publicOrigin).host, `127.0.0.1:${port}`, `localhost:${port}`]);
+// Comma-separated: Chungus answers as chungus.local and as its tailnet name.
+const publicOrigins = (process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`)
+  .split(',')
+  .map((origin) => new URL(origin.trim()).origin);
+const publicOrigin = publicOrigins[0];
+const origins = new Set([...publicOrigins, `http://127.0.0.1:${port}`, `http://localhost:${port}`]);
+const hosts = new Set([...publicOrigins.map((origin) => new URL(origin).host), `127.0.0.1:${port}`, `localhost:${port}`]);
+const BASE = '/jobby';
 const mime = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -94,12 +101,13 @@ export const server = createServer(async (req, res) => {
     if (req.headers['sec-fetch-site'] === 'cross-site')
       return json(403, { error: 'Cross-site access is not allowed.' });
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
-    if (url.pathname === '/' || url.pathname === '/jobs') {
-      res.writeHead(302, { Location: '/jobs/' });
+    // /jobs/ was the path before 2026-09-18; old bookmarks land on the app.
+    if (['/', BASE, '/jobs'].includes(url.pathname) || url.pathname.startsWith('/jobs/')) {
+      res.writeHead(302, { Location: `${BASE}/` });
       return res.end();
     }
-    if (!url.pathname.startsWith('/jobs/')) return json(404, { error: 'Page not found.' });
-    url.pathname = url.pathname.slice('/jobs'.length);
+    if (!url.pathname.startsWith(`${BASE}/`)) return json(404, { error: 'Page not found.' });
+    url.pathname = url.pathname.slice(BASE.length);
     if (req.method === 'GET' && url.pathname === '/api/groups') return json(200, store.groups());
     if (req.method === 'GET' && url.pathname === '/api/opportunities')
       return json(200, store.snapshot().opportunities);
@@ -107,6 +115,8 @@ export const server = createServer(async (req, res) => {
       const { account, lastSync, importedAt } = store.snapshot();
       return json(200, {
         configured: Boolean(workerUrl),
+        canReply: Boolean(mailer),
+        replyPreview: Boolean(mailer?.preview),
         syncing,
         error: syncError,
         account,
@@ -115,14 +125,37 @@ export const server = createServer(async (req, res) => {
         nextCheck,
       });
     }
+    if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    const recipientPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/reply-to$/);
+    if (req.method === 'GET' && recipientPath) {
+      const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(recipientPath[1]));
+      if (!row) return json(404, { error: 'Opportunity not found.' });
+      return json(200, { to: replyRecipient(row, mailer?.from ?? '') });
+    }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
+      return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
       if (!req.headers['content-type']?.startsWith('application/json'))
         return json(415, { error: 'JSON content is required.' });
+      if (req.method === 'POST' && url.pathname === '/api/phrases')
+        return json(201, store.addPhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')
         return json(200, store.group(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/sync') {
         if (!workerUrl) return json(409, { error: 'The mail-worker database is not connected.' });
         return json(200, { added: await sync() });
+      }
+      const replyPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/reply$/);
+      if (req.method === 'POST' && replyPath) {
+        if (!mailer) return json(409, { error: 'Sending is not set up: SMTP_USER and SMTP_PASS are missing.' });
+        const input = await body(req);
+        if (typeof input.body !== 'string' || !input.body.trim() || input.body.length > 10000)
+          return json(400, { error: 'Write a reply (up to 10,000 characters).' });
+        const id = decodeURIComponent(replyPath[1]);
+        const row = store.snapshot().opportunities.find((item) => item.id === id);
+        if (!row) return json(404, { error: 'Opportunity not found.' });
+        // The recipient always comes from the stored pitch, never from the request.
+        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim())));
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/'))
         return json(
@@ -180,7 +213,7 @@ export const server = createServer(async (req, res) => {
   }
 });
 server.listen(port, process.env.BIND_HOST || '127.0.0.1', () =>
-  console.log(`Jobbylooky: ${publicOrigin}/jobs/`),
+  console.log(`Jobbylooky: ${publicOrigin}${BASE}/`),
 );
 if (workerUrl) {
   sync()
