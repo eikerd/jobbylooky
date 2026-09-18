@@ -1,0 +1,35 @@
+services:
+  jobbylooky:
+    build:
+      context: ..
+    container_name: jobbylooky
+    restart: unless-stopped
+    environment:
+      MAIL_DATABASE_URL: http://libsql:8080
+      PUBLIC_ORIGIN: https://chungus.tail1d505c.ts.net
+    volumes:
+      - jobbylooky-data:/app/data
+    networks:
+      - chungus
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4317/jobs/api/connection').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+volumes:
+  jobbylooky-data:
+networks:
+  chungus:
+    external: true
+    name: chungus_chungus-network

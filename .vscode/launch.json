@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Jobbylooky server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/server/index.mjs",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "npm: build",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Jobbylooky browser (server already running)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://127.0.0.1:4317/jobs/",
+      "webRoot": "${workspaceFolder}"
+    }
+  ]
+}

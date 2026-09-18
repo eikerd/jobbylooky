@@ -1,0 +1,402 @@
+<div class="shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <a class="brand" href="./" aria-label="Jobbylooky home"
+      ><img src="icon-512.png" alt="" width="34" height="34" /><span
+        >jobbylooky<span class="brand-dot">.</span></span
+      ></a
+    >
+    <nav aria-label="Opportunity folders">
+      @for (item of folders; track item) {
+        <button
+          type="button"
+          [class.active]="!directoryMode() && folder() === item"
+          [attr.aria-current]="!directoryMode() && folder() === item ? 'page' : null"
+          (click)="changeFolder(item)"
+        >
+          <span class="nav-icon" aria-hidden="true">{{
+            item === 'Inbox'
+              ? '▤'
+              : item === 'Pursuing'
+                ? '↗'
+                : item === 'Maybe'
+                  ? '◷'
+                  : item === 'Passed'
+                    ? '−'
+                    : '≡'
+          }}</span
+          >{{ item }}
+        </button>
+      }
+      <button type="button" [class.active]="directoryMode() === 'recruiters'" [attr.aria-current]="directoryMode() === 'recruiters' ? 'page' : null" (click)="openDirectory('recruiters')">
+        <span class="nav-icon" aria-hidden="true">@</span>Recruiters
+      </button>
+      <button type="button" [class.active]="directoryMode() === 'companies'" [attr.aria-current]="directoryMode() === 'companies' ? 'page' : null" (click)="openDirectory('companies')">
+        <span class="nav-icon" aria-hidden="true">▦</span>Companies
+      </button>
+    </nav>
+    <div class="connection">
+      <div class="connection-heading">
+        <span
+          class="connection-dot"
+          [class.live]="connection()?.configured && !connection()?.error"
+        ></span
+        >Mail-worker
+      </div>
+      <p>
+        {{
+          connection()?.configured ? 'Watching for job opportunities' : 'Imported Gmail snapshot'
+        }}
+      </p>
+      @if (connection()?.lastSync; as lastSync) {
+        <p>Last checked {{ lastSync | date: 'MMM d, h:mm a' }}</p>
+      }
+    </div>
+  </aside>
+  <main>
+    <header class="page-header">
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <div class="header-actions">
+        <button
+          class="button secondary"
+          type="button"
+          (click)="adding.set(!adding())"
+          [disabled]="busy()"
+        >
+          {{ adding() ? 'Cancel' : '+ Add email' }}</button
+        ><button
+          class="button primary"
+          type="button"
+          (click)="checkMail()"
+          [disabled]="busy() || connection()?.syncing || !connection()?.configured"
+        >
+          {{ connection()?.syncing ? 'Checking mail…' : 'Check mail' }}
+        </button>
+      </div>
+    </header>
+    @if (error()) {
+      <div class="banner error" role="alert">
+        {{ error() }} <button type="button" (click)="load()">Retry</button>
+      </div>
+    }
+    @if (notice()) {
+      <div class="banner notice" role="status">{{ notice() }}</div>
+    }
+    @if (connection()?.error) {
+      <div class="banner error" role="alert">{{ connection()?.error }}</div>
+    }
+    @if (adding()) {
+      <form class="import-panel" (ngSubmit)="importEmail()" aria-label="Add an email">
+        <h2>Add an email</h2>
+        <div class="form-row">
+          <label
+            >Subject<input
+              name="subject"
+              [(ngModel)]="importSubject"
+              required
+              maxlength="500" /></label
+          ><label>From<input name="from" [(ngModel)]="importFrom" maxlength="500" /></label>
+        </div>
+        <label
+          >Email text<textarea
+            name="body"
+            [(ngModel)]="importBody"
+            required
+            maxlength="100000"
+            rows="7"
+          ></textarea></label
+        ><button class="button primary" type="submit" [disabled]="busy()">Add to inbox</button>
+      </form>
+    }
+    @if (loading()) {
+      <div class="empty" role="status">Loading your opportunities…</div>
+    } @else if (directoryMode(); as mode) {
+      <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
+    } @else {
+      <div class="workspace">
+        <section class="queue" aria-label="Opportunities">
+          @for (group of visible(); track group.id) {
+            @let row = group.representative;
+            <button
+              type="button"
+              class="opportunity"
+              [class.full-time]="row.employmentType === 'Full-time'"
+              [class.selected]="selectedGroup()?.id === group.id"
+              [attr.aria-pressed]="selectedGroup()?.id === group.id"
+              (click)="select(row)"
+            >
+              <div class="row-title">
+                <span class="source-title"><app-source-icon [from]="row.from" /><h2>{{ row.title }}</h2></span>
+                <span class="received">
+                  <strong>{{ ageLabel(row.receivedAt) }}</strong>
+                  <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
+                </span>
+              </div>
+              <p class="company">
+                {{ row.company !== 'Not stated' ? row.company : sender(row.from) }}
+              </p>
+              <div class="row-bottom">
+                <span>{{ row.location }}</span>
+                <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
+                @if (group.pitches.length > 1) {
+                  <span class="pitch-count">{{ group.pitches.length }} pitches</span>
+                }
+                @if (row.status !== 'New') {
+                  <span class="decision">{{ row.status }}</span>
+                }
+              </div>
+              @if (group.history.occurrences > 1) {
+                <p class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</p>
+              }
+              @if (row.followUp) {
+                <p class="follow-up" [class.overdue]="due(row.followUp)">
+                  Follow up {{ row.followUp | date: 'MMM d' : 'UTC' }}
+                </p>
+              }
+            </button>
+          } @empty {
+            <div class="empty">
+              <span class="empty-icon" aria-hidden="true">○</span>
+              <h2>No opportunities here</h2>
+              <p>
+                {{
+                  folder() === 'Inbox'
+                    ? 'New job emails will appear here when imported.'
+                    : 'Your decisions move opportunities into this folder.'
+                }}
+              </p>
+            </div>
+          }
+        </section>
+        <section #detailPane class="detail" aria-label="Opportunity details">
+          @if (selected(); as row) {
+            <div class="detail-top">
+              <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
+              @if (row.source !== 'manual') {
+                <a
+                  class="source-link"
+                  [href]="gmailUrl(row)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Open in Gmail ↗</a
+                >
+              }
+            </div>
+            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'">{{ row.title }}</h2>
+            @if (selectedGroup(); as group) {
+              @if (group.history.occurrences > 1) {
+                <section class="posting-summary" aria-label="Posting history">
+                  <p>First seen <strong>{{ group.history.firstSeen | date:'MMM d, y' }}</strong> · latest <strong>{{ group.history.lastSeen | date:'MMM d, y' }}</strong></p>
+                  <p>{{ group.history.occurrences }} emails over {{ group.history.spanDays }} days · longest gap {{ group.history.longestGapDays }} days</p>
+                  @if (group.history.spanDays >= 30) {
+                    <p class="repeat-insight">Related outreach spans {{ group.history.spanDays }} days. This may be an ongoing or renewed search.</p>
+                  }
+                  <details class="posting-history">
+                    <summary>Posting timeline</summary>
+                    <ol>
+                      @for (event of group.history.timeline; track event.id) {
+                        <li><button type="button" (click)="selectPitchId(event.pitchId)"><time [attr.datetime]="event.receivedAt">{{ event.receivedAt | date:'MMM d, y' }}</time> · {{ sender(event.from) }}</button>
+                        @if (event.gapDays !== null) { <span>{{ event.gapDays }} days after previous email</span> }</li>
+                      }
+                    </ol>
+                  </details>
+                </section>
+              }
+
+              @if (group.pitches.length > 1) {
+                <section class="recruiter-pitches" aria-labelledby="pitches-title">
+                  <h3 id="pitches-title">{{ group.kind === 'likely' ? 'Likely same job' : 'Same job' }} · {{ group.pitches.length }} pitches</h3>
+                  <p class="match-evidence">{{ group.evidence }}</p>
+                  <div class="pitch-list">
+                    @for (pitch of group.pitches; track pitch.id) {
+                      <button type="button" class="pitch" [class.full-time]="pitch.employmentType === 'Full-time'" [attr.aria-pressed]="pitch.id === selectedId()" (click)="select(pitch)" [disabled]="busy()">
+                        <span class="pitch-sender source-title"><app-source-icon [from]="pitch.from" />{{ pitch.from }}</span>
+                        <span class="pitch-terms">
+                          <span>{{ ageLabel(pitch.receivedAt) }} · {{ pitch.receivedAt | date: 'MMM d' }}</span>
+                          @if (pitch.pay; as pay) {
+                            <span><strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}</span>
+                          } @else {
+                            <span>Pay not stated</span>
+                          }
+                          <span [class]="'fit ' + fitClass(pitch.fit)">{{ pitch.fit }}</span>
+                          <span>{{ pitch.status }}</span>
+                        </span>
+                      </button>
+                    }
+                  </div>
+                  <p class="pitch-scope">Status and notes below apply to the selected pitch.</p>
+                </section>
+              }
+              <div class="group-actions">
+                <button type="button" (click)="linking.set(!linking())" [disabled]="busy()">{{ linking() ? 'Cancel grouping' : 'Group with another job' }}</button>
+                @if (group.pitches.length > 1) {
+                  <button type="button" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
+                } @else if (group.kind === 'manual') {
+                  <button type="button" (click)="groupCurrent('auto')" [disabled]="busy()">Allow automatic matching</button>
+                }
+              </div>
+              @if (linking()) {
+                <form class="group-form" (ngSubmit)="groupCurrent('link')">
+                  <label>Same job as<select name="linkTarget" [(ngModel)]="linkTarget" required>
+                    <option value="" disabled>Choose a job</option>
+                    @for (option of linkOptions(); track option.id) {
+                      <option [value]="option.pitches[0].id">{{ option.pitches[0].title }} — {{ sender(option.pitches[0].from) }} — {{ option.pitches[0].receivedAt | date: 'MMM d' }}</option>
+                    }
+                  </select></label>
+                  <button class="button secondary" type="submit" [disabled]="busy() || !linkTarget">Group jobs</button>
+                </form>
+              }
+            }
+            <p class="recruiter">{{ row.from }}</p>
+            <p class="received-detail">
+              <strong>{{ ageLabel(row.receivedAt) }}</strong>
+              <span>Received <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y, h:mm a' }}</time></span>
+            </p>
+            <dl class="facts">
+              <div>
+                <dt>Company</dt>
+                <dd>{{ row.company }}</dd>
+              </div>
+              <div>
+                <dt>Location</dt>
+                <dd>{{ row.location }}</dd>
+              </div>
+              <div>
+                <dt>Pay</dt>
+                <dd>
+                  @if (row.pay; as pay) {
+                    <strong
+                      >{{ money(pay.min)
+                      }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong
+                    >
+                    / {{ pay.period }}
+                  } @else {
+                    Not stated
+                  }
+                </dd>
+              </div>
+            </dl>
+            @for (map of locationMaps(); track map.query) {
+              <section class="location-map" aria-label="Address previews">
+                <a [href]="map.link" target="_blank" rel="noopener noreferrer">{{ map.source }}: {{ map.query }} ↗</a>
+                <div class="address-thumbnails">
+                  <iframe [src]="map.src" [title]="'Satellite map of ' + map.query" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
+                  <iframe [src]="map.streetSrc" [title]="'Street map of ' + map.query" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
+                </div>
+              </section>
+            }
+            <section class="assessment" aria-labelledby="assessment-title">
+              <h3 id="assessment-title">How it fits</h3>
+              <ul>
+                @for (reason of row.reasons; track $index) {
+                  <li>
+                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{
+                      reason.kind === 'pass' ? '✓' : reason.kind === 'fail' ? '×' : '?'
+                    }}</span>
+                    <div>
+                      <p>{{ reason.text }}</p>
+                      @if (reason.evidence) {
+                        <blockquote>{{ sourceText(reason.evidence) }}</blockquote>
+                      }
+                    </div>
+                  </li>
+                }
+              </ul>
+            </section>
+            <div class="decisions" aria-label="Triage this opportunity">
+              <button
+                type="button"
+                class="button primary"
+                [class.chosen]="row.status === 'Pursue'"
+                (click)="save('Pursue')"
+                [disabled]="busy()"
+              >
+                ↗ Pursue</button
+              ><button
+                type="button"
+                class="button secondary"
+                [class.chosen]="row.status === 'Maybe'"
+                (click)="save('Maybe')"
+                [disabled]="busy()"
+              >
+                Maybe</button
+              ><button
+                type="button"
+                class="button secondary"
+                [class.chosen]="row.status === 'Passed'"
+                (click)="save('Passed')"
+                [disabled]="busy()"
+              >
+                Pass
+              </button>
+            </div>
+            <section class="email-source" aria-labelledby="email-title">
+              <h3 id="email-title">Email body</h3>
+              @if (row.truncated) {
+                <p class="incomplete">The stored email is incomplete. Open in Gmail to read the original.</p>
+              }
+              <div class="email-reading">
+                @for (block of emailBlocks(); track $index) {
+                  @if (block.kind === 'field') {
+                    <p class="email-field">{{ block.label }}: {{ block.value }}</p>
+                  } @else {
+                    <pre>{{ block.text }}</pre>
+                  }
+                }
+              </div>
+            </section>
+            <form class="tracking" (ngSubmit)="save()">
+              <div class="form-row">
+                <label
+                  >Status<select
+                    name="status"
+                    [(ngModel)]="editStatus"
+                    (ngModelChange)="dirty.set(true)"
+                  >
+                    @for (status of statuses; track status) {
+                      <option [value]="status">{{ status }}</option>
+                    }
+                  </select></label
+                ><label
+                  >Follow-up date<input
+                    type="date"
+                    name="followUp"
+                    [(ngModel)]="followUp"
+                    (ngModelChange)="dirty.set(true)"
+                /></label>
+              </div>
+              <label
+                >Next action<input
+                  name="nextAction"
+                  [(ngModel)]="nextAction"
+                  (ngModelChange)="dirty.set(true)"
+                  maxlength="500" /></label
+              ><label
+                >Notes<textarea
+                  name="notes"
+                  [(ngModel)]="notes"
+                  (ngModelChange)="dirty.set(true)"
+                  rows="3"
+                  maxlength="10000"
+                ></textarea>
+              </label>
+              <div class="save-row">
+                <button type="submit" class="button secondary" [disabled]="busy() || !dirty()">
+                  {{ busy() ? 'Saving…' : 'Save changes' }}
+                </button>
+                @if (dirty()) {
+                  <span>Unsaved changes</span>
+                }
+              </div>
+            </form>
+          } @else {
+            <div class="empty detail-empty">
+              <img src="icon-512.png" width="56" height="56" alt="" />
+              <h2>Find your next good fit.</h2>
+              <p>Select an opportunity to review it.</p>
+            </div>
+          }
+        </section>
+      </div>
+    }
+  </main>
+</div>

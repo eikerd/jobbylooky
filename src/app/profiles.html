@@ -1,0 +1,66 @@
+<div class="profile-workspace">
+  <section class="profile-list" [attr.aria-label]="mode() === 'recruiters' ? 'Recruiters by name' : 'Companies by name'">
+    @for (entry of entries(); track entry.id) {
+      <button type="button" class="profile-row" [attr.aria-pressed]="selected()?.id === entry.id" (click)="select(entry.id)">
+        <strong>{{ entry.name }}</strong>
+        @if ('email' in entry) {
+          <span>{{ companyLabel(entry.companyId) }}</span>
+        }
+        <span>{{ entry.pitches.length }} pitches · {{ entry.jobs.length }} jobs</span>
+        <span>{{ entry.recentCount }} pitches in last 30 days</span>
+      </button>
+    } @empty {
+      <p class="empty">Profiles appear when job emails are imported.</p>
+    }
+  </section>
+  <section #detail class="profile-detail" aria-label="Profile overview">
+    @if (selected(); as profile) {
+      <h2>{{ profile.name }}</h2>
+      @if (recruiter(); as person) {
+        @if (person.email && person.email !== person.name) { <p class="identity">{{ person.email }}</p> }
+        <button type="button" class="text-link" (click)="openCompany.emit(person.companyId)">{{ companyLabel(person.companyId) }}</button>
+      }
+      @if (company(); as firm) {
+        <p class="provenance">{{ firm.kind === 'unassigned' ? 'Company not identified from this sender address.' : firm.kind === 'relay' ? 'Job-board relay addresses; recruiting companies are not verified.' : 'Company grouping is based on the sender email domain.' }}</p>
+      }
+      <div class="profile-summary">
+        <span><strong>{{ profile.pitches.length }}</strong> pitches</span>
+        <span><strong>{{ profile.jobs.length }}</strong> jobs</span>
+        <span><strong>{{ profile.recentCount }}</strong> pitches in last 30 days</span>
+      </div>
+      <p class="coverage">Imported history: {{ profile.firstSeen | date:'MMM d, y' }}–{{ profile.lastSeen | date:'MMM d, y' }}</p>
+      @if (mode() === 'companies') {
+        @if (company(); as firm) {
+          <section class="company-people" aria-labelledby="company-people-title">
+            <h3 id="company-people-title">Recruiters</h3>
+            @for (person of firm.recruiters; track person.id) {
+              <button type="button" class="person-link" (click)="openRecruiter.emit(person.id)">
+                <span>{{ person.name }}</span>
+                <span>{{ person.pitches.length }} pitches · {{ person.recentCount }} in last 30 days</span>
+              </button>
+            }
+          </section>
+        }
+      }
+      <section class="profile-offers" aria-labelledby="profile-offers-title">
+        <h3 id="profile-offers-title">Job offerings</h3>
+        @for (job of profile.jobs; track job.id) {
+          @let latest = job.pitches[0];
+          <article class="profile-job">
+            <div class="job-heading"><h4>{{ latest.title }}</h4><span class="age">{{ age(latest.receivedAt) }}<time [attr.datetime]="latest.receivedAt">{{ latest.receivedAt | date:'MMM d, y' }}</time></span></div>
+            <p>{{ latest.company !== 'Not stated' ? latest.company + ' · ' : '' }}{{ latest.location }}</p>
+            @if (job.history.occurrences > 1) {
+              <p class="overlap">First seen {{ job.history.firstSeen | date:'MMM d, y' }} · {{ job.history.spanDays }}-day span · longest gap {{ job.history.longestGapDays }} days</p>
+            }
+            @if (job.totalPitches > 1) { <p class="overlap">{{ job.totalPitches }} pitches for this job across your inbox</p> }
+            @for (pitch of job.pitches; track pitch.id) {
+              <button type="button" class="offer-link" (click)="openPitch.emit(pitch.id)">
+                <span [class.full-time]="pitch.employmentType === 'Full-time'">{{ pitch.from }}</span><span>{{ pitch.fit }} · {{ pitch.status }} <span aria-hidden="true">↗</span></span>
+              </button>
+            }
+          </article>
+        }
+      </section>
+    }
+  </section>
+</div>
