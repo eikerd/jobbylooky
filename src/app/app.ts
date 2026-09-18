@@ -100,8 +100,17 @@ export class App implements OnDestroy {
       body: data === undefined ? undefined : JSON.stringify(data),
       signal: AbortSignal.timeout(120000),
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'The request failed.');
+    // A proxy error page or an empty body must not hide the HTTP status behind a SyntaxError.
+    const text = await response.text();
+    let result: { error?: string } | null = null;
+    try {
+      result = text ? JSON.parse(text) : null;
+    } catch {
+      result = null;
+    }
+    if (!response.ok)
+      throw new Error(result?.error || `The request failed (HTTP ${response.status}).`);
+    if (result === null) throw new Error('The server returned an unreadable response.');
     return result as T;
   }
   async load() {
@@ -273,6 +282,13 @@ export class App implements OnDestroy {
         .replace(/"/g, '')
         .trim() || from
     );
+  }
+  reasonMark(kind: string) {
+    return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
+  }
+  // The row icons are compact; screen readers get the reasons as words.
+  reasonSummary(row: Opportunity) {
+    return row.reasons.map((reason) => `${this.reasonMark(reason.kind)} ${reason.text}`).join('; ');
   }
   fitClass(fit: string) {
     return fit.toLowerCase().replaceAll(' ', '-');

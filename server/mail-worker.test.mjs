@@ -79,3 +79,24 @@ test('legacy schemas work and flag stubs; failed pages propagate instead of repo
     /503/,
   );
 });
+test('the SQL prefilter covers every isOpportunity term, so "Hiring:" subjects are not dropped', async () => {
+  const results = await readWorker('http://example.test', async (url, options) => {
+    const stmt = JSON.parse(options.body).requests[0].stmt;
+    if (stmt.sql.startsWith('PRAGMA')) return response([{ name: 'messageId' }]);
+    const patterns = stmt.args.slice(3).map((arg) => arg.value);
+    assert.ok(patterns.includes('%hiring%'));
+    assert.ok(patterns.includes('%position%'));
+    assert.equal((stmt.sql.match(/LIKE \?/g) || []).length, patterns.length);
+    return response([
+      {
+        messageId: 'h',
+        subject: 'Hiring: Product Manager',
+        senderEmail: null,
+        receivedAt: 1789685000,
+        rawBody: 'Remote',
+      },
+    ]);
+  });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].from, '');
+});

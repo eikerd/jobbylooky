@@ -332,11 +332,16 @@ export function screen(message) {
   };
 }
 
+/** Subject terms that mark a pitch. The mail-worker SQL prefilter is built from this list. */
+export const OPPORTUNITY_TERMS = [
+  'developer', 'engineer', 'hiring', 'recruit', 'job', 'opportunity', 'opening', 'position',
+  'UI lead', 'frontend lead',
+];
+const opportunityPattern = new RegExp(`\\b(?:${OPPORTUNITY_TERMS.join('|')})\\b`, 'i');
+
 export function isOpportunity(message) {
   return (
-    /\b(?:developer|engineer|hiring|recruit|job|opportunity|opening|position|UI lead|frontend lead)\b/i.test(
-      message.subject,
-    ) &&
+    opportunityPattern.test(message.subject) &&
     !/\b(?:birthday|impressions|posts got|project available to import|webinar|newsletter|monthly build|hello developer|developer program|subscription|just hired|insights:|hired roles near you)\b/i.test(
       message.subject,
     )

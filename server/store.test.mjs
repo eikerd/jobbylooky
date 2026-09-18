@@ -175,3 +175,15 @@ test('employer and Plano flags retain complete pitches and user decisions after 
     assert.ok(restored.reasons.some(reason => reason.kind === 'check' && /client you asked to flag/.test(reason.text)));
     assert.equal(reopened.groups()[0].pitches[0].id, row.id);
   }));
+test('a re-synced message with no sender does not crash the batch', () =>
+  withStore((store) => {
+    assert.equal(store.import([message]), 1);
+    assert.doesNotThrow(() => store.import([{ ...message, from: null }]));
+    assert.equal(store.snapshot().opportunities[0].from, 'recruiter@example.com');
+  }));
+test('imports without an id or a valid date are rejected with a clear 400', () =>
+  withStore((store) => {
+    assert.throws(() => store.import([{ ...message, receivedAt: undefined }]), (error) => error.status === 400 && /receivedAt/.test(error.message));
+    assert.throws(() => store.import({ not: 'a list' }), (error) => error.status === 400);
+    assert.equal(store.import([{ ...message, subject: undefined, body: undefined }]), 1);
+  }));

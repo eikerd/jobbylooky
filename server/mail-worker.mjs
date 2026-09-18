@@ -1,4 +1,7 @@
-import { isOpportunity } from './screen.mjs';
+import { isOpportunity, OPPORTUNITY_TERMS } from './screen.mjs';
+
+// Never stricter than isOpportunity(), which makes the final decision.
+const SUBJECT_PREFILTER = OPPORTUNITY_TERMS.map(() => 'lower(subject) LIKE ?').join(' OR ');
 
 /** Read only: the existing worker owns Gmail ingestion and its mail log. */
 export async function readWorker(url, fetcher = fetch) {
@@ -37,21 +40,20 @@ export async function readWorker(url, fetcher = fetch) {
     const sql = `SELECT messageId, subject, senderEmail, receivedAt, rawBody, ${threadColumn}, ${truncatedColumn}
       FROM "budget-lens_mail_messages"
       WHERE (receivedAt > ? OR (receivedAt = ? AND messageId > ?))
-        AND (lower(subject) LIKE '%developer%' OR lower(subject) LIKE '%engineer%'
-          OR lower(subject) LIKE '%angular%' OR lower(subject) LIKE '%frontend%'
-          OR lower(subject) LIKE '%front end%' OR lower(subject) LIKE '%ui lead%')
+        AND (${SUBJECT_PREFILTER})
       ORDER BY receivedAt, messageId LIMIT 100`;
     page = await query(sql, [
       { type: 'integer', value: String(cursorTime) },
       { type: 'integer', value: String(cursorTime) },
       { type: 'text', value: cursorId },
+      ...OPPORTUNITY_TERMS.map((term) => ({ type: 'text', value: `%${term.toLowerCase()}%` })),
     ]);
     for (const row of page) {
       const message = {
         id: row.messageId,
         threadId: row.mailThreadId || row.messageId,
         subject: row.subject || '',
-        from: row.senderEmail,
+        from: row.senderEmail || '',
         receivedAt: new Date(Number(row.receivedAt) * 1000).toISOString(),
         body: row.rawBody || '',
         isHtml: false,

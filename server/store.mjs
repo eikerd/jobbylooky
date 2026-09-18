@@ -4,6 +4,26 @@ import { screen, STATUSES } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 
+/** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
+function validMessages(messages) {
+  if (!Array.isArray(messages))
+    throw Object.assign(new Error('Import must be a list of messages.'), { status: 400 });
+  return messages.map((message, index) => {
+    const valid =
+      typeof message?.id === 'string' && message.id &&
+      typeof message.receivedAt === 'string' && !Number.isNaN(Date.parse(message.receivedAt));
+    if (!valid)
+      throw Object.assign(new Error(`Message ${index + 1} needs an id and a valid receivedAt date.`), { status: 400 });
+    return {
+      ...message,
+      threadId: message.threadId || message.id,
+      subject: String(message.subject ?? ''),
+      from: String(message.from ?? ''),
+      body: String(message.body ?? ''),
+    };
+  });
+}
+
 export function createStore(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
@@ -49,7 +69,7 @@ export function createStore(directory) {
     import(messages, { synced = false, account = null } = {}) {
       const next = structuredClone(state);
       let added = 0;
-      for (const message of messages.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
+      for (const message of validMessages(messages).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
         const id = `${message.source || message.account || account || 'manual'}:${message.threadId}`;
         const existing = next.opportunities.find(
           (row) =>
@@ -63,9 +83,14 @@ export function createStore(directory) {
           const recorded = existing.history.find(item => item.id === message.id);
           if (recorded) Object.assign(recorded, occurrence);
           else existing.history.push(occurrence);
-          const address = (value) => value.match(/[^\s<>]+@[^\s<>]+/)?.[0]?.toLowerCase();
+          const address = (value) => String(value ?? '').match(/[^\s<>]+@[^\s<>]+/)?.[0]?.toLowerCase();
           const incomingAddress = address(message.from);
-          if (incomingAddress && existing.from.toLowerCase() === incomingAddress && message.from.toLowerCase() !== incomingAddress) existing.from = message.from;
+          if (
+            incomingAddress &&
+            existing.from?.toLowerCase() === incomingAddress &&
+            message.from.toLowerCase() !== incomingAddress
+          )
+            existing.from = message.from;
         }
         if (existing?.messageIds.includes(message.id)) {
           // A later replay may restore a formerly truncated body. Never replace

@@ -124,33 +124,40 @@
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
               (click)="select(row)"
             >
-              <div class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><h2>{{ row.title }}</h2></span>
+              <span class="row-title">
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">{{ row.title }}</span></span>
                 <span class="received">
                   <strong>{{ ageLabel(row.receivedAt) }}</strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
                 </span>
-              </div>
-              <p class="company">
+              </span>
+              <span class="company">
                 {{ row.company !== 'Not stated' ? row.company : sender(row.from) }}
-              </p>
-              <div class="row-bottom">
+              </span>
+              <span class="row-bottom">
                 <span>{{ row.location }}</span>
                 <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
+                @if (row.reasons.length) {
+                  <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
+                    @for (reason of row.reasons; track $index) {
+                      <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
+                    }
+                  </span>
+                }
                 @if (group.pitches.length > 1) {
                   <span class="pitch-count">{{ group.pitches.length }} pitches</span>
                 }
                 @if (row.status !== 'New') {
                   <span class="decision">{{ row.status }}</span>
                 }
-              </div>
+              </span>
               @if (group.history.occurrences > 1) {
-                <p class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</p>
+                <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</span>
               }
               @if (row.followUp) {
-                <p class="follow-up" [class.overdue]="due(row.followUp)">
+                <span class="follow-up" [class.overdue]="due(row.followUp)">
                   Follow up {{ row.followUp | date: 'MMM d' : 'UTC' }}
-                </p>
+                </span>
               }
             </button>
           } @empty {
@@ -289,9 +296,7 @@
               <ul>
                 @for (reason of row.reasons; track $index) {
                   <li>
-                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{
-                      reason.kind === 'pass' ? '✓' : reason.kind === 'fail' ? '×' : '?'
-                    }}</span>
+                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
                     <div>
                       <p>{{ reason.text }}</p>
                       @if (reason.evidence) {
