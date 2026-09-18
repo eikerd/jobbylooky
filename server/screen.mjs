@@ -310,9 +310,13 @@ export function screen(message, trackedPhrases = []) {
     trackedPhrases,
   );
   reasons.unshift(...trackedReasons);
-  const fit = multiRole
+  // An owner-defined negative phrase is decisive even in a multi-role email.
+  const negativePhrase = trackedReasons.some((reason) => reason.kind === 'fail');
+  const fit = negativePhrase
+    ? 'Mismatch'
+    : multiRole
     ? 'Review'
-    : javaRequired || microsoftRequired || locationMismatch || trackedReasons.some((reason) => reason.kind === 'fail')
+    : javaRequired || microsoftRequired || locationMismatch
       ? 'Mismatch'
       : message.truncated ||
           javaUnclear ||

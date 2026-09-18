@@ -16,6 +16,8 @@ function validMessages(messages) {
       throw Object.assign(new Error(`Message ${index + 1} needs an id and a valid receivedAt date.`), { status: 400 });
     return {
       ...message,
+      // Lexical sorting and "latest" comparisons below need canonical ISO strings.
+      receivedAt: new Date(Date.parse(message.receivedAt)).toISOString(),
       threadId: message.threadId || message.id,
       subject: String(message.subject ?? ''),
       from: String(message.from ?? ''),

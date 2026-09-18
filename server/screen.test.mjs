@@ -315,3 +315,8 @@ test('tracked phrases match whole words across whitespace, never inside JavaScri
   assert.equal(hit.fit, 'Mismatch');
   assert.equal(hit.reasons[0].evidence, 'Pairs with a java engineer daily.');
 });
+test('a negative tracked phrase forces Mismatch even in a multi-role email; a positive one does not', () => {
+  const body = 'Profile:- Angular Developer\nRequired: Angular\nProfile:- Backend Java Engineer\nStrong Java experience';
+  assert.equal(screen(mail('Angular Developer Remote', body), ['Backend Java Engineer']).fit, 'Mismatch');
+  assert.equal(screen(mail('Angular Developer Remote', body), [{ phrase: 'Angular Developer', kind: 'positive' }]).fit, 'Review');
+});

@@ -226,14 +226,20 @@ export class App implements OnDestroy {
     this.error.set('');
     try {
       this.phrases.set(await change());
-      this.jobGroups.set(await this.request<JobGroup[]>('groups'));
-      return true;
     } catch (error) {
       this.error.set(this.message(error));
+      this.busy.set(false);
       return false;
+    }
+    // The phrase change is committed; a failed reload is reported and the next poll reconciles fits.
+    try {
+      this.jobGroups.set(await this.request<JobGroup[]>('groups'));
+    } catch (error) {
+      this.error.set(`Phrase saved, but the list did not refresh: ${this.message(error)}`);
     } finally {
       this.busy.set(false);
     }
+    return true;
   }
   async save(status = this.editStatus) {
     const row = this.selected();

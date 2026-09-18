@@ -219,3 +219,10 @@ test('positive phrases add a ✓ reason without overriding the fit; kinds are va
     assert.equal(store.phrases()[0].kind, 'negative');
     assert.throws(() => store.addPhrase({ phrase: 'Kotlin', kind: 'neutral' }), (error) => error.status === 400);
   }));
+test('non-ISO receivedAt values are normalised so thread order stays chronological', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'a@x', receivedAt: '9/30/2026' }, { ...message, id: 'b@x', receivedAt: '10/01/2026' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.receivedAt.slice(0, 10), new Date('10/01/2026').toISOString().slice(0, 10));
+    assert.deepEqual(row.history.map((item) => item.id), ['a@x', 'b@x']);
+  }));
