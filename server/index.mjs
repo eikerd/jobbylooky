@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
-import { createMailer } from './mailer.mjs';
+import { createMailer, replyRecipient } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
@@ -126,6 +126,12 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    const recipientPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/reply-to$/);
+    if (req.method === 'GET' && recipientPath) {
+      const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(recipientPath[1]));
+      if (!row) return json(404, { error: 'Opportunity not found.' });
+      return json(200, { to: replyRecipient(row, mailer?.from ?? '') });
+    }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {

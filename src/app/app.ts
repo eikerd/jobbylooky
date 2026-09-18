@@ -63,6 +63,7 @@ export class App implements OnDestroy {
   phraseDraft = '';
   readonly replying = signal(false);
   replyDraft = '';
+  readonly replyTo = signal('');
   private replyTemplate = '';
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
@@ -112,8 +113,12 @@ export class App implements OnDestroy {
     window.addEventListener('beforeunload', this.beforeUnload);
   }
   private beforeUnload = (event: BeforeUnloadEvent) => {
-    if (this.dirty()) event.preventDefault();
+    if (this.hasUnsavedWork()) event.preventDefault();
   };
+  // An edited reply counts as unsaved work; the untouched greeting does not.
+  private hasUnsavedWork() {
+    return this.dirty() || (this.replying() && this.replyDraft !== this.replyTemplate);
+  }
   ngOnDestroy() {
     clearInterval(this.poll);
     window.removeEventListener('beforeunload', this.beforeUnload);
@@ -165,9 +170,7 @@ export class App implements OnDestroy {
     return error instanceof Error ? error.message : 'Something went wrong. Please retry.';
   }
   canLeave() {
-    // An edited reply counts as unsaved work; the untouched greeting does not.
-    const replyEdited = this.replying() && this.replyDraft !== this.replyTemplate;
-    return (!this.dirty() && !replyEdited) || window.confirm('Discard your unsaved changes?');
+    return !this.hasUnsavedWork() || window.confirm('Discard your unsaved changes?');
   }
   select(row: Opportunity) {
     if (this.busy() || !this.canLeave()) return;
@@ -211,7 +214,15 @@ export class App implements OnDestroy {
     this.folder.set('All opportunities');
     this.select(row);
   }
-  startReply(row: Opportunity) {
+  async startReply(row: Opportunity) {
+    // Ask the server: it picks the recipient with the same rule it sends with.
+    this.error.set('');
+    try {
+      this.replyTo.set((await this.request<{ to: string }>(`opportunities/${encodeURIComponent(row.id)}/reply-to`)).to);
+    } catch (error) {
+      this.error.set(this.message(error));
+      return;
+    }
     const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
     this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
     this.replyDraft = this.replyTemplate;

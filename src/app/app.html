@@ -403,7 +403,7 @@
                 <p class="reply-off">Sending is not set up on this server.</p>
               } @else if (replying()) {
                 <form (ngSubmit)="sendReply()">
-                  <p class="reply-to">To {{ row.replies?.at(-1)?.to ?? row.from }}</p>
+                  <p class="reply-to">To {{ replyTo() }}</p>
                   <label class="visually-hidden" for="reply-body">Reply</label>
                   <textarea id="reply-body" name="replyBody" rows="7" [(ngModel)]="replyDraft"></textarea>
                   <div class="reply-actions">
@@ -412,7 +412,7 @@
                   </div>
                 </form>
               } @else {
-                <button class="button secondary" type="button" (click)="startReply(row)">↩ Reply</button>
+                <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
               }
             </section>
             <section class="email-source" aria-labelledby="email-title">

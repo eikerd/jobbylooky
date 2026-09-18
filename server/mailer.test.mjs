@@ -18,7 +18,7 @@ test('replies thread under the root so the answer lands on the same row', () => 
   assert.equal(envelope.subject, 'Re: Job Requirement :: Frontend / UI Lead :: Plano, TX');
   assert.equal(envelope.inReplyTo, '<follow@recruiter.example>');
   assert.deepEqual(envelope.references, ['<root@recruiter.example>', '<follow@recruiter.example>']);
-  assert.equal(envelope.to, 'Aditya Singh <aditya@recruiter.example>');
+  assert.equal(envelope.to, 'aditya@recruiter.example');
   assert.equal(replyEnvelope({ ...row, subject: 'RE: hi' }, 'me@example.com').subject, 'RE: hi');
 });
 
@@ -58,4 +58,8 @@ test('malformed sender addresses are never used as a recipient; preview replies 
   assert.throws(() => replyEnvelope(bad, 'me@example.com'), /no sender/);
   const sent = await createMailer({ MAIL_SEND_MODE: 'preview' }).reply(row, 'Hi');
   assert.equal(sent.from, 'preview@jobbylooky.local');
+});
+test('a forged comma-separated sender cannot add recipients', () => {
+  const forged = { ...row, history: [{ id: 'x@y', from: 'Recruiter <recruiter@example.com>, attacker@example.net' }] };
+  assert.equal(replyEnvelope(forged, 'me@example.com').to, 'recruiter@example.com');
 });

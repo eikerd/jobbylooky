@@ -17,8 +17,9 @@ export function replyEnvelope(row, own) {
   const latest = incoming.at(-1);
   if (!latest) throw Object.assign(new Error('This pitch has no sender to reply to.'), { status: 409 });
   const root = String(row.threadId).includes('@') ? row.threadId : row.messageIds[0];
+  // Only the validated address: a forged "a@x, b@y" sender must not add recipients.
   return {
-    to: latest.from,
+    to: address(latest.from),
     subject: /^re:/i.test(row.subject.trim()) ? row.subject.trim() : `Re: ${row.subject.trim()}`,
     inReplyTo: bracket(latest.id),
     references: [...new Set([root, latest.id])].map(bracket),
@@ -29,6 +30,11 @@ export function replyEnvelope(row, own) {
  * SMTP_USER/SMTP_PASS come from 1Password at launch. MAIL_SEND_MODE=preview
  * records replies without sending anything, for rendering and tests.
  */
+/** The recipient a reply would go to, for the composer to show before sending. */
+export function replyRecipient(row, own) {
+  return replyEnvelope(row, own).to;
+}
+
 export function createMailer(env = process.env, transport = null) {
   const user = env.SMTP_USER || '';
   const preview = env.MAIL_SEND_MODE === 'preview';
