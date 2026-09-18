@@ -48,9 +48,14 @@ function schedule() {
   }, intervalMs);
   timer.unref();
 }
-const publicOrigin = process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
-const origins = new Set([publicOrigin, `http://127.0.0.1:${port}`, `http://localhost:${port}`]);
-const hosts = new Set([new URL(publicOrigin).host, `127.0.0.1:${port}`, `localhost:${port}`]);
+// Comma-separated: Chungus answers as chungus.local and as its tailnet name.
+const publicOrigins = (process.env.PUBLIC_ORIGIN || `http://127.0.0.1:${port}`)
+  .split(',')
+  .map((origin) => new URL(origin.trim()).origin);
+const publicOrigin = publicOrigins[0];
+const origins = new Set([...publicOrigins, `http://127.0.0.1:${port}`, `http://localhost:${port}`]);
+const hosts = new Set([...publicOrigins.map((origin) => new URL(origin).host), `127.0.0.1:${port}`, `localhost:${port}`]);
+const BASE = '/jobby';
 const mime = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -96,12 +101,13 @@ export const server = createServer(async (req, res) => {
     if (req.headers['sec-fetch-site'] === 'cross-site')
       return json(403, { error: 'Cross-site access is not allowed.' });
     const url = new URL(req.url, `http://127.0.0.1:${port}`);
-    if (url.pathname === '/' || url.pathname === '/jobs') {
-      res.writeHead(302, { Location: '/jobs/' });
+    // /jobs/ was the path before 2026-09-18; old bookmarks land on the app.
+    if (['/', BASE, '/jobs'].includes(url.pathname) || url.pathname.startsWith('/jobs/')) {
+      res.writeHead(302, { Location: `${BASE}/` });
       return res.end();
     }
-    if (!url.pathname.startsWith('/jobs/')) return json(404, { error: 'Page not found.' });
-    url.pathname = url.pathname.slice('/jobs'.length);
+    if (!url.pathname.startsWith(`${BASE}/`)) return json(404, { error: 'Page not found.' });
+    url.pathname = url.pathname.slice(BASE.length);
     if (req.method === 'GET' && url.pathname === '/api/groups') return json(200, store.groups());
     if (req.method === 'GET' && url.pathname === '/api/opportunities')
       return json(200, store.snapshot().opportunities);
@@ -201,7 +207,7 @@ export const server = createServer(async (req, res) => {
   }
 });
 server.listen(port, process.env.BIND_HOST || '127.0.0.1', () =>
-  console.log(`Jobbylooky: ${publicOrigin}/jobs/`),
+  console.log(`Jobbylooky: ${publicOrigin}${BASE}/`),
 );
 if (workerUrl) {
   sync()

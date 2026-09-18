@@ -48,3 +48,6 @@ work/
 .env
 .env.*
 !.env.template
+
+# Rendered from 1Password on the server; never committed.
+deploy/.env

@@ -15,9 +15,9 @@ npm run build
 MAIL_DATABASE_URL=http://192.168.42.180:8082 npm start
 ```
 
-Open http://127.0.0.1:4317/jobs/. `npm run dev` rebuilds the Angular app while the separate Node server runs. The production build is mounted at `/jobs/` locally and on Chungus. The default bind is loopback.
+Open http://127.0.0.1:4317/jobby/. `npm run dev` rebuilds the Angular app while the separate Node server runs. The production build is mounted at `/jobby/` locally and on Chungus; `/jobs/` (the path before 2026-09-18) redirects there. The default bind is loopback.
 
-Without `MAIL_DATABASE_URL`, the app still supports pasted emails and previously imported messages, but automatic monitoring is disabled. `PUBLIC_ORIGIN` defaults to the local origin; `BIND_HOST`, `PORT`, and `DATA_DIR` are optional deployment settings.
+Without `MAIL_DATABASE_URL`, the app still supports pasted emails and previously imported messages, but automatic monitoring is disabled. `PUBLIC_ORIGIN` defaults to the local origin and accepts a comma-separated list; `BIND_HOST`, `PORT`, and `DATA_DIR` are optional deployment settings.
 
 ## Replying to recruiters
 
@@ -55,13 +55,19 @@ The user's existing `WORK OPPORTUNITY` label is the proposed Gmail view. A label
 
 ## Chungus deployment
 
-Intended URL: https://chungus.tail1d505c.ts.net/jobs/
+URL: http://chungus.local/jobby/ (canonical: https://chungus.tail1d505c.ts.net/jobby/)
 
-The app has its own Docker Compose project in `deploy/docker-compose.yml`, joins the existing `chungus_chungus-network`, and publishes no host port. The companion Chungus nginx route forwards `/jobs/` to `jobbylooky:4317`. `PUBLIC_ORIGIN` checks Host and Origin; JSON mutations reject cross-site requests. This follows the existing private LAN/tailnet access model; do not expose it publicly without adding authentication.
+The app has its own Docker Compose project in `deploy/docker-compose.yml`, joins the existing `chungus_chungus-network`, and publishes no host port. Chungus nginx forwards `/jobby/` to `jobbylooky:4317` behind HTTP basic auth (credentials in 1Password, item `chungus / jobbylooky`; the htpasswd file lives only on the Pi). `PUBLIC_ORIGIN` lists every origin the app answers on; Host and Origin are checked and cross-site requests rejected.
 
-Deploy only clean, merged source. Stage this repository at `/home/eikerd/jobbylooky/` on Chungus, excluding `.git`, `node_modules`, `work`, `data`, `dist`, and `.angular`. Build with `docker compose -f deploy/docker-compose.yml up -d --build`. Apply the merged worker and nginx changes from the Chungus repository separately, verifying existing file hashes before replacement. Reload nginx only after `nginx -t` succeeds. Verify `/jobs/`, the connection status, and a reversible test decision in the running app.
+Deploy only clean, merged source:
 
-Private cache files and email text are gitignored and excluded from the image. The persistent `jobbylooky-data` volume belongs to the non-root Node user. No new Gmail credentials or tokens are needed.
+1. `rsync` a clean `origin/main` checkout to `/home/eikerd/jobbylooky/`, excluding `.git`, `node_modules`, `work`, `data`, `dist`, `.angular` and `deploy/.env`.
+2. `deploy/render-env.sh` renders `SMTP_USER`/`SMTP_PASS` from 1Password into `/home/eikerd/jobbylooky/deploy/.env` (mode 600). Without it the app runs with replies switched off.
+3. `docker compose -f deploy/docker-compose.yml up -d --build` on the Pi.
+4. First deploy only: copy the private cache (`data/opportunities.json`, `data/import.json`) into the `jobbylooky-data` volume while the container is stopped, owned by the `node` user. Never replace an existing volume's cache with an older one.
+5. Chungus nginx: `nginx -t`, then reload. Verify `/jobby/` asks for the password, loads, and shows the connection status.
+
+Private cache files and email text are gitignored and excluded from the image.
 
 ## Verification
 

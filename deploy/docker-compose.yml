@@ -6,7 +6,11 @@ services:
     restart: unless-stopped
     environment:
       MAIL_DATABASE_URL: http://libsql:8080
-      PUBLIC_ORIGIN: https://chungus.tail1d505c.ts.net
+      PUBLIC_ORIGIN: https://chungus.tail1d505c.ts.net,https://chungus.local,http://chungus.local
+    # SMTP_USER/SMTP_PASS for replies, rendered from 1Password by deploy/render-env.sh (mode 600, never committed).
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - jobbylooky-data:/app/data
     networks:
@@ -17,7 +21,7 @@ services:
           'CMD',
           'node',
           '-e',
-          "fetch('http://127.0.0.1:4317/jobs/api/connection').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:4317/jobby/api/connection').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 5s
