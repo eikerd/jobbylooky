@@ -1,0 +1,33 @@
+import { Component, computed, input, output, signal, effect, ElementRef, viewChild } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import type { JobGroup } from './models';
+import { buildProfiles } from './profiles';
+import { ageInDays } from './age';
+
+@Component({
+  selector:'app-profiles',
+  imports:[DatePipe],
+  templateUrl:'./profiles.html',
+  styleUrl:'./profiles.css',
+})
+export class Profiles {
+  readonly groups = input.required<JobGroup[]>();
+  readonly mode = input.required<'recruiters'|'companies'>();
+  readonly focusId = input('');
+  readonly openPitch = output<string>();
+  readonly openRecruiter = output<string>();
+  readonly openCompany = output<string>();
+  readonly selectedId = signal('');
+  readonly detail = viewChild<ElementRef<HTMLElement>>('detail');
+  readonly directory = computed(()=>buildProfiles(this.groups()));
+  readonly entries = computed(()=>this.mode()==='recruiters' ? this.directory().recruiters : this.directory().companies);
+  readonly selected = computed(()=>this.entries().find(profile=>profile.id===this.selectedId()) || this.entries().at(0));
+  readonly recruiter = computed(()=>this.mode()==='recruiters' ? this.directory().recruiters.find(p=>p.id===this.selected()?.id) : undefined);
+  readonly company = computed(()=>this.directory().companies.find(p=>p.id===(this.recruiter()?.companyId || this.selected()?.id)));
+  constructor() {
+    effect(()=>{this.mode(); this.selectedId.set(this.focusId()); this.detail()?.nativeElement.scrollTo({top:0});});
+  }
+  select(id:string) { this.selectedId.set(id); this.detail()?.nativeElement.scrollTo({top:0}); }
+  age(date:string) { const days=ageInDays(date); return days===null ? 'Age unknown' : `${days} ${days===1?'day':'days'} old`; }
+  companyLabel(id:string) { return this.directory().companies.find(p=>p.id===id)?.name || 'Unassigned company'; }
+}

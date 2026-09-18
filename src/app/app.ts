@@ -1,0 +1,295 @@
+import { Component, computed, signal, OnDestroy, ElementRef, viewChild, inject } from '@angular/core';
+import { DomSanitizer } from '@angular/platform-browser';
+import { mapLocations } from './location-map';
+import { DatePipe } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ageInDays } from './age';
+import { formatEmailBody } from './email-body';
+import type { Opportunity, JobGroup } from './models';
+import { Profiles } from './profiles.component';
+import { SourceIcon } from './source-icon.component';
+
+interface Connection {
+  configured: boolean;
+  syncing: boolean;
+  error: string;
+  lastSync: string | null;
+}
+type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
+
+@Component({
+  selector: 'app-root',
+  imports: [FormsModule, DatePipe, Profiles, SourceIcon],
+  templateUrl: './app.html',
+  styleUrl: './app.css',
+})
+export class App implements OnDestroy {
+  private readonly sanitizer = inject(DomSanitizer);
+  readonly locationMaps = computed(() => mapLocations(this.selected()?.location || '', this.selected()?.body || '').map(map => ({
+    ...map,
+    // The helper fixes the Google origin and URL-encodes all email-derived text.
+    src: this.sanitizer.bypassSecurityTrustResourceUrl(map.embed),
+    streetSrc: this.sanitizer.bypassSecurityTrustResourceUrl(map.streetMap),
+  })));
+  readonly detailPane = viewChild<ElementRef<HTMLElement>>('detailPane');
+  readonly folders: Folder[] = ['Inbox', 'Pursuing', 'Maybe', 'Passed', 'All opportunities'];
+  readonly statuses = ['New', 'Pursue', 'Maybe', 'Applied', 'Interviewing', 'Offer', 'Passed'];
+  readonly jobGroups = signal<JobGroup[]>([]);
+  readonly opportunities = computed(() => this.jobGroups().flatMap(group => group.pitches));
+  readonly linking = signal(false);
+  linkTarget = '';
+  readonly folder = signal<Folder>('Inbox');
+  readonly directoryMode = signal<'recruiters' | 'companies' | null>(null);
+  readonly profileFocus = signal('');
+  readonly selectedId = signal('');
+  readonly connection = signal<Connection | null>(null);
+  readonly loading = signal(true);
+  readonly busy = signal(false);
+  readonly error = signal('');
+  readonly notice = signal('');
+  readonly adding = signal(false);
+  readonly dirty = signal(false);
+  notes = '';
+  nextAction = '';
+  followUp = '';
+  editStatus = 'New';
+  importSubject = '';
+  importFrom = '';
+  importBody = '';
+  private poll: ReturnType<typeof setInterval>;
+  private revision = 0;
+  readonly visible = computed(() => {
+    const folder = this.folder();
+    const matchesFolder = (row: Opportunity) =>
+      folder === 'All opportunities' ||
+      (folder === 'Inbox' && row.status === 'New') ||
+      (folder === 'Pursuing' && ['Pursue', 'Applied', 'Interviewing', 'Offer'].includes(row.status)) ||
+      row.status === folder;
+    return this.jobGroups()
+      .filter(group => group.pitches.some(matchesFolder))
+      .map(group => ({ ...group, representative: group.pitches.find(matchesFolder)! }))
+      .sort((a, b) => Date.parse(b.representative.receivedAt) - Date.parse(a.representative.receivedAt));
+  });
+  readonly selectedGroup = computed(() =>
+    this.jobGroups().find(group => group.pitches.some(row => row.id === this.selectedId())),
+  );
+  readonly linkOptions = computed(() => this.jobGroups().filter(group => group.id !== this.selectedGroup()?.id));
+
+  readonly selected = computed(() =>
+    this.opportunities().find((row) => row.id === this.selectedId()),
+  );
+  readonly emailBlocks = computed(() => formatEmailBody(this.selected()?.body || ''));
+  constructor() {
+    void this.load();
+    this.poll = setInterval(() => {
+      if (!this.busy()) void this.refresh();
+    }, 30000);
+    window.addEventListener('beforeunload', this.beforeUnload);
+  }
+  private beforeUnload = (event: BeforeUnloadEvent) => {
+    if (this.dirty()) event.preventDefault();
+  };
+  ngOnDestroy() {
+    clearInterval(this.poll);
+    window.removeEventListener('beforeunload', this.beforeUnload);
+  }
+  private async request<T>(path: string, method = 'GET', data?: unknown): Promise<T> {
+    const response = await fetch(new URL(`api/${path}`, document.baseURI), {
+      method,
+      headers: data === undefined ? {} : { 'Content-Type': 'application/json' },
+      body: data === undefined ? undefined : JSON.stringify(data),
+      signal: AbortSignal.timeout(120000),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'The request failed.');
+    return result as T;
+  }
+  async load() {
+    this.error.set('');
+    await this.refresh();
+    if (!this.selectedId() && this.visible()[0]) this.select(this.visible()[0].representative);
+    this.loading.set(false);
+  }
+  private async refresh() {
+    const revision = this.revision;
+    try {
+      const [rows, connection] = await Promise.all([
+        this.request<JobGroup[]>('groups'),
+        this.request<Connection>('connection'),
+      ]);
+      // A background response started before a decision must not undo its UI state.
+      if (revision !== this.revision) return;
+      this.jobGroups.set(rows);
+      this.connection.set(connection);
+    } catch (error) {
+      this.error.set(this.message(error));
+    }
+  }
+  private message(error: unknown) {
+    return error instanceof Error ? error.message : 'Something went wrong. Please retry.';
+  }
+  canLeave() {
+    return !this.dirty() || window.confirm('Discard your unsaved changes?');
+  }
+  select(row: Opportunity) {
+    if (this.busy() || !this.canLeave()) return;
+    this.selectedId.set(row.id);
+    this.detailPane()?.nativeElement.scrollTo({ top: 0 });
+    this.notes = row.notes;
+    this.nextAction = row.nextAction;
+    this.followUp = row.followUp;
+    this.editStatus = row.status;
+    this.dirty.set(false);
+    this.notice.set('');
+    this.linking.set(false);
+    this.linkTarget = '';
+  }
+  changeFolder(folder: Folder) {
+    if (this.busy() || !this.canLeave()) return;
+    this.dirty.set(false);
+    this.directoryMode.set(null);
+    this.folder.set(folder);
+    this.selectedId.set('');
+    if (this.visible()[0]) this.select(this.visible()[0].representative);
+  }
+  openDirectory(mode: 'recruiters' | 'companies', id = '') {
+    if (this.busy() || !this.canLeave()) return;
+    this.dirty.set(false);
+    this.directoryMode.set(mode);
+    this.profileFocus.set(id);
+    this.notice.set('');
+  }
+  selectPitchId(id: string) {
+    const row = this.opportunities().find(item=>item.id===id);
+    if (row) this.select(row);
+  }
+  openProfilePitch(id: string) {
+    const row = this.opportunities().find(item => item.id === id);
+    if (!row || this.busy() || !this.canLeave()) return;
+    this.dirty.set(false);
+    this.directoryMode.set(null);
+    this.folder.set('All opportunities');
+    this.select(row);
+  }
+  async save(status = this.editStatus) {
+    const row = this.selected();
+    if (!row || this.busy()) return;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    this.notice.set('');
+    try {
+      const updated = await this.request<Opportunity>(
+        `opportunities/${encodeURIComponent(row.id)}`,
+        'PATCH',
+        { status, notes: this.notes, nextAction: this.nextAction, followUp: this.followUp },
+      );
+      this.jobGroups.update(groups => groups.map(group => ({
+        ...group, pitches: group.pitches.map(item => item.id === updated.id ? updated : item),
+      })));
+      this.editStatus = updated.status;
+      this.dirty.set(false);
+      this.notice.set('Saved.');
+    } catch (error) {
+      this.error.set(this.message(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  async groupCurrent(action: 'link' | 'separate' | 'auto') {
+    const row = this.selected();
+    if (!row || this.busy() || !this.canLeave()) return;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      const groups = await this.request<JobGroup[]>('grouping', 'POST', {
+        action, sourceId: row.id, targetId: action === 'link' ? this.linkTarget : undefined,
+      });
+      this.jobGroups.set(groups);
+      this.notes = row.notes;
+      this.nextAction = row.nextAction;
+      this.followUp = row.followUp;
+      this.editStatus = row.status;
+      this.dirty.set(false);
+      this.linking.set(false);
+      this.linkTarget = '';
+      this.notice.set(action === 'link' ? 'Pitches grouped. Each recruiter keeps their own status and notes.' : action === 'separate' ? 'This pitch is now separate.' : 'Automatic matching restored.');
+    } catch (error) {
+      this.error.set(this.message(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  async checkMail() {
+    this.busy.set(true);
+    this.error.set('');
+    this.notice.set('');
+    try {
+      const result = await this.request<{ added: number }>('sync', 'POST', {});
+      await this.refresh();
+      this.notice.set(
+        result.added
+          ? `${result.added} new opportunities imported.`
+          : 'Mail checked. No new opportunities.',
+      );
+    } catch (error) {
+      this.error.set(this.message(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  async importEmail() {
+    if (this.busy()) return;
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      await this.request('import', 'POST', {
+        subject: this.importSubject,
+        from: this.importFrom,
+        body: this.importBody,
+      });
+      this.adding.set(false);
+      this.importSubject = '';
+      this.importFrom = '';
+      this.importBody = '';
+      await this.refresh();
+      this.notice.set('Email added to the inbox.');
+    } catch (error) {
+      this.error.set(this.message(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  gmailUrl(row: Opportunity) {
+    return row.source === 'gmail'
+      ? `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(row.account || '')}#all/${encodeURIComponent(row.threadId)}`
+      : `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('rfc822msgid:' + row.messageIds[0])}`;
+  }
+  sender(from: string) {
+    return (
+      from
+        .replace(/<[^>]*>/g, '')
+        .replace(/"/g, '')
+        .trim() || from
+    );
+  }
+  fitClass(fit: string) {
+    return fit.toLowerCase().replaceAll(' ', '-');
+  }
+  money(value: number) {
+    return (Math.round(value) || 0).toLocaleString('en-US');
+  }
+  sourceText(body: string) {
+    return body.replace(/\$/g, '');
+  }
+  ageLabel(receivedAt: string) {
+    const days = ageInDays(receivedAt);
+    return days === null ? 'Age unknown' : `${days} ${days === 1 ? 'day' : 'days'} old`;
+  }
+  due(date: string) {
+    const today = new Date();
+    const local = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    return Boolean(date && date <= local);
+  }
+}

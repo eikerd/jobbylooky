@@ -1,0 +1,27 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  color-scheme: dark;
+  margin: 0;
+  background: #080c0a;
+  color: #cfdbd2;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+}
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+:focus-visible {
+  outline: 2px solid #79ed9f;
+  outline-offset: 2px;
+}
+::selection {
+  background: #244c32;
+}
+
+* { scrollbar-width: thin; scrollbar-color: #344a3c #0b100d; }
