@@ -5,7 +5,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
 import { formatEmailBody } from './email-body';
-import type { Opportunity, JobGroup, TrackedPhrase } from './models';
+import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -46,8 +46,20 @@ export class App implements OnDestroy {
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
   });
   readonly phrases = signal<TrackedPhrase[]>([]);
-  readonly phraseList = computed(() => this.phrases().map((row) => row.phrase));
+  readonly phraseKinds: PhraseKind[] = ['negative', 'positive'];
+  readonly openPhraseId = signal('');
+  /** Pitches per phrase id, from the reasons the server recorded, newest first. */
+  readonly phraseMatches = computed(() => {
+    const byPhrase = new Map<string, Opportunity[]>();
+    const rows = [...this.opportunities()].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt));
+    for (const tracked of this.phrases()) {
+      const key = tracked.phrase.toLowerCase();
+      byPhrase.set(tracked.id, rows.filter((row) => row.reasons.some((reason) => reason.phrase?.toLowerCase() === key)));
+    }
+    return byPhrase;
+  });
   phraseDraft = '';
+  phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
   readonly connection = signal<Connection | null>(null);
@@ -194,8 +206,15 @@ export class App implements OnDestroy {
   async addPhrase() {
     const phrase = this.phraseDraft.trim();
     if (phrase.length < 2) return;
-    if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase })))
+    const kind = this.phraseKind;
+    if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
       this.phraseDraft = '';
+  }
+  phrasesOf(kind: PhraseKind) {
+    return this.phrases().filter((row) => row.kind === kind);
+  }
+  togglePhrase(id: string) {
+    this.openPhraseId.update((open) => (open === id ? '' : id));
   }
   removePhrase(row: TrackedPhrase) {
     void this.changePhrases(() => this.request<TrackedPhrase[]>(`phrases/${encodeURIComponent(row.id)}`, 'DELETE'));

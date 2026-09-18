@@ -8,7 +8,7 @@ export interface Opportunity {
   receivedAt: string;
   fit: string;
   employmentType?: 'Full-time' | 'Contract' | 'Contract-to-hire' | 'Unknown';
-  reasons: { kind: string; text: string; evidence: string }[];
+  reasons: { kind: string; text: string; evidence: string; phrase?: string }[];
   body: string;
   truncated: boolean;
   status: string;
@@ -36,7 +36,9 @@ export interface JobGroup {
     timeline:{id:string;pitchId:string;from:string;receivedAt:string;gapDays:number|null}[];
   };
 }
+export type PhraseKind = 'negative' | 'positive';
 export interface TrackedPhrase {
   id: string;
   phrase: string;
+  kind: PhraseKind;
 }

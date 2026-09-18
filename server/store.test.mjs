@@ -206,3 +206,16 @@ test('tracked phrases are seeded, flag matching pitches as Mismatch and keep dec
     assert.throws(() => store.addPhrase({ phrase: 'x' }), (error) => error.status === 400);
     assert.equal(createStore(dir).snapshot().opportunities[0].fit, 'Mismatch');
   }));
+test('positive phrases add a ✓ reason without overriding the fit; kinds are validated', () =>
+  withStore((store) => {
+    store.import([{ ...message, body: 'Required: Angular and TypeScript. 100% remote.' }]);
+    const before = store.snapshot().opportunities[0].fit;
+    store.addPhrase({ phrase: '100% remote', kind: 'positive' });
+    const row = store.snapshot().opportunities[0];
+    const reason = row.reasons.find((item) => item.phrase === '100% remote');
+    assert.equal(reason.kind, 'pass');
+    assert.equal(row.fit, before);
+    assert.equal(store.phrases().find((p) => p.phrase === '100% remote').kind, 'positive');
+    assert.equal(store.phrases()[0].kind, 'negative');
+    assert.throws(() => store.addPhrase({ phrase: 'Kotlin', kind: 'neutral' }), (error) => error.status === 400);
+  }));

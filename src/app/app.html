@@ -114,22 +114,51 @@
       <div class="empty" role="status">Loading your opportunities…</div>
     } @else if (directoryMode() === 'phrases') {
       <section class="phrases" aria-labelledby="phrases-title">
-        <h2 id="phrases-title">Negative phrases</h2>
+        <h2 id="phrases-title" class="visually-hidden">Tracked phrases</h2>
         <form (ngSubmit)="addPhrase()">
           <label class="visually-hidden" for="new-phrase">Phrase to track</label>
           <input id="new-phrase" name="phrase" [(ngModel)]="phraseDraft" placeholder="e.g. Java Engineer" maxlength="100" autocomplete="off" />
+          <label class="visually-hidden" for="new-phrase-kind">Phrase kind</label>
+          <select id="new-phrase-kind" name="kind" [(ngModel)]="phraseKind">
+            <option value="negative">× Negative</option>
+            <option value="positive">✓ Positive</option>
+          </select>
           <button class="button primary" type="submit" [disabled]="busy() || phraseDraft.trim().length < 2">Track</button>
         </form>
-        <ul>
-          @for (row of phrases(); track row.id) {
-            <li>
-              <span class="phrase"><span class="reason-icon fail" aria-hidden="true">×</span>{{ row.phrase }}</span>
-              <button class="button secondary" type="button" [disabled]="busy()" (click)="removePhrase(row)" [attr.aria-label]="'Stop tracking ' + row.phrase">Remove</button>
-            </li>
-          } @empty {
-            <li class="phrase-empty">No phrases tracked.</li>
-          }
-        </ul>
+        @for (kind of phraseKinds; track kind) {
+          <h3>{{ kind === 'negative' ? 'Negative phrases' : 'Positive phrases' }}</h3>
+          <ul>
+            @for (row of phrasesOf(kind); track row.id) {
+              @let matches = phraseMatches().get(row.id) ?? [];
+              <li>
+                <div class="phrase-row">
+                  <button type="button" class="phrase" [class.positive]="kind === 'positive'" [attr.aria-expanded]="openPhraseId() === row.id" (click)="togglePhrase(row.id)">
+                    <span [class]="'reason-icon ' + (kind === 'positive' ? 'pass' : 'fail')" aria-hidden="true">{{ kind === 'positive' ? '✓' : '×' }}</span>{{ row.phrase }}
+                  </button>
+                  <span class="phrase-count">{{ matches.length }}</span>
+                  <button class="button secondary" type="button" [disabled]="busy()" (click)="removePhrase(row)" [attr.aria-label]="'Stop tracking ' + row.phrase">Remove</button>
+                </div>
+                @if (openPhraseId() === row.id) {
+                  <ul class="phrase-pitches">
+                    @for (pitch of matches; track pitch.id) {
+                      <li>
+                        <button type="button" (click)="openProfilePitch(pitch.id)">
+                          <span class="pitch-title">{{ pitch.title }}</span>
+                          <span [class]="'fit ' + fitClass(pitch.fit)">{{ pitch.fit }}</span>
+                          <span class="pitch-age">{{ ageLabel(pitch.receivedAt) }}</span>
+                        </button>
+                      </li>
+                    } @empty {
+                      <li class="phrase-empty">No pitches match.</li>
+                    }
+                  </ul>
+                }
+              </li>
+            } @empty {
+              <li class="phrase-empty">None tracked.</li>
+            }
+          </ul>
+        }
       </section>
     } @else if (profileMode(); as mode) {
       <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
@@ -147,7 +176,7 @@
               (click)="select(row)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading"><app-hl [text]="row.title" [phrases]="phraseList()" /></span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading"><app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong>{{ ageLabel(row.receivedAt) }}</strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -210,7 +239,7 @@
                 >
               }
             </div>
-            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phraseList()" /></h2>
+            <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phrases()" /></h2>
             @if (selectedGroup(); as group) {
               @if (group.history.occurrences > 1) {
                 <section class="posting-summary" aria-label="Posting history">
@@ -322,7 +351,7 @@
                     <div>
                       <p>{{ reason.text }}</p>
                       @if (reason.evidence) {
-                        <blockquote><app-hl [text]="sourceText(reason.evidence)" [phrases]="phraseList()" /></blockquote>
+                        <blockquote><app-hl [text]="sourceText(reason.evidence)" [phrases]="phrases()" /></blockquote>
                       }
                     </div>
                   </li>
@@ -364,9 +393,9 @@
               <div class="email-reading">
                 @for (block of emailBlocks(); track $index) {
                   @if (block.kind === 'field') {
-                    <p class="email-field"><app-hl [text]="block.label + ': ' + block.value" [phrases]="phraseList()" /></p>
+                    <p class="email-field"><app-hl [text]="block.label + ': ' + block.value" [phrases]="phrases()" /></p>
                   } @else {
-                    <pre><app-hl [text]="block.text" [phrases]="phraseList()" /></pre>
+                    <pre><app-hl [text]="block.text" [phrases]="phrases()" /></pre>
                   }
                 }
               </div>

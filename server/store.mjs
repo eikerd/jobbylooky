@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES } from './screen.mjs';
+import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 
@@ -37,15 +37,15 @@ export function createStore(directory) {
     state = next;
   }
   // Seed the owner's first negative phrases once; afterwards the Phrases tab owns the list.
-  state.trackedPhrases ??= DEFAULT_TRACKED_PHRASES.map((phrase) => ({ id: randomUUID(), phrase }));
-  const screen = (message) => screenMessage(message, state.trackedPhrases.map((row) => row.phrase));
+  state.trackedPhrases ??= DEFAULT_TRACKED_PHRASES.map((phrase) => ({ id: randomUUID(), phrase, kind: 'negative' }));
+  state.trackedPhrases = state.trackedPhrases.map((row) => ({ kind: 'negative', ...row }));
+  const screen = (message) => screenMessage(message, state.trackedPhrases);
   // Apply updated screening preferences to cached mail too, including rows
   // older than the worker's import window. User decisions remain untouched.
   function rescreen(next) {
-    const phrases = next.trackedPhrases.map((row) => row.phrase);
     return {
       ...next,
-      opportunities: next.opportunities.map((row) => ({ ...row, ...screenMessage({ ...row, isHtml: false }, phrases) })),
+      opportunities: next.opportunities.map((row) => ({ ...row, ...screenMessage({ ...row, isHtml: false }, next.trackedPhrases) })),
     };
   }
   const rescored = rescreen(state);
@@ -148,9 +148,12 @@ export function createStore(directory) {
       const phrase = typeof input?.phrase === 'string' ? input.phrase.replace(/\s+/g, ' ').trim() : '';
       if (phrase.length < 2 || phrase.length > 100)
         throw Object.assign(new Error('A phrase must be 2–100 characters.'), { status: 400 });
+      const kind = input.kind ?? 'negative';
+      if (!PHRASE_KINDS.includes(kind))
+        throw Object.assign(new Error('A phrase is either negative or positive.'), { status: 400 });
       if (state.trackedPhrases.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
         throw Object.assign(new Error('That phrase is already tracked.'), { status: 409 });
-      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase }] }));
+      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase, kind }] }));
       return structuredClone(state.trackedPhrases);
     },
     removePhrase(id) {

@@ -47,8 +47,9 @@ export function emailText(body, isHtml = false) {
     : body;
 }
 
-/** Owner-maintained negative phrases; seeded once, then edited in the Phrases tab. */
+/** Owner-maintained phrases; seeded once, then edited in the Phrases tab. */
 export const DEFAULT_TRACKED_PHRASES = ['Backend Java Engineer', 'Java Engineer'];
+export const PHRASE_KINDS = ['negative', 'positive'];
 
 /** Case-insensitive whole-word match that tolerates any whitespace between words. */
 export function phrasePattern(phrase) {
@@ -56,16 +57,18 @@ export function phrasePattern(phrase) {
   return new RegExp(`(?<![\\w])${words.join('\\s+')}(?![\\w])`, 'i');
 }
 
-function trackedPhraseReasons(text, phrases) {
-  return phrases.flatMap((phrase) => {
-    const pattern = phrasePattern(phrase);
-    const match = pattern.exec(text);
+// A bare string is a negative phrase, the original and most common kind.
+const asTracked = (entry) => (typeof entry === 'string' ? { phrase: entry, kind: 'negative' } : entry);
+
+function trackedPhraseReasons(text, trackedPhrases) {
+  return trackedPhrases.map(asTracked).flatMap(({ phrase, kind }) => {
+    const match = phrasePattern(phrase).exec(text);
     if (!match) return [];
     // Evidence is the whole source line(s) around the match, so a phrase split by a line break still shows.
     const start = text.lastIndexOf('\n', match.index) + 1;
     const end = text.indexOf('\n', match.index + match[0].length);
     const evidence = text.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ').trim();
-    return [{ kind: 'fail', text: `Tracked phrase: “${phrase}”.`, evidence }];
+    return [{ kind: kind === 'positive' ? 'pass' : 'fail', text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
   });
 }
 
@@ -309,7 +312,7 @@ export function screen(message, trackedPhrases = []) {
   reasons.unshift(...trackedReasons);
   const fit = multiRole
     ? 'Review'
-    : javaRequired || microsoftRequired || locationMismatch || trackedReasons.length > 0
+    : javaRequired || microsoftRequired || locationMismatch || trackedReasons.some((reason) => reason.kind === 'fail')
       ? 'Mismatch'
       : message.truncated ||
           javaUnclear ||
