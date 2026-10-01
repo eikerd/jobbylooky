@@ -29,7 +29,7 @@ For a fresh clone without the private cache, omit MAIL_DATABASE_URL and paste a 
 - `location-map.ts`: street-address thumbnails only. City names do not produce maps. Addresses found in email bodies are labeled separately from the job location.
 - `source-icon*`: sender-domain icons; these identify a source, not an employer.
 
-The app does not send emails, alter Gmail labels, archive messages, or automatically triage the owner’s mail. Deterministic matches are clues, not verified employers or vacancies.
+The app sends email only when the owner writes a reply from a pitch (optionally with the resume from the resume folder); it does not alter Gmail labels, archive messages, or automatically triage the owner’s mail. Deterministic matches are clues, not verified employers or vacancies.
 
 ## Preferences already implemented
 
@@ -48,6 +48,10 @@ The app does not send emails, alter Gmail labels, archive messages, or automatic
 - Newsletters imported before newer ingestion exclusions can still exist in the private cache. Preserve decisions; do not silently delete historical entries.
 - No authentication beyond private-network host/origin checks. Do not expose publicly.
 - No deployed Jobbylooky instance was established during this handoff. GitHub main is not a deployment.
+
+## Resume
+
+The owner's resume lives in several places (Google Docs, the resume folder on Chungus, LinkedIn, two Indeed accounts, Dice). Any resume change follows [docs/resume/UPDATE-WORKFLOW.md](resume/UPDATE-WORKFLOW.md), which lists every location and how to log in to each.
 
 ## Companion repository and deployment
 
