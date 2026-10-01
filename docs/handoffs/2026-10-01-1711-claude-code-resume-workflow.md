@@ -23,6 +23,8 @@ The Markdown snapshot now carries the owner's new headline, "Senior Software Eng
 
 ## Done outside the repo
 
+- Checked at 17:25: the 16 Yahoo pitches imported on 2026-10-01 now carry their real received dates (Apr 21 – Sep 22), fixed by another session.
+
 - The approved PDF (send copy, Google Doc 1w3rLlRnn5y8PPVfM00XlVcbuH-ggiWhl0cBLWQn5aDI) is in `/app/data/resume/` in the `jobbylooky` container on Chungus (owned by node; md5 matches) and in `data/resume/` in the Mac's main checkout.
 - LinkedIn headline and the Indeed Gmail account's headline and resume upload are updated to the new wording.
 
@@ -30,7 +32,6 @@ The Markdown snapshot now carries the owner's new headline, "Senior Software Eng
 
 - Dice still shows Plano 75075, 10 years, a stale "Graphics Specialist at Interphase" title and $60K/$35hr pay. The owner's rule: only what's on the resume, and hide pay. Dice's forms need Chrome in front for real keystrokes.
 - The Indeed Yahoo account is still visible to employers; the owner wants it hidden (needs a Yahoo email code).
-- The 16 Yahoo pitches imported on 2026-10-01 still show their import time as their age, unless #4's "real dates for pasted mail" or the receivedAt session backfilled them; check before telling the owner it's fixed.
 - Local branch `pr7-salvage` in the main checkout exists only to recover the doc; delete it after this merges.
 
 ## Proposed rule changes
