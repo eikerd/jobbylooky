@@ -63,3 +63,14 @@ test('a forged comma-separated sender cannot add recipients', () => {
   const forged = { ...row, history: [{ id: 'x@y', from: 'Recruiter <recruiter@example.com>, attacker@example.net' }] };
   assert.equal(replyEnvelope(forged, 'me@example.com').to, 'recruiter@example.com');
 });
+test('a resume attachment is sent by path and recorded by name only', async () => {
+  const calls = [];
+  const mailer = createMailer({ SMTP_USER: 'me@example.com', SMTP_PASS: 'x' }, {
+    sendMail: async (message) => (calls.push(message), { messageId: '<sent@example.com>' }),
+  });
+  const sent = await mailer.reply(row, 'Resume attached', { name: 'resume.pdf', path: '/data/resume/resume.pdf' });
+  assert.deepEqual(calls[0].attachments, [{ filename: 'resume.pdf', path: '/data/resume/resume.pdf' }]);
+  assert.equal(sent.attachment, 'resume.pdf');
+  assert.equal(JSON.stringify(sent).includes('/data/resume'), false);
+  assert.equal((await mailer.reply(row, 'Plain')).attachment, undefined);
+});

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatEmailBody } from '../src/app/email-body.ts';
+import { formatEmailBody, splitUrls, urlRows } from '../src/app/email-body.ts';
 
 test('rejoins the position, location and duration from the screenshot',()=>{
  assert.deepEqual(formatEmailBody('Hi Ernie,\n\nPOSITION\n\nUI/Angular developer\n\nLOCATION\n\nRemote\n\nDURATION\n\n12 months contract TO HIRE'),[
@@ -36,4 +36,41 @@ test('CRLF metadata and long values are not truncated',()=>{
 
 test('uppercase values are field values rather than section headings',()=>{
  assert.deepEqual(formatEmailBody('LOCATION\nREMOTE\nCOMPANY\nIBM'),[{kind:'field',label:'Location',value:'REMOTE'},{kind:'field',label:'Company',value:'IBM'}]);
+});
+
+test('URLs are split from prose without losing any text',()=>{
+ const text='View job: https://cts.indeed.com/v3/H4sI/abc  No: https://x.test/a?b=1.\nKeep it';
+ const parts=splitUrls(text);
+ assert.deepEqual(parts,[
+  {text:'View job: ',url:false},
+  {text:'https://cts.indeed.com/v3/H4sI/abc',url:true},
+  {text:'  No: ',url:false},
+  {text:'https://x.test/a?b=1',url:true},
+  {text:'.\nKeep it',url:false},
+ ]);
+ assert.equal(parts.map(p=>p.text).join(''),text);
+ assert.deepEqual(splitUrls('no links here'),[{text:'no links here',url:false}]);
+ assert.deepEqual(splitUrls(''),[]);
+});
+
+test('URL lines become their own rows and the newlines between rows survive',()=>{
+ const text='Do you want more?\nNo: https://a.test/1\n\nYes: https://a.test/2';
+ const rows=urlRows(text);
+ assert.deepEqual(rows,[
+  {kind:'text',text:'Do you want more?\n'},
+  {kind:'links',parts:[{text:'No: ',url:false},{text:'https://a.test/1',url:true}]},
+  {kind:'text',text:'\n\n'},
+  {kind:'links',parts:[{text:'Yes: ',url:false},{text:'https://a.test/2',url:true}]},
+ ]);
+ assert.equal(rows.map(row=>row.kind==='text'?row.text:row.parts.map(p=>p.text).join('')).join(''),text);
+ assert.deepEqual(urlRows('plain\ntext'),[{kind:'text',text:'plain\ntext'}]);
+});
+
+test('balanced brackets stay in the URL; unmatched ones and sentence punctuation go back to the prose',()=>{
+ assert.deepEqual(splitUrls('See https://en.wikipedia.org/wiki/Angular_(web_framework).'),[
+  {text:'See ',url:false},{text:'https://en.wikipedia.org/wiki/Angular_(web_framework)',url:true},{text:'.',url:false},
+ ]);
+ assert.deepEqual(splitUrls('(apply at https://x.test/a?b=1)'),[
+  {text:'(apply at ',url:false},{text:'https://x.test/a?b=1',url:true},{text:')',url:false},
+ ]);
 });

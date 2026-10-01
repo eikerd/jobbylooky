@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
+import { latestResume } from './resume.mjs';
+import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -13,6 +15,8 @@ const workerUrl = process.env.MAIL_DATABASE_URL || '';
 const mailer = createMailer();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
+// An agent drops each new resume here; the newest file is what gets attached.
+const resumeDir = resolve(root, process.env.RESUME_DIR || resolve(root, process.env.DATA_DIR || 'data', 'resume'));
 if (existsSync(seed)) {
   const messages = JSON.parse(readFileSync(seed, 'utf8'));
   store.import(messages, { account: messages[0]?.account });
@@ -25,7 +29,8 @@ async function sync() {
   if (syncing) throw Object.assign(new Error('A mail check is already running.'), { status: 409 });
   syncing = true;
   try {
-    const messages = await readWorker(workerUrl);
+    // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
+    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders() });
     const added = store.import(messages, { synced: true });
     syncError = '';
     return added;
@@ -126,6 +131,11 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'GET' && url.pathname === '/api/resume') {
+      const resume = latestResume(resumeDir);
+      if (!resume) return json(404, { error: 'No resume found. Put a PDF or Word file in the resume folder.' });
+      return json(200, { name: resume.name, modifiedAt: resume.modifiedAt });
+    }
     const recipientPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/reply-to$/);
     if (req.method === 'GET' && recipientPath) {
       const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(recipientPath[1]));
@@ -154,8 +164,14 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(replyPath[1]);
         const row = store.snapshot().opportunities.find((item) => item.id === id);
         if (!row) return json(404, { error: 'Opportunity not found.' });
+        // The attachment is always the folder's newest file, never a path from the request;
+        // the name the composer showed must still be that file.
+        const wanted = typeof input.attachResume === 'string' ? input.attachResume : '';
+        const resume = wanted ? latestResume(resumeDir) : null;
+        if (wanted && resume?.name !== wanted)
+          return json(409, { error: 'The resume folder changed since you opened this reply. Reopen it to attach the newest resume.' });
         // The recipient always comes from the stored pitch, never from the request.
-        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim())));
+        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim(), resume)));
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/'))
         return json(
@@ -178,6 +194,10 @@ export const server = createServer(async (req, res) => {
           input.from.length > 500
         )
           return json(400, { error: 'Enter a subject and email body. Sender is optional.' });
+        // The email's own date, never the moment it was pasted: given explicitly, or from an importer's note.
+        const given = input.receivedAt === undefined ? null : typeof input.receivedAt === 'string' ? Date.parse(input.receivedAt) : NaN;
+        if (given !== null && (Number.isNaN(given) || given > Date.now() + 86400000))
+          return json(400, { error: 'receivedAt must be a past date.' });
         const id = randomUUID();
         store.import([
           {
@@ -187,7 +207,7 @@ export const server = createServer(async (req, res) => {
             from: input.from.trim() || 'Manually added',
             body: input.body,
             isHtml: false,
-            receivedAt: new Date().toISOString(),
+            receivedAt: given !== null ? new Date(given).toISOString() : originalReceivedAt(input.body) ?? new Date().toISOString(),
           },
         ]);
         return json(201, { added: 1 });

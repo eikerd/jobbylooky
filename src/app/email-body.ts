@@ -36,3 +36,51 @@ export function formatEmailBody(body:string):EmailBlock[] {
   }
   flush();return blocks;
 }
+
+export type BodyPart = { text:string; url:boolean };
+
+const count=(text:string,char:string)=>text.split(char).length-1;
+/** Sentence punctuation after a URL belongs to the prose; a closing bracket only when it is unmatched. */
+function trimUrl(raw:string):string {
+  let url=raw;
+  for(;;) {
+    const last=url.at(-1);
+    if(last && '.,;:!?'.includes(last)) url=url.slice(0,-1);
+    else if(last===')' && count(url,')')>count(url,'(')) url=url.slice(0,-1);
+    else if(last===']' && count(url,']')>count(url,'[')) url=url.slice(0,-1);
+    else return url;
+  }
+}
+
+/** Separate URLs from prose so the viewer can show each one on a single truncated line. */
+export function splitUrls(text:string):BodyPart[] {
+  const parts:BodyPart[]=[];
+  let last=0;
+  for(const match of text.matchAll(/\bhttps?:\/\/[^\s<>"]+/gi)) {
+    const url=trimUrl(match[0]);
+    if(match.index>last) parts.push({text:text.slice(last,match.index),url:false});
+    parts.push({text:url,url:true});
+    last=match.index+url.length;
+  }
+  if(last<text.length) parts.push({text:text.slice(last),url:false});
+  return parts;
+}
+
+export type BodyRow = { kind:'text'; text:string } | { kind:'links'; parts:BodyPart[] };
+
+/** Group prose around lines that hold a URL; each such line becomes one row so its label stays beside the link. */
+export function urlRows(text:string):BodyRow[] {
+  const rows:BodyRow[]=[];
+  let prose='';
+  const lines=text.split('\n');
+  lines.forEach((line,i)=>{
+    const newline=i<lines.length-1 ? '\n' : '';
+    const parts=splitUrls(line);
+    if(!parts.some(part=>part.url)) { prose+=line+newline; return; }
+    if(prose) rows.push({kind:'text',text:prose});
+    rows.push({kind:'links',parts});
+    prose=newline;
+  });
+  if(prose) rows.push({kind:'text',text:prose});
+  return rows;
+}

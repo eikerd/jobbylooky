@@ -1,9 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
+import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
+import { originalReceivedAt } from './received-date.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -39,6 +40,25 @@ function noteReplyBack(row, message) {
   if (['New', 'Pursue'].includes(row.status)) row.status = 'Maybe';
 }
 
+// The pitch a message answers: one the owner wrote to this sender from before it arrived.
+// Its own thread wins; otherwise the most recent such pitch, unless the message is itself a job pitch.
+function answeredPitch(rows, message) {
+  const sender = emailAddress(message.from);
+  if (!sender) return null;
+  const eligible = rows
+    .map((row) => ({
+      row,
+      sentAt: (row.replies ?? [])
+        .filter((reply) => !reply.preview && reply.to === sender && reply.sentAt < message.receivedAt)
+        .reduce((latest, reply) => (reply.sentAt > latest ? reply.sentAt : latest), ''),
+    }))
+    .filter((item) => item.sentAt)
+    .sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+  const inThread = eligible.find(({ row }) => row.threadId === message.threadId || row.messageIds.includes(message.threadId));
+  if (inThread) return inThread.row;
+  return eligible.length && !isOpportunity(message) ? eligible[0].row : null;
+}
+
 export function createStore(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
@@ -65,7 +85,18 @@ export function createStore(directory) {
       opportunities: next.opportunities.map((row) => ({ ...row, ...screenMessage({ ...row, isHtml: false }, next.trackedPhrases) })),
     };
   }
-  const rescored = rescreen(state);
+  // Pasted emails used to be dated when they were pasted; their importer's note has the real date.
+  function redate(next) {
+    return {
+      ...next,
+      opportunities: next.opportunities.map((row) => {
+        const original = row.source === 'manual' && row.messageIds.length === 1 ? originalReceivedAt(row.body) : null;
+        if (!original || original >= row.receivedAt) return row;
+        return { ...row, receivedAt: original, history: (row.history ?? []).map((item) => ({ ...item, receivedAt: original })) };
+      }),
+    };
+  }
+  const rescored = rescreen(redate(state));
   if (storedPhrases !== JSON.stringify(state.trackedPhrases) || JSON.stringify(rescored) !== JSON.stringify(state))
     commit(rescored);
   return {
@@ -94,9 +125,40 @@ export function createStore(directory) {
     import(messages, { synced = false, account = null } = {}) {
       const next = structuredClone(state);
       let added = 0;
+      const newRow = (message, id) => ({
+        ...screen(message),
+        id,
+        subject: message.subject,
+        from: message.from,
+        receivedAt: message.receivedAt,
+        threadId: message.threadId,
+        account: message.account || account,
+        source: message.source || (message.account || account ? 'gmail' : 'manual'),
+        messageIds: [message.id],
+        history: [{ id: message.id, receivedAt: message.receivedAt, from: message.from }],
+        status: 'New',
+        notes: '',
+        nextAction: '',
+        followUp: '',
+      });
       for (const message of validMessages(messages).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
-        const id = `${message.source || message.account || account || 'manual'}:${message.threadId}`;
-        const existing = next.opportunities.find(
+        const prefix = message.source || message.account || account || 'manual';
+        const id = `${prefix}:${message.threadId}`;
+        // An answer from someone the owner wrote to is its own inbox item, not a line in the old thread.
+        const known = next.opportunities.some((row) => row.messageIds.includes(message.id));
+        const answered = known ? null : answeredPitch(next.opportunities, message);
+        if (answered) {
+          noteReplyBack(answered, message);
+          next.opportunities.push({
+            ...newRow(message, `${prefix}:${message.id}`),
+            respondsTo: answered.id,
+          });
+          added++;
+          continue;
+        }
+        // Read only because the sender is watched, and not an answer: e.g. older non-job mail.
+        if (message.watchedOnly && !known) continue;
+        const existing = next.opportunities.find((row) => row.messageIds.includes(message.id)) ?? next.opportunities.find(
           (row) =>
             row.messageIds.includes(message.id) ||
             row.messageIds.includes(message.threadId) ||
@@ -137,22 +199,7 @@ export function createStore(directory) {
             screen({ ...message, subject: existing.subject, body: existing.body, isHtml: false, truncated: existing.truncated || message.truncated }),
           );
         } else {
-          next.opportunities.push({
-            ...screen(message),
-            id,
-            subject: message.subject,
-            from: message.from,
-            receivedAt: message.receivedAt,
-            threadId: message.threadId,
-            account: message.account || account,
-            source: message.source || (message.account || account ? 'gmail' : 'manual'),
-            messageIds: [message.id],
-            history: [occurrence],
-            status: 'New',
-            notes: '',
-            nextAction: '',
-            followUp: '',
-          });
+          next.opportunities.push(newRow(message, id));
           added++;
         }
       }
@@ -162,6 +209,10 @@ export function createStore(directory) {
       commit(next);
       return added;
     },
+    /** Addresses the owner has really written to; the mail sync reads all of their mail. */
+    watchedSenders: () => [
+      ...new Set(state.opportunities.flatMap((row) => (row.replies ?? []).filter((reply) => !reply.preview).map((reply) => reply.to))),
+    ],
     recordReply(id, reply) {
       const next = structuredClone(state);
       const row = next.opportunities.find((item) => item.id === id);

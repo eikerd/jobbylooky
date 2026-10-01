@@ -1,0 +1,28 @@
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+const RESUME_FILE = /\.(?:pdf|docx?)$/i;
+
+/** The newest resume an agent has dropped in the folder, or null when there is none. */
+export function latestResume(directory) {
+  let names;
+  try {
+    names = readdirSync(directory);
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+  return names
+    .filter((name) => RESUME_FILE.test(name) && !name.startsWith('.'))
+    .flatMap((name) => {
+      try {
+        const stats = statSync(join(directory, name));
+        return stats.isFile() ? [{ name, path: join(directory, name), modifiedAt: stats.mtime.toISOString() }] : [];
+      } catch {
+        // A dangling link or a file removed mid-read is not a resume.
+        return [];
+      }
+    })
+    .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.name.localeCompare(b.name))
+[0] ?? null;
+}
