@@ -39,13 +39,25 @@ export function formatEmailBody(body:string):EmailBlock[] {
 
 export type BodyPart = { text:string; url:boolean };
 
+const count=(text:string,char:string)=>text.split(char).length-1;
+/** Sentence punctuation after a URL belongs to the prose; a closing bracket only when it is unmatched. */
+function trimUrl(raw:string):string {
+  let url=raw;
+  for(;;) {
+    const last=url.at(-1);
+    if(last && '.,;:!?'.includes(last)) url=url.slice(0,-1);
+    else if(last===')' && count(url,')')>count(url,'(')) url=url.slice(0,-1);
+    else if(last===']' && count(url,']')>count(url,'[')) url=url.slice(0,-1);
+    else return url;
+  }
+}
+
 /** Separate URLs from prose so the viewer can show each one on a single truncated line. */
 export function splitUrls(text:string):BodyPart[] {
   const parts:BodyPart[]=[];
   let last=0;
   for(const match of text.matchAll(/\bhttps?:\/\/[^\s<>"]+/gi)) {
-    // Sentence punctuation after a URL belongs to the prose, not the link.
-    const url=match[0].replace(/[.,;:!?)\]]+$/,'');
+    const url=trimUrl(match[0]);
     if(match.index>last) parts.push({text:text.slice(last,match.index),url:false});
     parts.push({text:url,url:true});
     last=match.index+url.length;

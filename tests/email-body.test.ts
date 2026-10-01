@@ -65,3 +65,12 @@ test('URL lines become their own rows and the newlines between rows survive',()=
  assert.equal(rows.map(row=>row.kind==='text'?row.text:row.parts.map(p=>p.text).join('')).join(''),text);
  assert.deepEqual(urlRows('plain\ntext'),[{kind:'text',text:'plain\ntext'}]);
 });
+
+test('balanced brackets stay in the URL; unmatched ones and sentence punctuation go back to the prose',()=>{
+ assert.deepEqual(splitUrls('See https://en.wikipedia.org/wiki/Angular_(web_framework).'),[
+  {text:'See ',url:false},{text:'https://en.wikipedia.org/wiki/Angular_(web_framework)',url:true},{text:'.',url:false},
+ ]);
+ assert.deepEqual(splitUrls('(apply at https://x.test/a?b=1)'),[
+  {text:'(apply at ',url:false},{text:'https://x.test/a?b=1',url:true},{text:')',url:false},
+ ]);
+});
