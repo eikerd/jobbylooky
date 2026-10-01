@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
+import { parseReceivedAt } from './received-at.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
@@ -178,6 +179,8 @@ export const server = createServer(async (req, res) => {
           input.from.length > 500
         )
           return json(400, { error: 'Enter a subject and email body. Sender is optional.' });
+        // Optional: an email pasted long after it arrived keeps its real age in the queue.
+        const receivedAt = parseReceivedAt(input.receivedAt);
         const id = randomUUID();
         store.import([
           {
@@ -187,7 +190,7 @@ export const server = createServer(async (req, res) => {
             from: input.from.trim() || 'Manually added',
             body: input.body,
             isHtml: false,
-            receivedAt: new Date().toISOString(),
+            receivedAt,
           },
         ]);
         return json(201, { added: 1 });
