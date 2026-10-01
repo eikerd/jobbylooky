@@ -422,11 +422,7 @@
               }
               <div class="email-reading">
                 @for (block of emailBlocks(); track $index) {
-                  @if (block.kind === 'field') {
-                    <p class="email-field"><app-hl [text]="block.label + ': ' + block.value" [phrases]="phrases()" /></p>
-                  } @else {
-                    <pre>@for (part of block.parts; track $index) {@if (part.url) {<span class="email-url">{{ part.text }}</span>} @else {<app-hl [text]="part.text" [phrases]="phrases()" />}}</pre>
-                  }
+                  <pre [class.email-field]="block.kind === 'field'">@for (row of block.rows; track $index) {@if (row.kind === 'links') {<span class="url-line">@for (part of row.parts; track $index) {@if (part.url) {<a class="email-url" [href]="part.text" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>} @else {<span class="url-label"><app-hl [text]="part.text" [phrases]="phrases()" /></span>}}</span>} @else {<app-hl [text]="row.text" [phrases]="phrases()" />}}</pre>
                 }
               </div>
             </section>

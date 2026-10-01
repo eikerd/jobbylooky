@@ -4,7 +4,7 @@ import { mapLocations } from './location-map';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
-import { formatEmailBody, splitUrls } from './email-body';
+import { formatEmailBody, urlRows } from './email-body';
 import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
@@ -105,7 +105,7 @@ export class App implements OnDestroy {
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
   readonly emailBlocks = computed(() =>
-    formatEmailBody(this.selected()?.body || '').map((block) => (block.kind === 'text' ? { ...block, parts: splitUrls(block.text) } : block)),
+    formatEmailBody(this.selected()?.body || '').map((block) => ({ ...block, rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`) })),
   );
   constructor() {
     void this.load();

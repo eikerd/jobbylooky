@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatEmailBody, splitUrls } from '../src/app/email-body.ts';
+import { formatEmailBody, splitUrls, urlRows } from '../src/app/email-body.ts';
 
 test('rejoins the position, location and duration from the screenshot',()=>{
  assert.deepEqual(formatEmailBody('Hi Ernie,\n\nPOSITION\n\nUI/Angular developer\n\nLOCATION\n\nRemote\n\nDURATION\n\n12 months contract TO HIRE'),[
@@ -51,4 +51,17 @@ test('URLs are split from prose without losing any text',()=>{
  assert.equal(parts.map(p=>p.text).join(''),text);
  assert.deepEqual(splitUrls('no links here'),[{text:'no links here',url:false}]);
  assert.deepEqual(splitUrls(''),[]);
+});
+
+test('URL lines become their own rows and the newlines between rows survive',()=>{
+ const text='Do you want more?\nNo: https://a.test/1\n\nYes: https://a.test/2';
+ const rows=urlRows(text);
+ assert.deepEqual(rows,[
+  {kind:'text',text:'Do you want more?\n'},
+  {kind:'links',parts:[{text:'No: ',url:false},{text:'https://a.test/1',url:true}]},
+  {kind:'text',text:'\n\n'},
+  {kind:'links',parts:[{text:'Yes: ',url:false},{text:'https://a.test/2',url:true}]},
+ ]);
+ assert.equal(rows.map(row=>row.kind==='text'?row.text:row.parts.map(p=>p.text).join('')).join(''),text);
+ assert.deepEqual(urlRows('plain\ntext'),[{kind:'text',text:'plain\ntext'}]);
 });

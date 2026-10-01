@@ -53,3 +53,22 @@ export function splitUrls(text:string):BodyPart[] {
   if(last<text.length) parts.push({text:text.slice(last),url:false});
   return parts;
 }
+
+export type BodyRow = { kind:'text'; text:string } | { kind:'links'; parts:BodyPart[] };
+
+/** Group prose around lines that hold a URL; each such line becomes one row so its label stays beside the link. */
+export function urlRows(text:string):BodyRow[] {
+  const rows:BodyRow[]=[];
+  let prose='';
+  const lines=text.split('\n');
+  lines.forEach((line,i)=>{
+    const newline=i<lines.length-1 ? '\n' : '';
+    const parts=splitUrls(line);
+    if(!parts.some(part=>part.url)) { prose+=line+newline; return; }
+    if(prose) rows.push({kind:'text',text:prose});
+    rows.push({kind:'links',parts});
+    prose=newline;
+  });
+  if(prose) rows.push({kind:'text',text:prose});
+  return rows;
+}
