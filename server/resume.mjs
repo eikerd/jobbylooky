@@ -14,11 +14,15 @@ export function latestResume(directory) {
   }
   return names
     .filter((name) => RESUME_FILE.test(name) && !name.startsWith('.'))
-    .map((name) => {
-      const stats = statSync(join(directory, name));
-      return { name, path: join(directory, name), modifiedAt: stats.mtime.toISOString(), file: stats.isFile() };
+    .flatMap((name) => {
+      try {
+        const stats = statSync(join(directory, name));
+        return stats.isFile() ? [{ name, path: join(directory, name), modifiedAt: stats.mtime.toISOString() }] : [];
+      } catch {
+        // A dangling link or a file removed mid-read is not a resume.
+        return [];
+      }
     })
-    .filter((row) => row.file)
     .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.name.localeCompare(b.name))
-    .map(({ file, ...row }) => row)[0] ?? null;
+[0] ?? null;
 }

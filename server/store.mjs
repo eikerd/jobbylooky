@@ -1,9 +1,10 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen as screenMessage, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
+import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
+import { originalReceivedAt } from './received-date.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -40,6 +41,7 @@ function noteReplyBack(row, message) {
 }
 
 // The pitch the owner most recently wrote to this sender from, when the message came after that reply.
+// A new job pitch from the same recruiter is not an answer unless it arrives in that pitch's thread.
 function answeredPitch(rows, message) {
   const sender = emailAddress(message.from);
   if (!sender) return null;
@@ -48,7 +50,10 @@ function answeredPitch(rows, message) {
     for (const reply of row.replies ?? [])
       if (!reply.preview && reply.to === sender && reply.sentAt < message.receivedAt && (!found || reply.sentAt > found.sentAt))
         found = { row, sentAt: reply.sentAt };
-  return found?.row ?? null;
+  const pitch = found?.row;
+  if (!pitch) return null;
+  const inThread = pitch.threadId === message.threadId || pitch.messageIds.includes(message.threadId);
+  return inThread || !isOpportunity(message) ? pitch : null;
 }
 
 export function createStore(directory) {
@@ -77,7 +82,18 @@ export function createStore(directory) {
       opportunities: next.opportunities.map((row) => ({ ...row, ...screenMessage({ ...row, isHtml: false }, next.trackedPhrases) })),
     };
   }
-  const rescored = rescreen(state);
+  // Pasted emails used to be dated when they were pasted; their importer's note has the real date.
+  function redate(next) {
+    return {
+      ...next,
+      opportunities: next.opportunities.map((row) => {
+        const original = row.source === 'manual' && row.messageIds.length === 1 ? originalReceivedAt(row.body) : null;
+        if (!original || original >= row.receivedAt) return row;
+        return { ...row, receivedAt: original, history: (row.history ?? []).map((item) => ({ ...item, receivedAt: original })) };
+      }),
+    };
+  }
+  const rescored = rescreen(redate(state));
   if (storedPhrases !== JSON.stringify(state.trackedPhrases) || JSON.stringify(rescored) !== JSON.stringify(state))
     commit(rescored);
   return {
@@ -126,9 +142,8 @@ export function createStore(directory) {
         const prefix = message.source || message.account || account || 'manual';
         const id = `${prefix}:${message.threadId}`;
         // An answer from someone the owner wrote to is its own inbox item, not a line in the old thread.
-        const answered = next.opportunities.some((row) => row.messageIds.includes(message.id))
-          ? null
-          : answeredPitch(next.opportunities, message);
+        const known = next.opportunities.some((row) => row.messageIds.includes(message.id));
+        const answered = known ? null : answeredPitch(next.opportunities, message);
         if (answered) {
           noteReplyBack(answered, message);
           next.opportunities.push({
@@ -138,6 +153,8 @@ export function createStore(directory) {
           added++;
           continue;
         }
+        // Read only because the sender is watched, and not an answer: e.g. older non-job mail.
+        if (message.watchedOnly && !known) continue;
         const existing = next.opportunities.find((row) => row.messageIds.includes(message.id)) ?? next.opportunities.find(
           (row) =>
             row.messageIds.includes(message.id) ||

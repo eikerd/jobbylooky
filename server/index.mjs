@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
 import { latestResume } from './resume.mjs';
+import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -163,10 +164,12 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(replyPath[1]);
         const row = store.snapshot().opportunities.find((item) => item.id === id);
         if (!row) return json(404, { error: 'Opportunity not found.' });
-        // The attachment is always the folder's newest file, never a path from the request.
-        const resume = input.attachResume === true ? latestResume(resumeDir) : null;
-        if (input.attachResume === true && !resume)
-          return json(409, { error: 'No resume found. Put a PDF or Word file in the resume folder.' });
+        // The attachment is always the folder's newest file, never a path from the request;
+        // the name the composer showed must still be that file.
+        const wanted = typeof input.attachResume === 'string' ? input.attachResume : '';
+        const resume = wanted ? latestResume(resumeDir) : null;
+        if (wanted && resume?.name !== wanted)
+          return json(409, { error: 'The resume folder changed since you opened this reply. Reopen it to attach the newest resume.' });
         // The recipient always comes from the stored pitch, never from the request.
         return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim(), resume)));
       }
@@ -191,6 +194,10 @@ export const server = createServer(async (req, res) => {
           input.from.length > 500
         )
           return json(400, { error: 'Enter a subject and email body. Sender is optional.' });
+        // The email's own date, never the moment it was pasted: given explicitly, or from an importer's note.
+        const given = input.receivedAt === undefined ? null : typeof input.receivedAt === 'string' ? Date.parse(input.receivedAt) : NaN;
+        if (given !== null && (Number.isNaN(given) || given > Date.now() + 86400000))
+          return json(400, { error: 'receivedAt must be a past date.' });
         const id = randomUUID();
         store.import([
           {
@@ -200,7 +207,7 @@ export const server = createServer(async (req, res) => {
             from: input.from.trim() || 'Manually added',
             body: input.body,
             isHtml: false,
-            receivedAt: new Date().toISOString(),
+            receivedAt: given !== null ? new Date(given).toISOString() : originalReceivedAt(input.body) ?? new Date().toISOString(),
           },
         ]);
         return json(201, { added: 1 });

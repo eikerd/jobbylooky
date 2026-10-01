@@ -266,7 +266,7 @@ export class App implements OnDestroy {
     try {
       const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', {
         body,
-        attachResume: Boolean(this.replyResume()),
+        attachResume: this.replyResume() || undefined,
       });
       this.jobGroups.update((groups) => groups.map((group) => ({
         ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),

@@ -109,9 +109,9 @@ test('watched senders are read whatever the subject; strangers still need a job 
       { messageId: 'a', subject: 'Re: quick question', senderEmail: 'Aditya <Aditya@Recruiter.example>', receivedAt: 1789685000, rawBody: 'The client is Fidelity', mailThreadId: 'root' },
       { messageId: 'b', subject: 'Lunch?', senderEmail: 'friend@example.com', receivedAt: 1789685001, rawBody: 'hi', mailThreadId: 'b' },
     ]);
-  }, { watch: ['aditya@recruiter.example', "bad'%value"] });
-  assert.deepEqual(results.map((row) => row.id), ['a']);
+  }, { watch: ['aditya@recruiter.example', 'john_smith@x.example', 'not-an-address'] });
+  assert.deepEqual(results.map((row) => [row.id, row.watchedOnly]), [['a', true]]);
+  assert.equal(sent.args.some((arg) => arg.value === 'john_smith@x.example'), true);
   assert.match(sent.sql, /instr\(lower\(senderEmail\), \?\) > 0/);
-  assert.equal(sent.args.at(-1).value, 'aditya@recruiter.example');
-  assert.equal(sent.args.some((arg) => arg.value === "bad'%value"), false);
+  assert.equal(sent.args.some((arg) => arg.value === 'not-an-address'), false);
 });

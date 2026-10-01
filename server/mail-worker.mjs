@@ -10,7 +10,7 @@ const SUBJECT_PREFILTER = OPPORTUNITY_TERMS.map(() => 'lower(subject) LIKE ?').j
  * its subject, so an answer like "the client is Fidelity" is not filtered out.
  */
 export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
-  const watched = [...new Set(watch.map((value) => String(value).toLowerCase()).filter((value) => /^[^\s'"%_<>]+@[^\s'"%_<>]+$/.test(value)))];
+  const watched = [...new Set(watch.map((value) => String(value).toLowerCase()).filter((value) => /^[^\s<>]+@[^\s<>]+$/.test(value)))];
   const senderFilter = watched.map(() => 'instr(lower(senderEmail), ?) > 0').join(' OR ');
   async function query(sql, args = []) {
     const response = await fetcher(`${url.replace(/\/$/, '')}/v2/pipeline`, {
@@ -71,8 +71,9 @@ export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
             ? row.rawBody?.length === 1024 || row.rawBody?.length >= 16384
             : Number(row.bodyTruncated) === 1,
       };
-      if (isOpportunity(message) || watched.includes(address(message.from)))
-        messages.push(message);
+      // Mail read only because its sender is watched; the store keeps it only if it is an answer.
+      if (isOpportunity(message)) messages.push(message);
+      else if (watched.includes(address(message.from))) messages.push({ ...message, watchedOnly: true });
       cursorTime = Number(row.receivedAt);
       cursorId = row.messageId;
     }

@@ -288,3 +288,34 @@ test('mail from that sender before my reply is not an answer', () =>
     store.import([{ ...message, id: 'early@b', threadId: 'root@b', source: 'mail-worker', receivedAt: '2026-09-18T09:00:00.000Z' }]);
     assert.equal(store.snapshot().opportunities.length, 1);
   }));
+test('a new job pitch from someone I wrote to stays a pitch; their older non-job mail is not imported', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@n', threadId: 'root@n', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    store.import([
+      { ...message, id: 'old@n', threadId: 'old@n', subject: 'Lunch?', body: 'hi', source: 'mail-worker', watchedOnly: true, receivedAt: '2026-09-10T10:00:00.000Z' },
+      { ...message, id: 'pitch2@n', threadId: 'pitch2@n', subject: 'React Developer Remote', source: 'mail-worker', receivedAt: '2026-09-19T10:00:00.000Z' },
+      { ...message, id: 'inthread@n', threadId: 'root@n', subject: 'Re: Angular Developer Remote', source: 'mail-worker', receivedAt: '2026-09-19T11:00:00.000Z' },
+    ]);
+    const rows = store.snapshot().opportunities;
+    assert.deepEqual(rows.map((row) => [row.id, row.respondsTo]), [
+      [id, undefined],
+      ['mail-worker:pitch2@n', undefined],
+      ['mail-worker:inthread@n', id],
+    ]);
+    assert.equal(rows.some((row) => 'watchedOnly' in row), false);
+  }));
+test("a pasted email dated at paste time is re-dated from its importer's note on startup", () =>
+  withStore((store, dir) => {
+    const note = '[Imported from x@yahoo.com on 2026-10-01. Originally received Mon, Jun 22 at 8:48 AM, 2026.]\n\nAngular role';
+    store.import([{ ...message, id: 'pasted', threadId: 'pasted', body: note, account: undefined, receivedAt: '2026-10-01T20:57:53.527Z' }]);
+    store.import([{ ...message, id: 'worker', threadId: 'worker', body: note, source: 'mail-worker', receivedAt: '2026-10-01T20:00:00.000Z' }]);
+    const rows = createStore(dir).snapshot().opportunities;
+    const pasted = rows.find((row) => row.messageIds[0] === 'pasted');
+    assert.equal(pasted.source, 'manual');
+    assert.equal(pasted.receivedAt, '2026-06-22T13:48:00.000Z');
+    assert.equal(pasted.history[0].receivedAt, '2026-06-22T13:48:00.000Z');
+    // Mail-worker rows already carry the real date and are left alone.
+    assert.equal(rows.find((row) => row.messageIds[0] === 'worker').receivedAt, '2026-10-01T20:00:00.000Z');
+  }));

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, utimesSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, utimesSync, mkdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { latestResume } from './resume.mjs';
@@ -20,4 +20,11 @@ test('picks the most recently modified resume and ignores other files', () => {
 test('a missing or empty folder means no resume', () => {
   assert.equal(latestResume(join(tmpdir(), 'no-such-resume-folder')), null);
   assert.equal(latestResume(mkdtempSync(join(tmpdir(), 'resume-'))), null);
+});
+
+test('a dangling link in the folder is skipped rather than failing the lookup', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'resume-'));
+  writeFileSync(join(dir, 'real.pdf'), 'x');
+  symlinkSync(join(dir, 'gone.pdf'), join(dir, 'broken.pdf'));
+  assert.equal(latestResume(dir).name, 'real.pdf');
 });
