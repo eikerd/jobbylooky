@@ -65,6 +65,8 @@ export class App implements OnDestroy {
   replyDraft = '';
   readonly replyTo = signal('');
   private replyTemplate = '';
+  /** Set while the composer will attach the resume folder's newest file. */
+  readonly replyResume = signal('');
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
@@ -216,17 +218,25 @@ export class App implements OnDestroy {
     this.folder.set('All opportunities');
     this.select(row);
   }
-  async startReply(row: Opportunity) {
+  async startReply(row: Opportunity, kind: 'plain' | 'resume' | 'client' = 'plain') {
     // Ask the server: it picks the recipient with the same rule it sends with.
     this.error.set('');
     try {
       this.replyTo.set((await this.request<{ to: string }>(`opportunities/${encodeURIComponent(row.id)}/reply-to`)).to);
+      this.replyResume.set(kind === 'resume' ? (await this.request<{ name: string }>('resume')).name : '');
     } catch (error) {
       this.error.set(this.message(error));
       return;
     }
     const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
-    this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
+    const role = row.title.split(' @ ')[0].trim();
+    const about = role ? `about the ${role} role` : 'about this role';
+    const body = {
+      plain: `I'd like more information about this position.\n\n`,
+      resume: `Thanks for reaching out ${about}. I'm interested, and I've attached my latest resume.\n\nHappy to find a time to talk.\n\nThanks,\nErnie`,
+      client: `Thanks for reaching out ${about}. It sounds interesting.\n\nBefore we go further, could you share who the end client is? It helps me make sure I haven't already been submitted there through another firm, and lets me tailor my resume to their environment.\n\nThanks,\nErnie`,
+    }[kind];
+    this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\n${body}`;
     this.replyDraft = this.replyTemplate;
     this.replying.set(true);
   }
@@ -242,7 +252,10 @@ export class App implements OnDestroy {
     this.revision++;
     this.error.set('');
     try {
-      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', { body });
+      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', {
+        body,
+        attachResume: Boolean(this.replyResume()),
+      });
       this.jobGroups.update((groups) => groups.map((group) => ({
         ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),
       })));

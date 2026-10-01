@@ -53,9 +53,10 @@ export function createMailer(env = process.env, transport = null) {
   return {
     from,
     preview,
-    async reply(row, text) {
+    async reply(row, text, attachment = null) {
       const envelope = replyEnvelope(row, address(user));
-      const info = await sender.sendMail({ from: user || undefined, text, ...envelope });
+      const attachments = attachment ? [{ filename: attachment.name, path: attachment.path }] : undefined;
+      const info = await sender.sendMail({ from: user || undefined, text, attachments, ...envelope });
       return {
         id: String(info.messageId || '').replace(/[<>]/g, ''),
         to: envelope.to,
@@ -64,6 +65,7 @@ export function createMailer(env = process.env, transport = null) {
         body: text,
         sentAt: new Date().toISOString(),
         preview,
+        ...(attachment ? { attachment: attachment.name } : {}),
       };
     },
   };

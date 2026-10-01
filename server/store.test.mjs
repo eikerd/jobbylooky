@@ -260,3 +260,31 @@ test('seeded phrases are written on first start, so their ids survive a restart'
     const ids = store.phrases().map((p) => p.id);
     assert.deepEqual(createStore(dir).phrases().map((p) => p.id), ids);
   }));
+test('an answer from someone I wrote to is a new inbox item, whatever its thread, and never duplicated', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@w', threadId: 'root@w', source: 'mail-worker', from: 'Aditya <aditya@r.example>' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'p@x', from: '', to: 'preview@r.example', subject: 'Re', body: 'Hi', sentAt: '2026-09-18T09:00:00.000Z', preview: true });
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: 'aditya@r.example', subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    assert.deepEqual(store.watchedSenders(), ['aditya@r.example']);
+    // A different subject and thread still counts: the sender is what is watched.
+    const answer = { ...message, id: 'answer@w', threadId: 'other@w', subject: 'Re: quick question', body: 'The client is Fidelity', source: 'mail-worker', from: 'Aditya <ADITYA@r.example>', receivedAt: '2026-09-18T12:00:00.000Z' };
+    assert.equal(store.import([answer]), 1);
+    assert.equal(store.import([answer]), 0);
+    const rows = store.snapshot().opportunities;
+    assert.equal(rows.length, 2);
+    const [original, response] = rows;
+    assert.equal(response.id, 'mail-worker:answer@w');
+    assert.equal(response.respondsTo, id);
+    assert.equal(response.status, 'New');
+    assert.equal(original.replyReceivedAt, '2026-09-18T12:00:00.000Z');
+    assert.equal(original.messageIds.includes('answer@w'), false);
+  }));
+test('mail from that sender before my reply is not an answer', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@b', threadId: 'root@b', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    store.import([{ ...message, id: 'early@b', threadId: 'root@b', source: 'mail-worker', receivedAt: '2026-09-18T09:00:00.000Z' }]);
+    assert.equal(store.snapshot().opportunities.length, 1);
+  }));

@@ -404,6 +404,9 @@
               } @else if (replying()) {
                 <form (ngSubmit)="sendReply()">
                   <p class="reply-to">To {{ replyTo() }}</p>
+                  @if (replyResume()) {
+                    <p class="reply-to">Attached: {{ replyResume() }}</p>
+                  }
                   <label class="visually-hidden" for="reply-body">Reply</label>
                   <textarea id="reply-body" name="replyBody" rows="7" [(ngModel)]="replyDraft"></textarea>
                   <div class="reply-actions">
@@ -412,7 +415,11 @@
                   </div>
                 </form>
               } @else {
-                <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
+                <div class="reply-actions">
+                  <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
+                  <button class="button secondary" type="button" (click)="void startReply(row, 'resume')">Reply with resume</button>
+                  <button class="button secondary" type="button" (click)="void startReply(row, 'client')">Ask end client</button>
+                </div>
               }
             </section>
             <section class="email-source" aria-labelledby="email-title">

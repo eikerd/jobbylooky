@@ -39,6 +39,18 @@ function noteReplyBack(row, message) {
   if (['New', 'Pursue'].includes(row.status)) row.status = 'Maybe';
 }
 
+// The pitch the owner most recently wrote to this sender from, when the message came after that reply.
+function answeredPitch(rows, message) {
+  const sender = emailAddress(message.from);
+  if (!sender) return null;
+  let found = null;
+  for (const row of rows)
+    for (const reply of row.replies ?? [])
+      if (!reply.preview && reply.to === sender && reply.sentAt < message.receivedAt && (!found || reply.sentAt > found.sentAt))
+        found = { row, sentAt: reply.sentAt };
+  return found?.row ?? null;
+}
+
 export function createStore(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);
@@ -94,9 +106,39 @@ export function createStore(directory) {
     import(messages, { synced = false, account = null } = {}) {
       const next = structuredClone(state);
       let added = 0;
+      const newRow = (message, id) => ({
+        ...screen(message),
+        id,
+        subject: message.subject,
+        from: message.from,
+        receivedAt: message.receivedAt,
+        threadId: message.threadId,
+        account: message.account || account,
+        source: message.source || (message.account || account ? 'gmail' : 'manual'),
+        messageIds: [message.id],
+        history: [{ id: message.id, receivedAt: message.receivedAt, from: message.from }],
+        status: 'New',
+        notes: '',
+        nextAction: '',
+        followUp: '',
+      });
       for (const message of validMessages(messages).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))) {
-        const id = `${message.source || message.account || account || 'manual'}:${message.threadId}`;
-        const existing = next.opportunities.find(
+        const prefix = message.source || message.account || account || 'manual';
+        const id = `${prefix}:${message.threadId}`;
+        // An answer from someone the owner wrote to is its own inbox item, not a line in the old thread.
+        const answered = next.opportunities.some((row) => row.messageIds.includes(message.id))
+          ? null
+          : answeredPitch(next.opportunities, message);
+        if (answered) {
+          noteReplyBack(answered, message);
+          next.opportunities.push({
+            ...newRow(message, `${prefix}:${message.id}`),
+            respondsTo: answered.id,
+          });
+          added++;
+          continue;
+        }
+        const existing = next.opportunities.find((row) => row.messageIds.includes(message.id)) ?? next.opportunities.find(
           (row) =>
             row.messageIds.includes(message.id) ||
             row.messageIds.includes(message.threadId) ||
@@ -137,22 +179,7 @@ export function createStore(directory) {
             screen({ ...message, subject: existing.subject, body: existing.body, isHtml: false, truncated: existing.truncated || message.truncated }),
           );
         } else {
-          next.opportunities.push({
-            ...screen(message),
-            id,
-            subject: message.subject,
-            from: message.from,
-            receivedAt: message.receivedAt,
-            threadId: message.threadId,
-            account: message.account || account,
-            source: message.source || (message.account || account ? 'gmail' : 'manual'),
-            messageIds: [message.id],
-            history: [occurrence],
-            status: 'New',
-            notes: '',
-            nextAction: '',
-            followUp: '',
-          });
+          next.opportunities.push(newRow(message, id));
           added++;
         }
       }
@@ -162,6 +189,10 @@ export function createStore(directory) {
       commit(next);
       return added;
     },
+    /** Addresses the owner has really written to; the mail sync reads all of their mail. */
+    watchedSenders: () => [
+      ...new Set(state.opportunities.flatMap((row) => (row.replies ?? []).filter((reply) => !reply.preview).map((reply) => reply.to))),
+    ],
     recordReply(id, reply) {
       const next = structuredClone(state);
       const row = next.opportunities.find((item) => item.id === id);

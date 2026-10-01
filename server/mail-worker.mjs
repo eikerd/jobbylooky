@@ -1,10 +1,17 @@
 import { isOpportunity, OPPORTUNITY_TERMS } from './screen.mjs';
+import { address } from './mailer.mjs';
 
 // Never stricter than isOpportunity(), which makes the final decision.
 const SUBJECT_PREFILTER = OPPORTUNITY_TERMS.map(() => 'lower(subject) LIKE ?').join(' OR ');
 
 /** Read only: the existing worker owns Gmail ingestion and its mail log. */
-export async function readWorker(url, fetcher = fetch) {
+/**
+ * `watch` lists addresses the owner has replied to: their mail is read whatever
+ * its subject, so an answer like "the client is Fidelity" is not filtered out.
+ */
+export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
+  const watched = [...new Set(watch.map((value) => String(value).toLowerCase()).filter((value) => /^[^\s'"%_<>]+@[^\s'"%_<>]+$/.test(value)))];
+  const senderFilter = watched.map(() => 'instr(lower(senderEmail), ?) > 0').join(' OR ');
   async function query(sql, args = []) {
     const response = await fetcher(`${url.replace(/\/$/, '')}/v2/pipeline`, {
       method: 'POST',
@@ -40,13 +47,14 @@ export async function readWorker(url, fetcher = fetch) {
     const sql = `SELECT messageId, subject, senderEmail, receivedAt, rawBody, ${threadColumn}, ${truncatedColumn}
       FROM "budget-lens_mail_messages"
       WHERE (receivedAt > ? OR (receivedAt = ? AND messageId > ?))
-        AND (${SUBJECT_PREFILTER})
+        AND ((${SUBJECT_PREFILTER})${senderFilter ? ` OR ${senderFilter}` : ''})
       ORDER BY receivedAt, messageId LIMIT 100`;
     page = await query(sql, [
       { type: 'integer', value: String(cursorTime) },
       { type: 'integer', value: String(cursorTime) },
       { type: 'text', value: cursorId },
       ...OPPORTUNITY_TERMS.map((term) => ({ type: 'text', value: `%${term.toLowerCase()}%` })),
+      ...watched.map((value) => ({ type: 'text', value })),
     ]);
     for (const row of page) {
       const message = {
@@ -63,7 +71,8 @@ export async function readWorker(url, fetcher = fetch) {
             ? row.rawBody?.length === 1024 || row.rawBody?.length >= 16384
             : Number(row.bodyTruncated) === 1,
       };
-      if (isOpportunity(message)) messages.push(message);
+      if (isOpportunity(message) || watched.includes(address(message.from)))
+        messages.push(message);
       cursorTime = Number(row.receivedAt);
       cursorId = row.messageId;
     }

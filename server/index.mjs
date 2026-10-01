@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
+import { latestResume } from './resume.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -13,6 +14,8 @@ const workerUrl = process.env.MAIL_DATABASE_URL || '';
 const mailer = createMailer();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
+// An agent drops each new resume here; the newest file is what gets attached.
+const resumeDir = resolve(root, process.env.RESUME_DIR || resolve(root, process.env.DATA_DIR || 'data', 'resume'));
 if (existsSync(seed)) {
   const messages = JSON.parse(readFileSync(seed, 'utf8'));
   store.import(messages, { account: messages[0]?.account });
@@ -25,7 +28,8 @@ async function sync() {
   if (syncing) throw Object.assign(new Error('A mail check is already running.'), { status: 409 });
   syncing = true;
   try {
-    const messages = await readWorker(workerUrl);
+    // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
+    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders() });
     const added = store.import(messages, { synced: true });
     syncError = '';
     return added;
@@ -126,6 +130,11 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'GET' && url.pathname === '/api/resume') {
+      const resume = latestResume(resumeDir);
+      if (!resume) return json(404, { error: 'No resume found. Put a PDF or Word file in the resume folder.' });
+      return json(200, { name: resume.name, modifiedAt: resume.modifiedAt });
+    }
     const recipientPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/reply-to$/);
     if (req.method === 'GET' && recipientPath) {
       const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(recipientPath[1]));
@@ -154,8 +163,12 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(replyPath[1]);
         const row = store.snapshot().opportunities.find((item) => item.id === id);
         if (!row) return json(404, { error: 'Opportunity not found.' });
+        // The attachment is always the folder's newest file, never a path from the request.
+        const resume = input.attachResume === true ? latestResume(resumeDir) : null;
+        if (input.attachResume === true && !resume)
+          return json(409, { error: 'No resume found. Put a PDF or Word file in the resume folder.' });
         // The recipient always comes from the stored pitch, never from the request.
-        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim())));
+        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim(), resume)));
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/'))
         return json(
