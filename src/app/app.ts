@@ -1,7 +1,7 @@
 import { Component, computed, signal, OnDestroy, ElementRef, viewChild, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { mapLocations } from './location-map';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
 import { formatEmailBody, urlRows } from './email-body';
@@ -22,7 +22,7 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, Profiles, SourceIcon, Highlight],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight],
   templateUrl: './app.html',
   styleUrls: ['./app.css', './phrases.css', './reply.css'],
 })
@@ -106,9 +106,20 @@ export class App implements OnDestroy {
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  readonly emailBlocks = computed(() =>
-    formatEmailBody(this.selected()?.body || '').map((block) => ({ ...block, rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`) })),
-  );
+  readonly emailBlocks = computed(() => this.blocks(this.selected()?.body || ''));
+  /** The pitch an answer row replies to, and whether its email is shown under the answer. */
+  readonly original = computed(() => {
+    const id = this.selected()?.respondsTo;
+    return id ? this.opportunities().find((row) => row.id === id) : undefined;
+  });
+  readonly showOriginal = signal(false);
+  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()?.body || '') : []));
+  private blocks(body: string) {
+    return formatEmailBody(body).map((block) => ({
+      ...block,
+      rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`),
+    }));
+  }
   constructor() {
     void this.load();
     this.poll = setInterval(() => {
@@ -189,6 +200,7 @@ export class App implements OnDestroy {
     this.linking.set(false);
     this.linkTarget = '';
     this.replying.set(false);
+    this.showOriginal.set(false);
     this.replyDraft = '';
   }
   changeFolder(folder: Folder) {

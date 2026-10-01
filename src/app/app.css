@@ -439,7 +439,7 @@ textarea {
   border-bottom: 1px solid #283d2f;
   padding: 16px 0;
 }
-.email-source pre {
+.email-reading pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-family: inherit;
@@ -648,7 +648,7 @@ textarea {
 /* The URL's huge shrink factor makes it give up width before its label wraps. */
 .url-label { flex:0 1 auto; min-width:0; white-space:pre-wrap; }
 .email-url { flex:0 1000 auto; min-width:8ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#8de8a8; }
-.email-source .email-field { margin:0; font-size:11px; line-height:1.7; color:#c2d3c7; white-space:nowrap; overflow-x:auto; max-width:100%; }
+.email-reading .email-field { margin:0; font-size:11px; line-height:1.7; color:#c2d3c7; white-space:nowrap; overflow-x:auto; max-width:100%; }
 
 /* Buttons allow phrasing content only; these spans keep the former block layout. */
 .opportunity .company, .opportunity .recurrence, .opportunity .follow-up { display:block; }

@@ -176,7 +176,7 @@
               (click)="select(row)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading"><app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong>{{ ageLabel(row.receivedAt) }}</strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -388,6 +388,17 @@
                 Pass
               </button>
             </div>
+            @if (original(); as first) {
+              <section class="answer-of" aria-label="Original pitch">
+                <p>↩ Answer to <button type="button" class="link-button" (click)="openProfilePitch(first.id)">{{ first.title }}</button></p>
+                <button class="button secondary" type="button" [attr.aria-expanded]="showOriginal()" (click)="showOriginal.set(!showOriginal())">
+                  {{ showOriginal() ? 'Hide original email' : 'View original email' }}
+                </button>
+                @if (showOriginal()) {
+                  <ng-container *ngTemplateOutlet="bodyBlocks; context: { $implicit: originalBlocks() }" />
+                }
+              </section>
+            }
             <section class="reply" aria-labelledby="reply-title">
               <h3 id="reply-title">Reply</h3>
               @if (row.replyReceivedAt) {
@@ -396,6 +407,9 @@
               @for (sent of row.replies ?? []; track sent.id) {
                 <div class="sent-reply">
                   <p class="sent-meta">You wrote {{ sent.sentAt | date: 'MMM d, h:mm a' }} to {{ sent.to }}@if (sent.preview) { · preview, not sent}</p>
+                  @if (sent.attachment) {
+                    <p class="sent-meta">📎 {{ sent.attachment }}</p>
+                  }
                   <pre>{{ sent.body }}</pre>
                 </div>
               }
@@ -427,11 +441,7 @@
               @if (row.truncated) {
                 <p class="incomplete">The stored email is incomplete. Open in Gmail to read the original.</p>
               }
-              <div class="email-reading">
-                @for (block of emailBlocks(); track $index) {
-                  <pre [class.email-field]="block.kind === 'field'">@for (row of block.rows; track $index) {@if (row.kind === 'links') {<span class="url-line">@for (part of row.parts; track $index) {@if (part.url) {<a class="email-url" [href]="part.text" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>} @else {<span class="url-label"><app-hl [text]="part.text" [phrases]="phrases()" /></span>}}</span>} @else {<app-hl [text]="row.text" [phrases]="phrases()" />}}</pre>
-                }
-              </div>
+              <ng-container *ngTemplateOutlet="bodyBlocks; context: { $implicit: emailBlocks() }" />
             </section>
             <form class="tracking" (ngSubmit)="save()">
               <div class="form-row">
@@ -489,3 +499,11 @@
     }
   </main>
 </div>
+
+<ng-template #bodyBlocks let-blocks>
+  <div class="email-reading">
+    @for (block of blocks; track $index) {
+      <pre [class.email-field]="block.kind === 'field'">@for (row of block.rows; track $index) {@if (row.kind === 'links') {<span class="url-line">@for (part of row.parts; track $index) {@if (part.url) {<a class="email-url" [href]="part.text" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>} @else {<span class="url-label"><app-hl [text]="part.text" [phrases]="phrases()" /></span>}}</span>} @else {<app-hl [text]="row.text" [phrases]="phrases()" />}}</pre>
+    }
+  </div>
+</ng-template>
