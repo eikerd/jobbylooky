@@ -40,20 +40,23 @@ function noteReplyBack(row, message) {
   if (['New', 'Pursue'].includes(row.status)) row.status = 'Maybe';
 }
 
-// The pitch the owner most recently wrote to this sender from, when the message came after that reply.
-// A new job pitch from the same recruiter is not an answer unless it arrives in that pitch's thread.
+// The pitch a message answers: one the owner wrote to this sender from before it arrived.
+// Its own thread wins; otherwise the most recent such pitch, unless the message is itself a job pitch.
 function answeredPitch(rows, message) {
   const sender = emailAddress(message.from);
   if (!sender) return null;
-  let found = null;
-  for (const row of rows)
-    for (const reply of row.replies ?? [])
-      if (!reply.preview && reply.to === sender && reply.sentAt < message.receivedAt && (!found || reply.sentAt > found.sentAt))
-        found = { row, sentAt: reply.sentAt };
-  const pitch = found?.row;
-  if (!pitch) return null;
-  const inThread = pitch.threadId === message.threadId || pitch.messageIds.includes(message.threadId);
-  return inThread || !isOpportunity(message) ? pitch : null;
+  const eligible = rows
+    .map((row) => ({
+      row,
+      sentAt: (row.replies ?? [])
+        .filter((reply) => !reply.preview && reply.to === sender && reply.sentAt < message.receivedAt)
+        .reduce((latest, reply) => (reply.sentAt > latest ? reply.sentAt : latest), ''),
+    }))
+    .filter((item) => item.sentAt)
+    .sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+  const inThread = eligible.find(({ row }) => row.threadId === message.threadId || row.messageIds.includes(message.threadId));
+  if (inThread) return inThread.row;
+  return eligible.length && !isOpportunity(message) ? eligible[0].row : null;
 }
 
 export function createStore(directory) {

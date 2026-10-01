@@ -319,3 +319,21 @@ test("a pasted email dated at paste time is re-dated from its importer's note on
     // Mail-worker rows already carry the real date and are left alone.
     assert.equal(rows.find((row) => row.messageIds[0] === 'worker').receivedAt, '2026-10-01T20:00:00.000Z');
   }));
+test('an answer in an older pitch thread goes to that pitch, not the one replied to most recently', () =>
+  withStore((store) => {
+    store.import([
+      { ...message, id: 'a@t', threadId: 'a@t', source: 'mail-worker' },
+      { ...message, id: 'b@t', threadId: 'b@t', subject: 'React Developer Remote', source: 'mail-worker' },
+    ]);
+    const [a, b] = store.snapshot().opportunities.map((row) => row.id);
+    store.recordReply(a, { id: 'ra', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    store.recordReply(b, { id: 'rb', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T11:00:00.000Z' });
+    store.import([
+      { ...message, id: 'ans-a@t', threadId: 'a@t', subject: 'Re: Angular Developer Remote', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' },
+      { ...message, id: 'ans-x@t', threadId: 'x@t', subject: 'Re: a quick question', source: 'mail-worker', receivedAt: '2026-09-18T13:00:00.000Z' },
+    ]);
+    const rows = store.snapshot().opportunities;
+    assert.equal(rows.find((row) => row.id === 'mail-worker:ans-a@t').respondsTo, a);
+    assert.equal(rows.find((row) => row.id === 'mail-worker:ans-x@t').respondsTo, b);
+    assert.equal(rows.find((row) => row.id === b).replyReceivedAt, '2026-09-18T13:00:00.000Z');
+  }));
