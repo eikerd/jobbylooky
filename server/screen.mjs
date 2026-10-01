@@ -92,11 +92,13 @@ export function screen(message, trackedPhrases = []) {
   const employerMentions = flaggedEmployers.filter(({ pattern }) => pattern.test(`${company}\n${message.subject}\n${body}`));
   // Only explicit client fields establish the employer. Other mentions need confirmation.
   const flaggedEmployer = employerMentions.find(({ pattern }) => pattern.test(company));
+  // "Java scripting", "Java Script" and "Java-script" are recruiter spellings of JavaScript.
+  const java = /\bjava\b(?![\s-]*script)/i;
   const javaLines = text
     .split(/[\n.!?]+/)
-    .filter((line) => /\bjava\b|\bspring\s*boot\b/i.test(line));
+    .filter((line) => java.test(line) || /\bspring\s*boot\b/i.test(line));
   const javaRequired =
-    /\bjava\b/i.test(title) ||
+    java.test(title) ||
     javaLines.some(
       (line) =>
         !/\b(?:optional|nice.to.have|not required|no java|without java|preferred|a plus)\b/i.test(
