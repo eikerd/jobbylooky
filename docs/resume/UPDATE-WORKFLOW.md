@@ -13,7 +13,7 @@ When the owner's resume changes, update **every** place below in the same sessio
 | **LinkedIn** | linkedin.com/in/ernesto-ikerd-6a5b108: headline, experience entries, current role. | Owner's Chrome (Claude in Chrome), already signed in. |
 | **Indeed, Gmail account (primary)** | psylux@gmail.com: headline, uploaded resume PDF. This is the account Indeed's job matching runs on. | Sign in with "Sign in with a code instead"; the code goes to Gmail. |
 | **Indeed, Yahoo account (legacy)** | eikerd42@yahoo.com: holds a 2016-era Indeed Resume. Owner's decision (2026-10-01): hide it from employers, don't delete it. | Code goes to Yahoo Mail. |
-| **Dice** | Account email psylux@gmail.com; profile at dice.com/dashboard/profiles. | 1Password login (Dice item). |
+| **Dice** | Account email psylux@gmail.com; profile at dice.com/profile/info, with Skills, Work History, Preferences and Preview tabs. Matches the resume as of 2026-10-01 except pay (see below). | 1Password login (Dice item). |
 
 Headline wording as of 2026-10-01: resume and Indeed "Senior Software Engineer — Front-End Focused, Full-Stack"; LinkedIn adds "| Angular · TypeScript · Node.js · Data Visualization".
 
@@ -36,7 +36,7 @@ Headline wording as of 2026-10-01: resume and Indeed "Senior Software Engineer �
    - LinkedIn: headline and changed experience entries. Turn **Notify network off** on every form, and skip the "share this update" and "people you may know" prompts afterwards.
    - Indeed (Gmail account): headline under "About you"; upload the PDF and press **Save resume**.
    - Indeed (Yahoo account): keep it hidden from employers.
-   - Dice: headline/summary and upload the PDF.
+   - Dice: replace the resume ("File options" → "Replace", then "Upload only" so it doesn't add parsed skills), keep Work History to the resume's jobs, keep Skills to what the resume names, and check the Preview tab, which is what recruiters see.
 6. Write a handoff note saying exactly which places changed.
 
 ## Logins and automation
@@ -46,5 +46,7 @@ Headline wording as of 2026-10-01: resume and Indeed "Senior Software Engineer �
 - **Typing doesn't always register** on Indeed and LinkedIn forms. Use `form_input`, read the value back with JavaScript before saving, and press buttons with a scripted click if a coordinate click does nothing.
 - **Indeed upload:** the "Upload a resume" button creates its file input on click. Find the `input[type=file]`, use `file_upload` with the PDF's path, then confirm "Save resume".
 - **jobbylooky in the browser** rejects cross-site navigations (`Sec-Fetch-Site`). Open `https://chungus.tail1d505c.ts.net/` first, then set `location.href = '/jobby/'`.
-- **Dice ignores scripted input.** Its profile forms (react-aria) keep only values typed as real keystrokes, and keystrokes reach Chrome only when it is the front window. Ask the owner to bring Chrome to the front before editing Dice. As of 2026-10-01 Dice still showed Plano 75075, 10 years, a stale "Graphics Specialist at Interphase" title and $60K/$35hr pay. The owner's rule: claim only what's on the resume (remove older jobs and skills) and hide pay.
+- **Dice forms.** Plain text inputs and selects take values set with the native value setter plus `input`/`change` events. Comboboxes (skill name, job title, salary) need real keystrokes, which reach Chrome only when it is the front window: run `osascript -e 'tell application "Google Chrome" to activate'` first. Every save shows a short toast ("Skills saved", "Work history saved"); watch for it with a MutationObserver before navigating, because it disappears within seconds.
+- **Dice skills need a years number.** "Skill name and years are required", so a skill can't be added without claiming a year count. Dice also folds Angular into its "AngularJS" skill.
+- **Dice cannot hide pay.** A blank salary or hourly rate is sent as undefined and the server keeps the old value; 0 shows as "$0k/yr". The only way to change what recruiters see is a new number. The owner's rule: claim only what's on the resume, and hide pay.
 - **Clipboard copy needs the Chrome window focused.** To move text between sites while the owner works elsewhere, read it in slices and post it through jobbylooky's `/api/import` instead.

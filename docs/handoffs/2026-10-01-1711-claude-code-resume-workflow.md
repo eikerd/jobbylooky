@@ -4,8 +4,8 @@ tool: claude-code
 model: claude-opus-5-5
 repo: eikerd/jobbylooky
 branch: resume-workflow-docs (worktree ../jobbylooky-wt-resume-docs)
-pr: see the PR opened from this branch
-state: pr-open
+pr: https://github.com/eikerd/jobbylooky/pull/8
+state: merged (override mode, owner's word: "Override, merge now")
 deployed: docs only; separately, the approved resume PDF was copied into the Chungus container's /app/data/resume (md5 6ac7b25a9d13bb14dce7002aa905051b), and GET /jobby/api/resume reports it
 loose_ends: listed below
 supersedes: docs/handoffs/2026-10-01-1533-claude-code-resume-snapshot.md
@@ -27,11 +27,13 @@ The Markdown snapshot now carries the owner's new headline, "Senior Software Eng
 
 - The approved PDF (send copy, Google Doc 1w3rLlRnn5y8PPVfM00XlVcbuH-ggiWhl0cBLWQn5aDI) is in `/app/data/resume/` in the `jobbylooky` container on Chungus (owned by node; md5 matches) and in `data/resume/` in the Mac's main checkout.
 - LinkedIn headline and the Indeed Gmail account's headline and resume upload are updated to the new wording.
+- Dice, later the same evening, under the owner's rule "only claim what's on the resume … take it off. Including that outdated pay": resume replaced with the approved PDF; Work History is now the resume's eight jobs (the Interphase "Graphics Specialist" entry is gone); Skills cut from 29 to 13 (ColdFusion, Flash, Fireworks, Dreamweaver, InDesign, Windows XP, Mac OS, JSP, jQuery, QA, Mobile, IT management, e-commerce and three generic ones removed), with the ones he uses today marked Current; preferred title "senior software engineer". Profile basics were saved earlier: Dallas 75214, 18 years, LinkedIn URL.
 
 ## Loose ends
 
-- Dice still shows Plano 75075, 10 years, a stale "Graphics Specialist at Interphase" title and $60K/$35hr pay. The owner's rule: only what's on the resume, and hide pay. Dice's forms need Chrome in front for real keystrokes.
-- The Indeed Yahoo account is still visible to employers; the owner wants it hidden (needs a Yahoo email code).
+- **Dice pay still shows $60k/yr · $35/hr.** Dice cannot hide pay (blank keeps the old value; 0 shows "$0k/yr"), so the owner needs to name a number or accept it. Saving 0 was tried and reverted.
+- **Dice skills lack Node.js and GraphQL.** Both are on the resume, but Dice requires a years number for each skill; the owner should give one.
+- **The Indeed Yahoo account is still visible to employers**; the owner wants it hidden. The email-code prompt timed out at the sign-in step. Indeed is now signed out in Chrome (both accounts); sign back in to the Gmail account after.
 - Local branch `pr7-salvage` in the main checkout exists only to recover the doc; delete it after this merges.
 
 ## Proposed rule changes
