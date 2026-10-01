@@ -93,7 +93,8 @@ export function screen(message, trackedPhrases = []) {
   // Only explicit client fields establish the employer. Other mentions need confirmation.
   const flaggedEmployer = employerMentions.find(({ pattern }) => pattern.test(company));
   // "Java scripting", "Java Script" and "Java-script" are recruiter spellings of JavaScript.
-  const java = /\bjava\b(?![\s-]*script)/i;
+  // Whole words only, so Java's ScriptEngine and scriptlets still count as Java.
+  const java = /\bjava\b(?![\s-]+script(?:s|ing)?\b)/i;
   const javaLines = text
     .split(/[\n.!?]+/)
     .filter((line) => java.test(line) || /\bspring\s*boot\b/i.test(line));
@@ -157,7 +158,8 @@ export function screen(message, trackedPhrases = []) {
   const primaryAngular =
     /\bangular\b/i.test(title) ||
     (angular &&
-      !/\b(?:\.net|net|java|python|php|servicenow|svelte|vue|react|devops|sre|security|kubernetes)\b/i.test(
+      !java.test(title) &&
+      !/\b(?:\.net|net|python|php|servicenow|svelte|vue|react|devops|sre|security|kubernetes)\b/i.test(
         title,
       ));
   const roleHeadings = [

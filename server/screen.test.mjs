@@ -84,8 +84,17 @@ test('"Java scripting" and "Java Script" mean JavaScript, not Java', () => {
     assert.ok(!result.reasons.some(reason => /Java/.test(reason.text)), phrase);
   }
 });
+test('a "Java Script" title does not hide an Angular role behind another technology', () => {
+  const result = screen(mail('UI Developer - Java Script/HTML', 'Location: Remote\nRequired: Angular, Highcharts'));
+  assert.equal(result.fit, 'Strong fit');
+});
 test('"Java" followed by other words still counts as a Java requirement', () => {
-  for (const sentence of ['Strong Java 11 and Spring Boot required', 'Java, JavaScript and Angular development required']) {
+  for (const sentence of [
+    'Strong Java 11 and Spring Boot required',
+    'Java, JavaScript and Angular development required',
+    'Java ScriptEngine API experience required',
+    'Java scriptlet development required',
+  ]) {
     const result = screen(mail('Angular UI Developer', `Location: Remote\nRequired: Angular\n${sentence}.`));
     assert.equal(result.fit, 'Mismatch', sentence);
     assert.ok(result.reasons.some(reason => reason.kind === 'fail' && reason.text === 'Requires Java development.'), sentence);
