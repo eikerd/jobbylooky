@@ -75,6 +75,7 @@ test('a reply attaches the resume only when asked, and records which file went',
   assert.deepEqual(resume, { filename: 'Ernesto-Ikerd-Resume.pdf', path: pdf });
   assert.equal(findResume(join(dir, 'missing.pdf')), null);
   assert.equal(findResume(''), null);
+  assert.equal(findResume(dir), null, 'a directory is not a resume');
 
   const calls = [];
   const mailer = createMailer({ SMTP_USER: 'me@example.com', SMTP_PASS: 'x' }, {

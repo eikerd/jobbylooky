@@ -32,6 +32,8 @@ export interface SentReply {
   body: string;
   sentAt: string;
   preview?: boolean;
+  /** Filenames attached to the reply; absent on replies sent before attachments existed. */
+  attachments?: string[];
 }
 export interface JobGroup {
   id: string;

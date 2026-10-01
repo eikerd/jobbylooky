@@ -1,11 +1,16 @@
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { basename } from 'node:path';
 
-/** The resume replies can attach, or null when the file is not on this server. */
+/** The resume replies can attach, or null unless a regular file is at `path`. */
 export function findResume(path) {
-  return path && existsSync(path) ? { filename: basename(path), path } : null;
+  if (!path) return null;
+  try {
+    return statSync(path).isFile() ? { filename: basename(path), path } : null;
+  } catch {
+    return null;
+  }
 }
 
 export const address = (value) => String(value ?? '').match(/[^\s<>"]+@[^\s<>"]+/)?.[0]?.toLowerCase() || '';
