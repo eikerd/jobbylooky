@@ -5,12 +5,14 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
 import { readWorker } from './mail-worker.mjs';
-import { createMailer, replyRecipient } from './mailer.mjs';
+import { createMailer, replyRecipient, findResume } from './mailer.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
 const workerUrl = process.env.MAIL_DATABASE_URL || '';
 const mailer = createMailer();
+// The PDF replies attach when the Reply box asks for it; RESUME_PATH overrides the bundled copy.
+const resumePath = resolve(root, process.env.RESUME_PATH || 'resume/Ernesto-Ikerd-Resume.pdf');
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 if (existsSync(seed)) {
@@ -130,7 +132,7 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'GET' && recipientPath) {
       const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(recipientPath[1]));
       if (!row) return json(404, { error: 'Opportunity not found.' });
-      return json(200, { to: replyRecipient(row, mailer?.from ?? '') });
+      return json(200, { to: replyRecipient(row, mailer?.from ?? ''), resume: findResume(resumePath)?.filename ?? null });
     }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
@@ -154,8 +156,11 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(replyPath[1]);
         const row = store.snapshot().opportunities.find((item) => item.id === id);
         if (!row) return json(404, { error: 'Opportunity not found.' });
+        const attachment = input.attachResume === true ? findResume(resumePath) : null;
+        if (input.attachResume === true && !attachment)
+          return json(409, { error: 'The resume file is missing on the server, so nothing was sent.' });
         // The recipient always comes from the stored pitch, never from the request.
-        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim())));
+        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim(), { attachment })));
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/'))
         return json(

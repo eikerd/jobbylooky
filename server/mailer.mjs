@@ -1,5 +1,12 @@
 import nodemailer from 'nodemailer';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
+
+/** The resume replies can attach, or null when the file is not on this server. */
+export function findResume(path) {
+  return path && existsSync(path) ? { filename: basename(path), path } : null;
+}
 
 export const address = (value) => String(value ?? '').match(/[^\s<>"]+@[^\s<>"]+/)?.[0]?.toLowerCase() || '';
 // One @, a dotted domain, nothing SMTP would refuse outright.
@@ -53,15 +60,19 @@ export function createMailer(env = process.env, transport = null) {
   return {
     from,
     preview,
-    async reply(row, text) {
+    async reply(row, text, { attachment = null } = {}) {
       const envelope = replyEnvelope(row, address(user));
-      const info = await sender.sendMail({ from: user || undefined, text, ...envelope });
+      const attachments = attachment
+        ? [{ filename: attachment.filename, path: attachment.path, contentType: 'application/pdf' }]
+        : undefined;
+      const info = await sender.sendMail({ from: user || undefined, text, ...envelope, attachments });
       return {
         id: String(info.messageId || '').replace(/[<>]/g, ''),
         to: envelope.to,
         from,
         subject: envelope.subject,
         body: text,
+        attachments: attachment ? [attachment.filename] : [],
         sentAt: new Date().toISOString(),
         preview,
       };

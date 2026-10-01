@@ -406,6 +406,11 @@
                   <p class="reply-to">To {{ replyTo() }}</p>
                   <label class="visually-hidden" for="reply-body">Reply</label>
                   <textarea id="reply-body" name="replyBody" rows="7" [(ngModel)]="replyDraft"></textarea>
+                  @if (resumeName()) {
+                    <label class="attach-resume"
+                      ><input type="checkbox" name="attachResume" [(ngModel)]="attachResume" /> Attach resume</label
+                    >
+                  }
                   <div class="reply-actions">
                     <button class="button primary" type="submit" [disabled]="busy() || !replyDraft.trim()">Send</button>
                     <button class="button secondary" type="button" [disabled]="busy()" (click)="cancelReply()">Cancel</button>

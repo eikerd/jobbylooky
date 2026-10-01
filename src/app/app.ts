@@ -64,6 +64,9 @@ export class App implements OnDestroy {
   readonly replying = signal(false);
   replyDraft = '';
   readonly replyTo = signal('');
+  // Filename of the resume the server can attach, or null when it has none.
+  readonly resumeName = signal<string | null>(null);
+  attachResume = true;
   private replyTemplate = '';
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
@@ -218,7 +221,12 @@ export class App implements OnDestroy {
     // Ask the server: it picks the recipient with the same rule it sends with.
     this.error.set('');
     try {
-      this.replyTo.set((await this.request<{ to: string }>(`opportunities/${encodeURIComponent(row.id)}/reply-to`)).to);
+      const target = await this.request<{ to: string; resume: string | null }>(
+        `opportunities/${encodeURIComponent(row.id)}/reply-to`,
+      );
+      this.replyTo.set(target.to);
+      this.resumeName.set(target.resume ?? null);
+      this.attachResume = true;
     } catch (error) {
       this.error.set(this.message(error));
       return;
@@ -240,7 +248,10 @@ export class App implements OnDestroy {
     this.revision++;
     this.error.set('');
     try {
-      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', { body });
+      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', {
+        body,
+        attachResume: !!this.resumeName() && this.attachResume,
+      });
       this.jobGroups.update((groups) => groups.map((group) => ({
         ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),
       })));

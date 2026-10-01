@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMailer, replyEnvelope } from './mailer.mjs';
+import { createMailer, replyEnvelope, findResume } from './mailer.mjs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const row = {
   subject: 'Job Requirement :: Frontend / UI Lead :: Plano, TX',
@@ -62,4 +65,26 @@ test('malformed sender addresses are never used as a recipient; preview replies 
 test('a forged comma-separated sender cannot add recipients', () => {
   const forged = { ...row, history: [{ id: 'x@y', from: 'Recruiter <recruiter@example.com>, attacker@example.net' }] };
   assert.equal(replyEnvelope(forged, 'me@example.com').to, 'recruiter@example.com');
+});
+
+test('a reply attaches the resume only when asked, and records which file went', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'jobby-resume-'));
+  const pdf = join(dir, 'Ernesto-Ikerd-Resume.pdf');
+  writeFileSync(pdf, '%PDF-1.4 test');
+  const resume = findResume(pdf);
+  assert.deepEqual(resume, { filename: 'Ernesto-Ikerd-Resume.pdf', path: pdf });
+  assert.equal(findResume(join(dir, 'missing.pdf')), null);
+  assert.equal(findResume(''), null);
+
+  const calls = [];
+  const mailer = createMailer({ SMTP_USER: 'me@example.com', SMTP_PASS: 'x' }, {
+    sendMail: async (message) => (calls.push(message), { messageId: '<sent@example.com>' }),
+  });
+  const withResume = await mailer.reply(row, 'Resume attached.', { attachment: resume });
+  assert.deepEqual(calls[0].attachments, [{ filename: 'Ernesto-Ikerd-Resume.pdf', path: pdf, contentType: 'application/pdf' }]);
+  assert.deepEqual(withResume.attachments, ['Ernesto-Ikerd-Resume.pdf']);
+
+  const without = await mailer.reply(row, 'No attachment.');
+  assert.equal(calls[1].attachments, undefined);
+  assert.deepEqual(without.attachments, []);
 });

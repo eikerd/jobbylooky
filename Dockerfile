@@ -15,6 +15,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package*.json ./
 COPY server ./server
+COPY resume ./resume
 RUN mkdir data && chown node:node data && chmod 700 data
 USER node
 EXPOSE 4317
