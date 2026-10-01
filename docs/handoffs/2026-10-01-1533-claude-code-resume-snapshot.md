@@ -4,10 +4,10 @@ tool: claude-code
 model: claude-opus-5-5
 repo: eikerd/jobbylooky
 branch: resume-copy (worktree ../jobbylooky-wt-resume)
-pr: https://github.com/eikerd/jobbylooky/pull/3 (draft)
-state: pr-open
+pr: https://github.com/eikerd/jobbylooky/pull/3
+state: merged
 deployed: no — docs only, nothing to deploy
-loose_ends: 1 (listed below)
+loose_ends: none
 supersedes: none (the 2026-09-18 note covers different work)
 ---
 
@@ -30,12 +30,12 @@ The owner asked to keep a copy of the resume in this repo. `docs/resume/ernesto-
 
 ## Next agent
 
-- Wait for the owner's call on review rounds vs. override mode for this docs-only PR, then scorecard and merge.
+- Merged under override mode (owner: "Override, merge now"); no bot review rounds ran. Scorecard: reports/pr-3.html.
 - When the doc's questions are answered, update this file in the same PR if it is still open, or a new branch if merged.
 
 ## Loose ends
 
-- PR #3 is a draft; its review/merge path is pending the owner's word.
+None. The worktree and branch were removed after the merge.
 
 ## Proposed rule changes
 
