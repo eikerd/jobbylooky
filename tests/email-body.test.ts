@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatEmailBody } from '../src/app/email-body.ts';
+import { formatEmailBody, splitUrls } from '../src/app/email-body.ts';
 
 test('rejoins the position, location and duration from the screenshot',()=>{
  assert.deepEqual(formatEmailBody('Hi Ernie,\n\nPOSITION\n\nUI/Angular developer\n\nLOCATION\n\nRemote\n\nDURATION\n\n12 months contract TO HIRE'),[
@@ -36,4 +36,19 @@ test('CRLF metadata and long values are not truncated',()=>{
 
 test('uppercase values are field values rather than section headings',()=>{
  assert.deepEqual(formatEmailBody('LOCATION\nREMOTE\nCOMPANY\nIBM'),[{kind:'field',label:'Location',value:'REMOTE'},{kind:'field',label:'Company',value:'IBM'}]);
+});
+
+test('URLs are split from prose without losing any text',()=>{
+ const text='View job: https://cts.indeed.com/v3/H4sI/abc  No: https://x.test/a?b=1.\nKeep it';
+ const parts=splitUrls(text);
+ assert.deepEqual(parts,[
+  {text:'View job: ',url:false},
+  {text:'https://cts.indeed.com/v3/H4sI/abc',url:true},
+  {text:'  No: ',url:false},
+  {text:'https://x.test/a?b=1',url:true},
+  {text:'.\nKeep it',url:false},
+ ]);
+ assert.equal(parts.map(p=>p.text).join(''),text);
+ assert.deepEqual(splitUrls('no links here'),[{text:'no links here',url:false}]);
+ assert.deepEqual(splitUrls(''),[]);
 });

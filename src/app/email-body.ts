@@ -36,3 +36,20 @@ export function formatEmailBody(body:string):EmailBlock[] {
   }
   flush();return blocks;
 }
+
+export type BodyPart = { text:string; url:boolean };
+
+/** Separate URLs from prose so the viewer can show each one on a single truncated line. */
+export function splitUrls(text:string):BodyPart[] {
+  const parts:BodyPart[]=[];
+  let last=0;
+  for(const match of text.matchAll(/\bhttps?:\/\/[^\s<>"]+/gi)) {
+    // Sentence punctuation after a URL belongs to the prose, not the link.
+    const url=match[0].replace(/[.,;:!?)\]]+$/,'');
+    if(match.index>last) parts.push({text:text.slice(last,match.index),url:false});
+    parts.push({text:url,url:true});
+    last=match.index+url.length;
+  }
+  if(last<text.length) parts.push({text:text.slice(last),url:false});
+  return parts;
+}

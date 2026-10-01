@@ -425,7 +425,7 @@
                   @if (block.kind === 'field') {
                     <p class="email-field"><app-hl [text]="block.label + ': ' + block.value" [phrases]="phrases()" /></p>
                   } @else {
-                    <pre><app-hl [text]="block.text" [phrases]="phrases()" /></pre>
+                    <pre>@for (part of block.parts; track $index) {@if (part.url) {<span class="email-url">{{ part.text }}</span>} @else {<app-hl [text]="part.text" [phrases]="phrases()" />}}</pre>
                   }
                 }
               </div>

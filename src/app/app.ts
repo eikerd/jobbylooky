@@ -4,7 +4,7 @@ import { mapLocations } from './location-map';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
-import { formatEmailBody } from './email-body';
+import { formatEmailBody, splitUrls } from './email-body';
 import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
@@ -104,7 +104,9 @@ export class App implements OnDestroy {
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  readonly emailBlocks = computed(() => formatEmailBody(this.selected()?.body || ''));
+  readonly emailBlocks = computed(() =>
+    formatEmailBody(this.selected()?.body || '').map((block) => (block.kind === 'text' ? { ...block, parts: splitUrls(block.text) } : block)),
+  );
   constructor() {
     void this.load();
     this.poll = setInterval(() => {
