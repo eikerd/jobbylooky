@@ -1,36 +1,36 @@
 :host { display:block; min-width:0; }
 * { box-sizing:border-box; }
 button { font:inherit; cursor:pointer; }
-button:focus-visible { outline:2px solid #79ed9f; outline-offset:-2px; }
-.profile-workspace { display:grid; grid-template-columns:minmax(245px,.8fr) minmax(340px,1.2fr); height:calc(100dvh - 86px); min-height:420px; border:1px solid #2a4031; background:#0c120e; }
-.profile-list { overflow:auto; border-right:1px solid #25372b; background:#0a100c; }
-.profile-row { display:grid; gap:5px; width:100%; padding:12px 14px; border:0; border-bottom:1px solid #25372b; background:transparent; color:#9cb2a4; text-align:left; font-size:11px; }
-.profile-row strong { font-size:12px; font-weight:600; color:#d1e1d6; overflow-wrap:anywhere; }
-.profile-row:hover { background:#112018; }
-.profile-row[aria-pressed='true'] { background:#14291c; box-shadow:inset 2px 0 #79ed9f; }
-.profile-detail { padding:18px 20px; overflow:auto; min-width:0; }
-h2 { font-size:16px; font-weight:600; color:#d1e1d6; margin:0 0 8px; overflow-wrap:anywhere; }
-h3 { font-size:12px; font-weight:600; color:#c2d3c7; margin:0 0 10px; }
-h4 { font-size:12px; font-weight:600; margin:0; line-height:1.5; overflow-wrap:anywhere; }
-p { font-size:11px; color:#9cb2a4; line-height:1.6; margin:6px 0; }
+button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.profile-workspace { display:grid; grid-template-columns:minmax(260px,.8fr) minmax(340px,1.2fr); height:calc(100dvh - 110px); min-height:420px; border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--card); }
+.profile-list { overflow:auto; border-right:1px solid var(--line); background:var(--page); }
+.profile-row { display:grid; gap:5px; width:100%; padding:13px 16px; border:0; border-bottom:1px solid var(--line); border-left:4px solid transparent; background:transparent; color:var(--soft); text-align:left; font-size:14px; }
+.profile-row strong { font-size:15px; font-weight:700; color:var(--ink-strong); overflow-wrap:anywhere; }
+.profile-row:hover { background:var(--hover); }
+.profile-row[aria-pressed='true'] { background:var(--select); border-left-color:var(--select-edge); }
+.profile-detail { padding:24px 30px; overflow:auto; min-width:0; }
+h2 { font-size:25px; font-weight:800; color:var(--ink-strong); margin:0 0 8px; overflow-wrap:anywhere; }
+h3 { font-size:15px; font-weight:800; color:var(--ink-strong); margin:0 0 10px; }
+h4 { font-size:15px; font-weight:700; color:var(--ink-strong); margin:0; line-height:1.5; overflow-wrap:anywhere; }
+p { font-size:14px; color:var(--soft); line-height:1.6; margin:6px 0; }
 .identity { overflow-wrap:anywhere; }
-.text-link { padding:3px 0; color:#8de8a8; font-size:11px; border:0; background:none; text-decoration:underline; text-underline-offset:3px; overflow-wrap:anywhere; }
-.provenance, .coverage { color:#91a599; }
-.profile-summary { display:flex; flex-wrap:wrap; gap:8px 18px; padding:14px 0 0; font-size:11px; color:#afc9b7; }
-.profile-summary strong { color:#d1e1d6; font-weight:600; }
+.text-link { padding:3px 0; color:var(--accent-ink); font-size:14px; border:0; background:none; text-decoration:underline; text-underline-offset:3px; overflow-wrap:anywhere; }
+.provenance, .coverage { color:var(--muted); }
+.profile-summary { display:flex; flex-wrap:wrap; gap:8px 18px; padding:14px 0 0; font-size:14px; color:var(--soft); }
+.profile-summary strong { color:var(--ink-strong); font-weight:700; }
 .coverage { margin-bottom:16px; }
-.company-people { padding:14px 0; border-block:1px solid #283d2f; margin-bottom:16px; }
-.person-link, .offer-link { display:flex; justify-content:space-between; flex-wrap:wrap; gap:5px 12px; width:100%; padding:8px 0; color:#c2d3c7; background:none; border:0; text-align:left; font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
-.person-link span:last-child, .offer-link span:last-child { color:#9cb2a4; }
-.person-link:hover, .offer-link:hover { color:#91efae; background:#112018; }
-.profile-offers { padding-top:14px; border-top:1px solid #283d2f; }
-.profile-job { padding:12px 0; border-bottom:1px solid #25372b; }
+.company-people { padding:14px 0; border-block:1px solid var(--line); margin-bottom:16px; }
+.person-link, .offer-link { display:flex; justify-content:space-between; flex-wrap:wrap; gap:5px 12px; width:100%; padding:9px 6px; color:var(--ink); background:none; border:0; border-radius:8px; text-align:left; font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+.person-link span:last-child, .offer-link span:last-child { color:var(--soft); }
+.person-link:hover, .offer-link:hover { color:var(--ink-strong); background:var(--hover); }
+.profile-offers { padding-top:14px; border-top:1px solid var(--line); }
+.profile-job { padding:12px 0; border-bottom:1px solid var(--line); }
 .job-heading { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
-.age { display:grid; gap:4px; flex-shrink:0; text-align:right; font-size:11px; color:#c5dfce; }
-time { font-size:10px; color:#92aa9b; }
-.overlap { color:#91c7a1; }
+.age { display:grid; gap:2px; flex-shrink:0; text-align:right; font-size:14px; font-weight:700; color:var(--ink-strong); }
+time { font-size:13px; font-weight:400; color:var(--muted); }
+.overlap { color:var(--accent-ink); }
 .empty { padding:20px; }
-.full-time { color:#91c5ff; }
-@media (max-width:1000px) { .profile-workspace { grid-template-columns:minmax(230px,.85fr) minmax(300px,1.2fr); } .profile-detail { padding:14px 16px; } }
-@media (max-width:800px) { .profile-workspace { grid-template-columns:minmax(220px,.85fr) minmax(280px,1fr); height:calc(100dvh - 190px); } }
-@media (max-width:620px) { .profile-workspace { display:block; height:auto; min-height:0; } .profile-list { max-height:280px; border-right:0; border-bottom:1px solid #25372b; } .profile-detail { overflow:visible; padding:16px 14px; } }
+.full-time { color:var(--full-time); }
+@media (max-width:1000px) { .profile-workspace { grid-template-columns:minmax(230px,.85fr) minmax(300px,1.2fr); } .profile-detail { padding:18px 20px; } }
+@media (max-width:800px) { .profile-workspace { grid-template-columns:minmax(220px,.85fr) minmax(280px,1fr); height:calc(100dvh - 210px); } }
+@media (max-width:620px) { .profile-workspace { display:block; height:auto; min-height:0; } .profile-list { max-height:300px; border-right:0; border-bottom:1px solid var(--line); } .profile-detail { overflow:visible; padding:18px 16px; } }

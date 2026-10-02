@@ -8,8 +8,8 @@ import type { TrackedPhrase } from './models';
   template: `@for (segment of segments(); track $index) {@if (segment.hit) {<mark [class]="'tracked ' + segment.hit"><strong>{{ segment.text }}</strong></mark>} @else {{{ segment.text }}}}`,
   styles: [`
     :host { display: contents; }
-    .tracked { background: #5a1f1c; color: #ffb4ab; border-radius: 2px; padding: 0 2px; }
-    .tracked.positive { background: #173b24; color: #a5f5bd; }
+    .tracked { background: var(--bad-soft); color: var(--bad); border-radius: 3px; padding: 0 2px; }
+    .tracked.positive { background: var(--mark); color: var(--ink-strong); }
     .tracked strong { font-weight: 700; }
   `],
 })

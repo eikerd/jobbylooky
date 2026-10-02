@@ -2,12 +2,12 @@
   box-sizing: border-box;
 }
 body {
-  color-scheme: dark;
+  color-scheme: light;
   margin: 0;
-  background: #080c0a;
-  color: #cfdbd2;
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 12px;
+  background: #fdfbf6;
+  color: #283c46;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 15px;
   -webkit-font-smoothing: antialiased;
 }
 button,
@@ -17,11 +17,11 @@ select {
   font-family: inherit;
 }
 :focus-visible {
-  outline: 2px solid #79ed9f;
+  outline: 2px solid #1e7a4a;
   outline-offset: 2px;
 }
 ::selection {
-  background: #244c32;
+  background: #ffe58f;
 }
 
-* { scrollbar-width: thin; scrollbar-color: #344a3c #0b100d; }
+* { scrollbar-width: thin; scrollbar-color: #d5ccb6 transparent; }

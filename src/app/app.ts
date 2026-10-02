@@ -24,7 +24,7 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
   selector: 'app-root',
   imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight],
   templateUrl: './app.html',
-  styleUrls: ['./app.css', './phrases.css', './reply.css'],
+  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css'],
 })
 export class App implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
