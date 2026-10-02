@@ -145,7 +145,7 @@ h1 {
 .secondary {
   background: var(--card);
   color: var(--ink);
-  border-color: var(--line-strong);
+  border-color: var(--control-border);
 }
 .secondary:hover {
   background: var(--hover);
