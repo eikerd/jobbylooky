@@ -1,0 +1,42 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  /* Warm paper theme: one palette. Custom properties inherit, so child components read these too. */
+  --page: #fdfbf6;
+  --side: #f4efe3;
+  --card: #ffffff;
+  --hover: #f8f3e6;
+  --ink: #283c46;
+  --ink-strong: #1d2d35;
+  --soft: #4f5f67;
+  --muted: #5c6b72;
+  --line: #e7e0cf;
+  --line-strong: #d5ccb6;
+  /* Inputs need a 3:1 boundary against the card; --line-strong is decorative only. */
+  --control-border: #8f8672;
+  --accent: #1e7a4a;
+  --accent-hover: #186a3f;
+  --accent-ink: #17643c;
+  --accent-soft: #dff3e6;
+  --select: #fff7d1;
+  --select-edge: #a87e00;
+  --warn: #7a5600;
+  --warn-soft: #fff0bf;
+  --bad: #a1332a;
+  --bad-soft: #fde3df;
+  --full-time: #1f5fa8;
+  --mark: #ffe58f;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+button, input, textarea, select {
+  font-family: var(--sans);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

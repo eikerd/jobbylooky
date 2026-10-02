@@ -1,15 +1,15 @@
-.reply { border-top: 1px solid #1f2b24; padding-top: 12px; margin-top: 12px; }
+.reply { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
 .reply h3 { margin: 0 0 8px; }
 .reply form { display: grid; gap: 8px; }
-.reply textarea { width: 100%; box-sizing: border-box; font-size: 12px; }
+.reply textarea { width: 100%; box-sizing: border-box; font-size: 15px; }
 .reply-actions { display: flex; gap: 8px; }
-.reply-to, .sent-meta, .reply-off { font-size: 11px; color: #92aa9b; margin: 0; }
-.reply-back { font-size: 12px; font-weight: 700; color: #a5f5bd; margin: 0 0 8px; }
-.sent-reply { border-left: 2px solid #2c3d33; padding-left: 8px; margin-bottom: 10px; }
-.sent-reply pre { font-size: 11px; margin: 4px 0 0; white-space: pre-wrap; }
-.replied { color: #a5f5bd; font-weight: 700; }
-.answer-of { border-top: 1px solid #1f2b24; padding-top: 12px; margin-top: 12px; display: grid; gap: 8px; justify-items: start; }
-.answer-of p { margin: 0; font-size: 12px; font-weight: 700; color: #a5f5bd; }
-.answer-of .email-reading { justify-self: stretch; border-left: 2px solid #2c3d33; padding-left: 8px; }
-.link-button { background: none; border: 0; padding: 0; color: #8de8a8; font: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
-.answer-mark { color: #a5f5bd; }
+.reply-to, .sent-meta, .reply-off { font-size: 13px; color: var(--soft); margin: 0; }
+.reply-back { font-size: 14px; font-weight: 700; color: var(--accent-ink); margin: 0 0 8px; }
+.sent-reply { border-left: 3px solid var(--line-strong); padding-left: 10px; margin-bottom: 10px; }
+.sent-reply pre { font-size: 14px; margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; }
+.replied { color: var(--accent-ink); font-weight: 700; }
+.answer-of { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; display: grid; gap: 8px; justify-items: start; }
+.answer-of p { margin: 0; font-size: 14px; font-weight: 700; color: var(--accent-ink); }
+.answer-of .email-reading { justify-self: stretch; border-left: 3px solid var(--line-strong); padding-left: 10px; }
+.link-button { background: none; border: 0; padding: 0; color: var(--accent-ink); font: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
+.answer-mark { color: var(--accent-ink); }
