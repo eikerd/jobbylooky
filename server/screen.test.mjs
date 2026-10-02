@@ -95,6 +95,7 @@ test('"Java" followed by other words still counts as a Java requirement', () => 
     'Java ScriptEngine API experience required',
     'Java scriptlet development required',
     'Java Scripting API experience required',
+    'Java Scripting APIs experience required',
   ]) {
     const result = screen(mail('Angular UI Developer', `Location: Remote\nRequired: Angular\n${sentence}.`));
     assert.equal(result.fit, 'Mismatch', sentence);
