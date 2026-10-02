@@ -72,6 +72,36 @@ test('Angular and JavaScript are not Java; recruiter address is not job location
   assert.equal(result.fit, 'Strong fit');
   assert.equal(result.location, 'Remote');
 });
+test('"Java scripting" and "Java Script" mean JavaScript, not Java', () => {
+  for (const phrase of ['Java scripting', 'Java Script', 'Java-script']) {
+    const result = screen(
+      mail(
+        'Angular UI Developer',
+        `Location: Remote\nRequired: Angular\nShould have hands on experience of Web Application development using advanced HTML designing and ${phrase}.`,
+      ),
+    );
+    assert.equal(result.fit, 'Strong fit', phrase);
+    assert.ok(!result.reasons.some(reason => /Java/.test(reason.text)), phrase);
+  }
+});
+test('a "Java Script" title does not hide an Angular role behind another technology', () => {
+  const result = screen(mail('UI Developer - Java Script/HTML', 'Location: Remote\nRequired: Angular, Highcharts'));
+  assert.equal(result.fit, 'Strong fit');
+});
+test('"Java" followed by other words still counts as a Java requirement', () => {
+  for (const sentence of [
+    'Strong Java 11 and Spring Boot required',
+    'Java, JavaScript and Angular development required',
+    'Java ScriptEngine API experience required',
+    'Java scriptlet development required',
+    'Java Scripting API experience required',
+    'Java Scripting APIs experience required',
+  ]) {
+    const result = screen(mail('Angular UI Developer', `Location: Remote\nRequired: Angular\n${sentence}.`));
+    assert.equal(result.fit, 'Mismatch', sentence);
+    assert.ok(result.reasons.some(reason => reason.kind === 'fail' && reason.text === 'Requires Java development.'), sentence);
+  }
+});
 test('testing and interest do not become EST restrictions', () => {
   const result = screen(
     mail(

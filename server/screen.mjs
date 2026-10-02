@@ -92,11 +92,14 @@ export function screen(message, trackedPhrases = []) {
   const employerMentions = flaggedEmployers.filter(({ pattern }) => pattern.test(`${company}\n${message.subject}\n${body}`));
   // Only explicit client fields establish the employer. Other mentions need confirmation.
   const flaggedEmployer = employerMentions.find(({ pattern }) => pattern.test(company));
+  // "Java scripting", "Java Script" and "Java-script" are recruiter spellings of JavaScript.
+  // Whole words only, so Java's ScriptEngine, scriptlets and Scripting API still count as Java.
+  const java = /\bjava\b(?![\s-]+script(?:s|ing)?\b(?![\s-]*apis?\b))/i;
   const javaLines = text
     .split(/[\n.!?]+/)
-    .filter((line) => /\bjava\b|\bspring\s*boot\b/i.test(line));
+    .filter((line) => java.test(line) || /\bspring\s*boot\b/i.test(line));
   const javaRequired =
-    /\bjava\b/i.test(title) ||
+    java.test(title) ||
     javaLines.some(
       (line) =>
         !/\b(?:optional|nice.to.have|not required|no java|without java|preferred|a plus)\b/i.test(
@@ -155,7 +158,8 @@ export function screen(message, trackedPhrases = []) {
   const primaryAngular =
     /\bangular\b/i.test(title) ||
     (angular &&
-      !/\b(?:\.net|net|java|python|php|servicenow|svelte|vue|react|devops|sre|security|kubernetes)\b/i.test(
+      !java.test(title) &&
+      !/\b(?:\.net|net|python|php|servicenow|svelte|vue|react|devops|sre|security|kubernetes)\b/i.test(
         title,
       ));
   const roleHeadings = [
