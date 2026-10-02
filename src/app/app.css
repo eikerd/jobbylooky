@@ -151,7 +151,10 @@ h1 {
   background: var(--hover);
 }
 .button:disabled {
-  opacity: 0.55;
+  /* Neutral, not faded: a washed-out green read as broken and failed contrast. */
+  background: var(--hover);
+  border-color: var(--line-strong);
+  color: var(--muted);
   cursor: default;
 }
 .button.chosen {
