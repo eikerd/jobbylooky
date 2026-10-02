@@ -100,3 +100,18 @@ test('the SQL prefilter covers every isOpportunity term, so "Hiring:" subjects a
   assert.equal(results.length, 1);
   assert.equal(results[0].from, '');
 });
+test('watched senders are read whatever the subject; strangers still need a job subject', async () => {
+  let sent;
+  const results = await readWorker('http://example.test', async (url, options) => {
+    sent = JSON.parse(options.body).requests[0].stmt;
+    if (sent.sql.startsWith('PRAGMA')) return response([{ name: 'messageId' }, { name: 'mailThreadId' }]);
+    return response([
+      { messageId: 'a', subject: 'Re: quick question', senderEmail: 'Aditya <Aditya@Recruiter.example>', receivedAt: 1789685000, rawBody: 'The client is Fidelity', mailThreadId: 'root' },
+      { messageId: 'b', subject: 'Lunch?', senderEmail: 'friend@example.com', receivedAt: 1789685001, rawBody: 'hi', mailThreadId: 'b' },
+    ]);
+  }, { watch: ['aditya@recruiter.example', 'john_smith@x.example', 'not-an-address'] });
+  assert.deepEqual(results.map((row) => [row.id, row.watchedOnly]), [['a', true]]);
+  assert.equal(sent.args.some((arg) => arg.value === 'john_smith@x.example'), true);
+  assert.match(sent.sql, /instr\(lower\(senderEmail\), \?\) > 0/);
+  assert.equal(sent.args.some((arg) => arg.value === 'not-an-address'), false);
+});

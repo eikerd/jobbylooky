@@ -8,3 +8,8 @@
 .sent-reply { border-left: 2px solid #2c3d33; padding-left: 8px; margin-bottom: 10px; }
 .sent-reply pre { font-size: 11px; margin: 4px 0 0; white-space: pre-wrap; }
 .replied { color: #a5f5bd; font-weight: 700; }
+.answer-of { border-top: 1px solid #1f2b24; padding-top: 12px; margin-top: 12px; display: grid; gap: 8px; justify-items: start; }
+.answer-of p { margin: 0; font-size: 12px; font-weight: 700; color: #a5f5bd; }
+.answer-of .email-reading { justify-self: stretch; border-left: 2px solid #2c3d33; padding-left: 8px; }
+.link-button { background: none; border: 0; padding: 0; color: #8de8a8; font: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
+.answer-mark { color: #a5f5bd; }

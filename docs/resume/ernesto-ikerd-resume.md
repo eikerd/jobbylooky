@@ -1,16 +1,16 @@
 <!--
-Snapshot of Ernesto (Ernie) Ikerd's resume, taken 2026-10-01 from the working draft in Google Docs:
+Snapshot of Ernesto (Ernie) Ikerd's resume, taken 2026-10-01 (headline and summary updated the same day) from the working draft in Google Docs:
 https://docs.google.com/document/d/1UHAtbD_XopSApV-0ccozzINXonUsnaFMxYlpNagrzNQ/edit
 The Google Doc is the source of truth. Bracketed [Q#] items are questions still open in that doc.
 -->
 
 # Ernesto (Ernie) Ikerd
 
-**Senior Front-End Software Engineer**
+**Senior Software Engineer — Front-End Focused, Full-Stack**
 
 Dallas, TX | psylux@gmail.com | (214) 727-9722 | [linkedin.com/in/ernesto-ikerd-6a5b108](https://www.linkedin.com/in/ernesto-ikerd-6a5b108/)
 
-Senior front-end engineer with 18 years of experience building web applications for Fortune 500 companies, the last ten in financial services at Fidelity, JPMorgan Chase, and Bank of America. Specializes in Angular and TypeScript, accessible UI, and data visualization. Principal engineer and tech lead for two Fidelity planning teams (2021–2024), owning releases and production validation. Works across the stack with Node.js, GraphQL, REST, and SQL, and builds side projects in React, Next.js, and Swift.
+Front-end-focused full-stack engineer with 18 years of experience building web applications for Fortune 500 companies, the last ten in financial services at Fidelity, JPMorgan Chase, and Bank of America. Deep in Angular and TypeScript, accessible UI, and data visualization; builds and integrates REST and GraphQL APIs with Node.js, and has shipped back-end work in C#/.NET and Spring Boot. Principal engineer and tech lead for two Fidelity planning teams (2021–2024), owning releases and production validation. Builds side projects in React, Next.js, and Swift.
 
 ## Technical skills
 

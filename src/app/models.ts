@@ -23,6 +23,8 @@ export interface Opportunity {
   pay: { min: number; max: number | null; period: string } | null;
   replies?: SentReply[];
   replyReceivedAt?: string;
+  /** The pitch whose reply this message answers. */
+  respondsTo?: string;
 }
 export interface SentReply {
   id: string;
@@ -32,6 +34,7 @@ export interface SentReply {
   body: string;
   sentAt: string;
   preview?: boolean;
+  attachment?: string;
 }
 export interface JobGroup {
   id: string;

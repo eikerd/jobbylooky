@@ -1,10 +1,10 @@
 import { Component, computed, signal, OnDestroy, ElementRef, viewChild, inject } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
 import { mapLocations } from './location-map';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
-import { formatEmailBody } from './email-body';
+import { formatEmailBody, urlRows } from './email-body';
 import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
@@ -22,7 +22,7 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, Profiles, SourceIcon, Highlight],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight],
   templateUrl: './app.html',
   styleUrls: ['./app.css', './phrases.css', './reply.css'],
 })
@@ -65,6 +65,8 @@ export class App implements OnDestroy {
   replyDraft = '';
   readonly replyTo = signal('');
   private replyTemplate = '';
+  /** Set while the composer will attach the resume folder's newest file. */
+  readonly replyResume = signal('');
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
@@ -104,7 +106,20 @@ export class App implements OnDestroy {
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  readonly emailBlocks = computed(() => formatEmailBody(this.selected()?.body || ''));
+  readonly emailBlocks = computed(() => this.blocks(this.selected()?.body || ''));
+  /** The pitch an answer row replies to, and whether its email is shown under the answer. */
+  readonly original = computed(() => {
+    const id = this.selected()?.respondsTo;
+    return id ? this.opportunities().find((row) => row.id === id) : undefined;
+  });
+  readonly showOriginal = signal(false);
+  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()?.body || '') : []));
+  private blocks(body: string) {
+    return formatEmailBody(body).map((block) => ({
+      ...block,
+      rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`),
+    }));
+  }
   constructor() {
     void this.load();
     this.poll = setInterval(() => {
@@ -185,6 +200,7 @@ export class App implements OnDestroy {
     this.linking.set(false);
     this.linkTarget = '';
     this.replying.set(false);
+    this.showOriginal.set(false);
     this.replyDraft = '';
   }
   changeFolder(folder: Folder) {
@@ -214,17 +230,25 @@ export class App implements OnDestroy {
     this.folder.set('All opportunities');
     this.select(row);
   }
-  async startReply(row: Opportunity) {
+  async startReply(row: Opportunity, kind: 'plain' | 'resume' | 'client' = 'plain') {
     // Ask the server: it picks the recipient with the same rule it sends with.
     this.error.set('');
     try {
       this.replyTo.set((await this.request<{ to: string }>(`opportunities/${encodeURIComponent(row.id)}/reply-to`)).to);
+      this.replyResume.set(kind === 'resume' ? (await this.request<{ name: string }>('resume')).name : '');
     } catch (error) {
       this.error.set(this.message(error));
       return;
     }
     const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
-    this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\nI'd like more information about this position.\n\n`;
+    const role = row.title.split(' @ ')[0].trim();
+    const about = role ? `about the ${role} role` : 'about this role';
+    const body = {
+      plain: `I'd like more information about this position.\n\n`,
+      resume: `Thanks for reaching out ${about}. I'm interested, and I've attached my latest resume.\n\nHappy to find a time to talk.\n\nThanks,\nErnie`,
+      client: `Thanks for reaching out ${about}. It sounds interesting.\n\nBefore we go further, could you share who the end client is? It helps me make sure I haven't already been submitted there through another firm, and lets me tailor my resume to their environment.\n\nThanks,\nErnie`,
+    }[kind];
+    this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\n${body}`;
     this.replyDraft = this.replyTemplate;
     this.replying.set(true);
   }
@@ -240,7 +264,10 @@ export class App implements OnDestroy {
     this.revision++;
     this.error.set('');
     try {
-      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', { body });
+      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', {
+        body,
+        attachResume: this.replyResume() || undefined,
+      });
       this.jobGroups.update((groups) => groups.map((group) => ({
         ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),
       })));
