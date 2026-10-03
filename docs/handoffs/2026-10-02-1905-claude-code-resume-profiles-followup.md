@@ -4,10 +4,10 @@ tool: claude-code
 model: claude-opus-5-5
 repo: eikerd/jobbylooky
 branch: resume-profiles-followup (worktree ../jobbylooky-wt-resume-followup)
-pr: see the PR opened from this branch
-state: pr-open
+pr: https://github.com/eikerd/jobbylooky/pull/10
+state: merged (override mode, owner's word: "Override, merge now")
 deployed: no; docs only, nothing to deploy
-loose_ends: listed below
+loose_ends: none
 supersedes: docs/handoffs/2026-10-01-1711-claude-code-resume-workflow.md
 ---
 
@@ -25,11 +25,11 @@ The workflow doc also records a Dice quirk found while adding the skills: the vi
 
 ## What the next agent should do first
 
-Nothing is pending in the repo. Before the next profile update, sign Indeed back in to the Gmail account (see loose ends).
+Nothing is pending. For the next resume change, follow `docs/resume/UPDATE-WORKFLOW.md`.
 
 ## Loose ends
 
-- **Indeed is signed out in Chrome** (both accounts), left over from the Yahoo attempt. The Gmail account (psylux@gmail.com), the primary one, needs a sign-in with a Gmail code before next use.
+None. Indeed in Chrome is signed in to the Gmail account (psylux@gmail.com) again, showing the new headline and resume (checked 2026-10-02).
 
 ## Proposed rule changes
 
