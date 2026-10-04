@@ -34,6 +34,11 @@ export class App implements OnDestroy {
     src: this.sanitizer.bypassSecurityTrustResourceUrl(map.embed),
     streetSrc: this.sanitizer.bypassSecurityTrustResourceUrl(map.streetMap),
   })));
+  /**
+   * Maps the owner asked to see, keyed by pitch and address. A foreign iframe anywhere on the
+   * page makes Claude's built-in browser ask before every action, so none is rendered until clicked.
+   */
+  readonly shownMaps = signal<ReadonlySet<string>>(new Set());
   readonly detailPane = viewChild<ElementRef<HTMLElement>>('detailPane');
   readonly folders: Folder[] = ['Inbox', 'Pursuing', 'Maybe', 'Passed', 'All opportunities'];
   readonly statuses = ['New', 'Pursue', 'Maybe', 'Applied', 'Interviewing', 'Offer', 'Passed'];
@@ -422,6 +427,10 @@ export class App implements OnDestroy {
         .trim() || from
     );
   }
+  showMap(key: string) {
+    this.shownMaps.update(shown => new Set(shown).add(key));
+  }
+
   reasonMark(kind: string) {
     return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
   }
