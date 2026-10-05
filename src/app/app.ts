@@ -435,6 +435,9 @@ export class App implements OnDestroy {
   reasonMark(kind: string) {
     return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
   }
+  reasonCount(row: Opportunity, kind: 'pass' | 'fail') {
+    return row.reasons.filter((reason) => reason.kind === kind).length;
+  }
   // The row icons are compact; screen readers get the reasons as words.
   reasonSummary(row: Opportunity) {
     return row.reasons.map((reason) => `${this.reasonMark(reason.kind)} ${reason.text}`).join('; ');

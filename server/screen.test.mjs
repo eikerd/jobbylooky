@@ -350,3 +350,16 @@ test('a negative tracked phrase forces Mismatch even in a multi-role email; a po
   assert.equal(screen(mail('Angular Developer Remote', body), ['Backend Java Engineer']).fit, 'Mismatch');
   assert.equal(screen(mail('Angular Developer Remote', body), [{ phrase: 'Angular Developer', kind: 'positive' }]).fit, 'Review');
 });
+
+test('every reason carries a short label for the fit tags', () => {
+  const samples = [
+    { subject: 'Senior Angular Developer - Remote', body: 'Angular, Node.js. Fully remote role.' },
+    { subject: 'Java Developer - Plano, TX', body: 'Location: Plano, TX\nMust have Java 17, Spring Boot.\nC# a plus.' },
+    { subject: 'UI Developer', body: 'Location: Westlake, TX and Merrimack, NH. Banking client.' },
+  ];
+  for (const sample of samples) {
+    const { reasons } = screen({ id: 'x', from: 'r@example.com', receivedAt: new Date().toISOString(), ...sample }, ['Spring Boot']);
+    assert.ok(reasons.length);
+    for (const reason of reasons) assert.ok(reason.label && reason.label.length <= 30, JSON.stringify(reason));
+  }
+});

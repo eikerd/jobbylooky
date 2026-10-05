@@ -299,13 +299,6 @@ time {
   margin: 12px 0 6px;
   overflow-wrap: anywhere;
 }
-.recruiter {
-  font-size: 15px;
-  color: var(--soft);
-  margin: 0;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
 .facts {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -337,18 +330,6 @@ h3 {
   margin: 0 0 10px;
   color: var(--ink-strong);
 }
-.assessment ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 10px;
-}
-.assessment li {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-}
 .reason-icon {
   display: flex;
   align-items: center;
@@ -371,21 +352,6 @@ h3 {
 .reason-icon.fail {
   color: var(--bad);
   background: transparent;
-}
-.assessment p {
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink);
-  margin: 0;
-}
-.assessment blockquote {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--soft);
-  border-left: 3px solid var(--line-strong);
-  padding-left: 12px;
-  margin: 4px 0 0;
-  overflow-wrap: anywhere;
 }
 .decisions {
   display: flex;
@@ -633,4 +599,28 @@ textarea {
 /* Buttons allow phrasing content only; these spans keep the former block layout. */
 .opportunity .company, .opportunity .recurrence, .opportunity .follow-up { display:block; }
 .row-reasons { display:inline-flex; gap:3px; }
-.row-reasons .reason-icon { width:14px; height:auto; font-size:14px; }
+
+/* 2026-10 canvas pass: one-row cards, unlabeled facts, fit tags, one action row. */
+.row-bottom { flex-wrap: nowrap; overflow: hidden; }
+.row-bottom > span { flex: none; }
+.opportunity .row-bottom .company { display: inline; flex: 0 1 auto; max-width: 45%; margin: 0; }
+.row-bottom > .row-location { flex: 0 1000 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-reasons { gap: 4px; }
+.count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.count-pill.pass { background: var(--accent-soft); color: var(--accent-ink); }
+.count-pill.fail { background: var(--bad-soft); color: var(--bad); }
+.detail-links { display: flex; align-items: center; gap: 12px; }
+.button.small { min-height: 36px; padding: 6px 14px; font-size: 13px; }
+.facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 14px 0; font-size: 15px; }
+.facts span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fit-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.fit-tags li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+.fit-tags li span { font-weight: 800; }
+.fit-tags .pass { background: var(--accent-soft); color: var(--accent-ink); }
+.fit-tags .check { background: var(--warn-soft); color: var(--warn); }
+.fit-tags .fail { background: var(--bad-soft); color: var(--bad); }
+.decisions { flex-wrap: wrap; }
+.received-detail { gap: 5px 16px; margin: 0; }
+.decisions { gap: 6px; }
+.decisions .button { padding-inline: 12px; }
+.decisions .primary { min-width: 0; }

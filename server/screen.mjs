@@ -68,7 +68,7 @@ function trackedPhraseReasons(text, trackedPhrases) {
     const start = text.lastIndexOf('\n', match.index) + 1;
     const end = text.indexOf('\n', match.index + match[0].length);
     const evidence = text.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ').trim();
-    return [{ kind: kind === 'positive' ? 'pass' : 'fail', text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
+    return [{ kind: kind === 'positive' ? 'pass' : 'fail', label: phrase, text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
   });
 }
 
@@ -176,12 +176,14 @@ export function screen(message, trackedPhrases = []) {
   if (multiRole)
     reasons.push({
       kind: 'check',
+      label: 'Multiple roles',
       text: 'This email describes multiple roles. Confirm the requirements for the Angular role separately.',
       evidence: '',
     });
   if (javaRequired)
     reasons.push({
       kind: multiRole ? 'check' : 'fail',
+      label: 'Java',
       text: multiRole
         ? 'One of the listed roles requires Java development.'
         : 'Requires Java development.',
@@ -190,12 +192,14 @@ export function screen(message, trackedPhrases = []) {
   else if (javaUnclear)
     reasons.push({
       kind: 'check',
+      label: 'Java',
       text: 'Java is mentioned; verify whether you would need to write it.',
       evidence: javaLines[0]?.trim().slice(0, 240),
     });
   if (microsoftRequired)
     reasons.push({
       kind: multiRole ? 'check' : 'fail',
+      label: '.NET / C#',
       text: multiRole
         ? 'One of the listed roles calls for .NET, C#, or ASP.NET development.'
         : 'Calls for .NET, C#, or ASP.NET development, outside your target stack.',
@@ -204,12 +208,14 @@ export function screen(message, trackedPhrases = []) {
   else if (microsoftUnclear)
     reasons.push({
       kind: 'check',
+      label: '.NET / C#',
       text: '.NET, C#, or ASP.NET is mentioned as optional or an integration; confirm no Microsoft-stack development is expected.',
       evidence: microsoftLines[0].trim().slice(0, 240),
     });
   if (angular)
     reasons.push({
       kind: primaryAngular && !alert ? 'pass' : 'check',
+      label: 'Angular',
       text: alert
         ? 'Angular appears in the job alert; verify the full job description.'
         : primaryAngular
@@ -217,22 +223,25 @@ export function screen(message, trackedPhrases = []) {
           : 'Angular is mentioned, but the role may focus on a different technology.',
       evidence: '',
     });
-  else reasons.push({ kind: 'check', text: 'Angular is not stated in this email.', evidence: '' });
+  else reasons.push({ kind: 'check', label: 'No Angular', text: 'Angular is not stated in this email.', evidence: '' });
   if (node)
     reasons.push({
       kind: 'pass',
+      label: 'Node.js',
       text: 'Node.js matches your target stack; assess the expected backend experience.',
       evidence: '',
     });
   if (remoteConflict)
     reasons.push({
       kind: 'fail',
+      label: 'Remote excludes Dallas',
       text: 'The stated remote location restriction excludes Dallas.',
       evidence: restriction,
     });
   else if (remote)
     reasons.push({
       kind: fullyRemote ? 'pass' : 'check',
+      label: officeCondition ? 'Remote + office' : restriction ? 'Remote, with conditions' : 'Fully remote',
       text: officeCondition
         ? 'Remote is mentioned alongside office attendance or hybrid work; confirm whether this is fully remote.'
         : restriction
@@ -241,10 +250,11 @@ export function screen(message, trackedPhrases = []) {
       evidence: officeCondition || restriction || '',
     });
   else if (dallas)
-    reasons.push({ kind: 'pass', text: 'Dallas is your next choice after fully remote work.', evidence: loc });
+    reasons.push({ kind: 'pass', label: 'Dallas', text: 'Dallas is your next choice after fully remote work.', evidence: loc });
   else if (nearby)
     reasons.push({
       kind: 'check',
+      label: nearby[0],
       text: /^(?:plano|frisco)$/i.test(nearby[0])
         ? `${nearby[0]} is a conditional option after remote and Dallas; confirm the commute.`
         : `${nearby[0]} is near Dallas; confirm the commute works for you.`,
@@ -253,6 +263,7 @@ export function screen(message, trackedPhrases = []) {
   else if (!westlake)
     reasons.push({
       kind: locationMismatch ? 'fail' : 'check',
+      label: locationMismatch ? 'Not remote, not Dallas' : 'Location unclear',
       text: locationMismatch
         ? 'The stated location is outside Dallas and is not remote.'
         : 'The work location needs confirmation.',
@@ -261,24 +272,28 @@ export function screen(message, trackedPhrases = []) {
   if (westlake)
     reasons.push({
       kind: 'pass',
+      label: 'Westlake, TX',
       text: 'Westlake, Texas is a location of interest to you, regardless of skill fit.',
       evidence: loc || locationContext,
     });
   if (alert)
     reasons.push({
       kind: 'check',
+      label: 'Job alert',
       text: 'This is a job alert summary, not a complete requirements list.',
       evidence: '',
     });
   if (message.truncated)
     reasons.push({
       kind: 'check',
+      label: 'Incomplete email',
       text: 'The mail-worker stored an incomplete email. Check Gmail for the full requirements.',
       evidence: '',
     });
   for (const employer of employerMentions)
     reasons.push({
       kind: 'check',
+      label: employer.name,
       text: employer === flaggedEmployer
         ? `${employer.name} is a stated client you asked to flag for review.`
         : `${employer.name} is mentioned; verify whether it is the hiring client.`,
@@ -287,6 +302,7 @@ export function screen(message, trackedPhrases = []) {
   if (planoBanking)
     reasons.push({
       kind: 'check',
+      label: 'Plano banking',
       text: 'Banking in Plano needs extra scrutiny: verify the client, especially Chase or Bank of America.',
       evidence: loc,
     });
@@ -299,6 +315,7 @@ export function screen(message, trackedPhrases = []) {
   if (company === 'Not stated' && fidelityLocations.length >= 2)
     reasons.push({
       kind: 'check',
+      label: 'Possible Fidelity',
       text: 'Possible Fidelity: this location combination matches the pattern you identified. Confirm the client with the recruiter.',
       evidence: fidelityLocations.map(([name]) => name).join(' · '),
     });
@@ -306,6 +323,7 @@ export function screen(message, trackedPhrases = []) {
   if (company === 'Not stated' && chaseLocationPattern)
     reasons.push({
       kind: 'check',
+      label: 'Possible Chase',
       text: 'Possible Chase: Raleigh together with an Ohio location matches the pattern you identified. This is an unverified clue; confirm the client with the recruiter.',
       evidence: locationContext,
     });
