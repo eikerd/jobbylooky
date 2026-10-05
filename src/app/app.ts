@@ -332,7 +332,7 @@ export class App implements OnDestroy {
     this.error.set('');
     this.notice.set('');
     try {
-      const updated = await this.request<Opportunity>(
+      const { trashed, trashError, ...updated } = await this.request<Opportunity & { trashed?: number; trashError?: string }>(
         `opportunities/${encodeURIComponent(row.id)}`,
         'PATCH',
         { status, notes: this.notes, nextAction: this.nextAction, followUp: this.followUp },
@@ -342,7 +342,8 @@ export class App implements OnDestroy {
       })));
       this.editStatus = updated.status;
       this.dirty.set(false);
-      this.notice.set('Saved.');
+      if (trashError) this.error.set(`Saved. ${trashError}`);
+      else this.notice.set(trashed ? `Saved. Deleted from your Gmail inbox (${trashed} ${trashed === 1 ? 'email' : 'emails'} in Trash).` : 'Saved.');
     } catch (error) {
       this.error.set(this.message(error));
     } finally {

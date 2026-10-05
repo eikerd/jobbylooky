@@ -8,11 +8,13 @@ import { readWorker } from './mail-worker.mjs';
 import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
+import { createTrasher } from './gmail-trash.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
 const workerUrl = process.env.MAIL_DATABASE_URL || '';
 const mailer = createMailer();
+const trasher = createTrasher();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 // An agent drops each new resume here; the newest file is what gets attached.
@@ -173,14 +175,20 @@ export const server = createServer(async (req, res) => {
         // The recipient always comes from the stored pitch, never from the request.
         return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim(), resume)));
       }
-      if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/'))
-        return json(
-          200,
-          store.update(
-            decodeURIComponent(url.pathname.slice('/api/opportunities/'.length)),
-            await body(req),
-          ),
-        );
+      if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/')) {
+        const id = decodeURIComponent(url.pathname.slice('/api/opportunities/'.length));
+        const before = store.snapshot().opportunities.find((item) => item.id === id)?.status;
+        const row = store.update(id, await body(req));
+        if (row.status !== 'Passed' || before === 'Passed') return json(200, row);
+        // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved
+        // either way; a Gmail failure is reported, never hidden.
+        if (!trasher) return json(200, { ...row, trashError: 'Gmail is not set up: SMTP_USER and SMTP_PASS are missing.' });
+        try {
+          return json(200, { ...row, trashed: (await trasher.trash(row.messageIds)).trashed });
+        } catch (error) {
+          return json(200, { ...row, trashError: `Gmail did not delete the email: ${error.message}` });
+        }
+      }
       if (req.method === 'POST' && url.pathname === '/api/import') {
         const input = await body(req);
         if (
