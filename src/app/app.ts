@@ -453,22 +453,24 @@ export class App implements OnDestroy {
   reasonTagClass(reason: Opportunity['reasons'][number]) {
     return reason.tone ? `${reason.kind} ${reason.tone}` : reason.kind;
   }
-  // Tags compress "How it fits": a label already shown (e.g. tracked "java" beside screened "Java") is not
-  // repeated. Tracked phrases come first, so their crayon-coloured tag is the one kept.
+  // Tags compress "How it fits": a tag repeating an earlier one with the same verdict (tracked "java" ×
+  // beside screened "Java" ×) is not shown twice. Tracked phrases come first, so their crayon-coloured tag
+  // is the one kept. Conflicting verdicts both stay, so a positive tracked phrase never hides a mismatch.
   fitTags(row: Opportunity) {
     const seen = new Set<string>();
     return row.reasons.filter((reason) => {
-      const key = this.tagLabel(reason).toLowerCase();
+      const key = this.tagKey(reason.kind, reason.label || reason.text);
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
   }
-  hasFitTag(row: Opportunity, label: string) {
-    return row.reasons.some((reason) => this.tagLabel(reason).toLowerCase() === label.toLowerCase());
+  hasFitTag(row: Opportunity, kind: string, label: string) {
+    const key = this.tagKey(kind, label);
+    return row.reasons.some((reason) => this.tagKey(reason.kind, reason.label || reason.text) === key);
   }
-  private tagLabel(reason: Opportunity['reasons'][number]) {
-    return reason.label || reason.text;
+  private tagKey(kind: string, label: string) {
+    return `${kind} ${label.toLowerCase()}`;
   }
   reasonCount(row: Opportunity, kind: 'pass' | 'fail') {
     return row.reasons.filter((reason) => reason.kind === kind).length;
