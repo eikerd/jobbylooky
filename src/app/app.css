@@ -609,9 +609,10 @@ textarea {
 .button.small { min-height: 36px; padding: 6px 14px; font-size: 13px; }
 .facts { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 14px 0; font-size: 15px; }
 .facts span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fit-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.fit-tags li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; }
-.fit-tags li span { font-weight: 800; }
+/* At most two rows of 22px tags; a pitch with more scrolls inside the strip instead of growing it. */
+.fit-tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; max-height: 48px; overflow-y: auto; }
+.fit-tags li { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: 999px; font-size: 12px; line-height: 20px; font-weight: 600; }
+.fit-tags li span { font-size: 11px; font-weight: 800; }
 .fit-tags .pass { background: var(--accent-soft); color: var(--accent-ink); }
 .fit-tags .check { background: var(--warn-soft); color: var(--warn); }
 .fit-tags .fail { background: var(--bad-soft); color: var(--bad); }

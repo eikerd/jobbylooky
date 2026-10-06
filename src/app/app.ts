@@ -453,6 +453,23 @@ export class App implements OnDestroy {
   reasonTagClass(reason: Opportunity['reasons'][number]) {
     return reason.tone ? `${reason.kind} ${reason.tone}` : reason.kind;
   }
+  // Tags compress "How it fits": a label already shown (e.g. tracked "java" beside screened "Java") is not
+  // repeated. Tracked phrases come first, so their crayon-coloured tag is the one kept.
+  fitTags(row: Opportunity) {
+    const seen = new Set<string>();
+    return row.reasons.filter((reason) => {
+      const key = this.tagLabel(reason).toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+  hasFitTag(row: Opportunity, label: string) {
+    return row.reasons.some((reason) => this.tagLabel(reason).toLowerCase() === label.toLowerCase());
+  }
+  private tagLabel(reason: Opportunity['reasons'][number]) {
+    return reason.label || reason.text;
+  }
   reasonCount(row: Opportunity, kind: 'pass' | 'fail') {
     return row.reasons.filter((reason) => reason.kind === kind).length;
   }
