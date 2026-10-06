@@ -1,5 +1,4 @@
-import { Component, computed, signal, OnDestroy, ElementRef, viewChild, inject } from '@angular/core';
-import { DomSanitizer } from '@angular/platform-browser';
+import { Component, computed, signal, OnDestroy, ElementRef, viewChild } from '@angular/core';
 import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -11,6 +10,7 @@ import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
 import { CrayonPicker } from './crayon-picker.component';
 import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
+import { LocationMaps } from './location-maps.component';
 
 interface Connection {
   configured: boolean;
@@ -24,25 +24,14 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, CrayonPicker],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
   host: { '[style]': 'phraseStyle()' },
 })
 export class App implements OnDestroy {
-  private readonly sanitizer = inject(DomSanitizer);
-  readonly locationMaps = computed(() => mapLocations(this.selected()?.location || '', this.selected()?.body || '').map(map => ({
-    ...map,
-    // The helper fixes the Google origin and URL-encodes all email-derived text.
-    src: this.sanitizer.bypassSecurityTrustResourceUrl(map.embed),
-    streetSrc: this.sanitizer.bypassSecurityTrustResourceUrl(map.streetMap),
-  })));
-  /**
-   * Maps the owner asked to see, keyed by pitch and address. A foreign iframe anywhere on the
-   * page makes Claude's built-in browser ask before every action, so none is rendered until clicked.
-   */
-  readonly shownMaps = signal<ReadonlySet<string>>(new Set());
+  readonly locationMaps = computed(() => mapLocations(this.selected()?.location || ''));
   readonly detailPane = viewChild<ElementRef<HTMLElement>>('detailPane');
   readonly folders: Folder[] = ['Inbox', 'Pursuing', 'Maybe', 'Passed', 'All opportunities'];
   readonly statuses = ['New', 'Pursue', 'Maybe', 'Applied', 'Interviewing', 'Offer', 'Passed'];
@@ -361,7 +350,7 @@ export class App implements OnDestroy {
     this.error.set('');
     this.notice.set('');
     try {
-      const updated = await this.request<Opportunity>(
+      const { trashed, trashError, ...updated } = await this.request<Opportunity & { trashed?: number; trashError?: string }>(
         `opportunities/${encodeURIComponent(row.id)}`,
         'PATCH',
         { status, notes: this.notes, nextAction: this.nextAction, followUp: this.followUp },
@@ -371,7 +360,8 @@ export class App implements OnDestroy {
       })));
       this.editStatus = updated.status;
       this.dirty.set(false);
-      this.notice.set('Saved.');
+      if (trashError) this.error.set(`Saved. ${trashError}`);
+      else this.notice.set(trashed ? `Saved. Deleted from your Gmail inbox (${trashed} ${trashed === 1 ? 'email' : 'emails'} in Trash).` : 'Saved.');
     } catch (error) {
       this.error.set(this.message(error));
     } finally {
@@ -456,16 +446,15 @@ export class App implements OnDestroy {
         .trim() || from
     );
   }
-  showMap(key: string) {
-    this.shownMaps.update(shown => new Set(shown).add(key));
-  }
-
   reasonMark(kind: string) {
     return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
   }
-  // A tracked phrase's tone is its kind, so the icon wears the crayon picked for that kind.
-  reasonIconClass(reason: Opportunity['reasons'][number]) {
-    return reason.tone ? `reason-icon ${reason.kind} ${reason.tone}` : `reason-icon ${reason.kind}`;
+  // A tracked phrase's tone is its kind, so its tag wears the crayon picked for that kind.
+  reasonTagClass(reason: Opportunity['reasons'][number]) {
+    return reason.tone ? `${reason.kind} ${reason.tone}` : reason.kind;
+  }
+  reasonCount(row: Opportunity, kind: 'pass' | 'fail') {
+    return row.reasons.filter((reason) => reason.kind === kind).length;
   }
   // The row icons are compact; screen readers get the reasons as words.
   reasonSummary(row: Opportunity) {

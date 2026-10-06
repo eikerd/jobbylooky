@@ -7,7 +7,7 @@ branch: feat/phrase-colors (built in a scratchpad clone, not the shared checkout
 pr: https://github.com/eikerd/jobbylooky/pull/13
 state: merged (three review rounds; the owner said "run the three review rounds and merge")
 deployed: Chungus deploy of the merge commit follows in this session; the result (md5 against origin/main) is in the closing message to the owner, not here
-loose_ends: 4 (listed below)
+loose_ends: 3 (listed below)
 supersedes: none (docs/handoffs/2026-10-04-2347-claude-code-maps-on-click.md covers different work)
 ---
 
@@ -28,7 +28,8 @@ Default crayons: Salmon (negative), Flora (positive), Lemon (neutral), Lavender 
   - fix: concurrent crayon picks never undo a newer colour (round 2, Codex)
 - Files: `server/screen.mjs` (`PHRASE_KINDS`, `HIGHLIGHT_KINDS`, `DEFAULT_PHRASE_COLORS`, reason `tone`), `server/store.mjs` (`phraseColors`, `setPhraseColor`), `server/index.mjs` (routes), `src/app/crayons.ts`, `src/app/crayon-picker.component.ts`, `src/app/app.ts` (`phraseColors`, `pickPhraseColor`, `reasonIconClass`), `src/app/highlight.component.ts`, `src/app/phrases.css`, `src/app/app.css`.
 - Verified by:
-  - `npm test` 113/113 on `main` plus this branch; `ng build` clean; CI `validate` green.
+  - `npm test` 113/113 on the original base, and 128/128 after merging #12 into the branch; `ng build` clean; CI `validate` green.
+  - Not rendered after the #12 merge: the fit tags take the crayon tint, which is a code-level carry-over of #12's approved tag design.
   - Sample-data preview (port 4318): all five highlights, the Phrases tab, the crayon box open, and a pick (Tangerine) persisted through `/jobby/api/phrase-colors`. The owner saw the render and pressed Create PR.
 
 ## What is deployed
@@ -37,14 +38,13 @@ See the closing message: the deploy runs after this note is merged.
 
 ## Loose ends
 
-- **PR #12 (`feat/pass-trashes-gmail`, another session's draft) conflicts with this one.** It replaces the "How it fits" list with `fit-tags`. Whichever merges second must carry the tone class onto the tags: add `reason.tone` to the `<li>` class, and add `.fit-tags .neutral/.purple/.pink/.negative/.positive` rules from `--<kind>-soft` and `--<kind>-ink`.
 - **The shared checkout `~/repos/work/jobbylooky` was being edited by another session the whole time** (location maps, profiles; its note is `2026-10-06-1019-claude-code-map-locations.md`). This session switched that checkout's branch for about a minute while moving its own changes. It restored the branch and both of that session's files (`src/app/location-map.ts`, `tests/location-map.test.ts`) from a patch, then did all further work in a scratchpad clone.
 - **Round 3 (Codex), declined**: two rapid same-kind crayon picks can reach the server out of order and persist the older colour. The client already ignores stale answers. The fix, if it's ever seen: serialise same-kind writes in `pickPhraseColor` (hold the latest pending colour and send it once the in-flight PATCH returns).
 - The sample preview server (`jobbylooky-sample`, port 4318) was left running; stopping it was blocked by a permission check.
 
 ## Next agent: start here
 
-1. If you are merging PR #12, apply the fit-tags tone carry-over from Loose ends first.
+1. Nothing is pending on this feature. PR #12 merged first, and this PR's merge carried the tone onto its fit tags: `reasonTagClass(reason)` plus `.fit-tags .<kind>` rules read `--<kind>-soft` and `--<kind>-ink`. The inbox rows show #12's pass/fail count pills, not per-reason icons, so the crayons appear on highlights, tags and the Phrases tab.
 
 ## Decided by the owner
 

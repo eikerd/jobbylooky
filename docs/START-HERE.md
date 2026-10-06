@@ -29,7 +29,7 @@ For a fresh clone without the private cache, omit MAIL_DATABASE_URL and paste a 
 - `location-map.ts`: street-address thumbnails only. City names do not produce maps. Addresses found in email bodies are labeled separately from the job location.
 - `source-icon*`: sender-domain icons; these identify a source, not an employer.
 
-The app sends email only when the owner writes a reply from a pitch (optionally with the resume from the resume folder); it does not alter Gmail labels, archive messages, or automatically triage the owner’s mail. Deterministic matches are clues, not verified employers or vacancies.
+The app sends email only when the owner writes a reply from a pitch (optionally with the resume from the resume folder); passing on a pitch (status → Passed) moves that pitch's emails from the Gmail inbox to Gmail Trash over IMAP (`server/gmail-trash.mjs`, same app password). Nothing else alters Gmail, and nothing is triaged automatically. Deterministic matches are clues, not verified employers or vacancies.
 
 ## Preferences already implemented
 
