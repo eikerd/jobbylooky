@@ -233,6 +233,17 @@ export function createStore(directory) {
       commit(next);
       return structuredClone(row);
     },
+    /**
+     * Gmail finished deleting `trashedIds`. Pending clears only when that batch covered every
+     * Message-ID the pitch has now: mail synced while IMAP ran is still in the inbox, so it stays
+     * pending and the next Pass deletes it.
+     */
+    settleTrash(id, trashedIds) {
+      const row = state.opportunities.find((item) => item.id === id);
+      if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
+      const covered = new Set(trashedIds);
+      return this.setTrashPending(id, !row.messageIds.every((messageId) => covered.has(messageId)));
+    },
     phrases: () => structuredClone(state.trackedPhrases),
     addPhrase(input) {
       const phrase = typeof input?.phrase === 'string' ? input.phrase.replace(/\s+/g, ' ').trim() : '';
