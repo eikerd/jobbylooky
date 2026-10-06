@@ -424,7 +424,8 @@ export class App implements OnDestroy {
       // Edits that rode on the failed Pass come back as unsaved work on their pitch.
       const edited = fields.notes !== row.notes || fields.nextAction !== row.nextAction || fields.followUp !== row.followUp;
       if (edited && this.selectedId() !== row.id && !this.hasUnsavedWork()) this.select(row);
-      if (this.selectedId() === row.id) {
+      // A draft typed while the Pass was saving is newer than the one sent, and is kept as it is.
+      if (this.selectedId() === row.id && !this.dirty()) {
         this.notes = fields.notes;
         this.nextAction = fields.nextAction;
         this.followUp = fields.followUp;
@@ -450,11 +451,11 @@ export class App implements OnDestroy {
   private collectTrash({ id, title }: Opportunity) {
     this.trashWait = this.trashWait.then(async () => {
       try {
-        const { trashed, trashError, skipped } = await this.request<{ trashed?: number; trashError?: string; skipped?: boolean }>(
+        const { trashed, trashError, skipped, preview } = await this.request<{ trashed?: number; trashError?: string; skipped?: boolean; preview?: boolean }>(
           `opportunities/${encodeURIComponent(id)}/trash`,
         );
         if (trashError) this.error.set(`${title}: ${trashError}`);
-        else if (!skipped) this.toast(`${trashed ? 'Deleted from Gmail' : 'Already gone from Gmail'} · ${title}`);
+        else if (!skipped) this.toast(`${preview ? 'Preview: Gmail not touched' : trashed ? 'Deleted from Gmail' : 'Already gone from Gmail'} · ${title}`);
       } catch (error) {
         this.error.set(`${title}: could not confirm the Gmail delete: ${this.message(error)}`);
       }

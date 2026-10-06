@@ -20,14 +20,14 @@ export function createPassTrash({ store, trasher, keepMs = KEEP_OUTCOME_MS }) {
     const retry = 'Click Pass again to retry.';
     if (!trasher) return { ...row, trashError: `Gmail is not set up: SMTP_USER and SMTP_PASS are missing. ${retry}` };
     const batch = [...row.messageIds];
-    let trashed;
+    let trashed, preview;
     try {
-      ({ trashed } = await trasher.trash(batch));
+      ({ trashed, preview } = await trasher.trash(batch));
     } catch (error) {
       // IMAP can take a while; the row may have changed meanwhile, so report the current one.
       return { ...current(id), trashError: `Gmail did not delete the email: ${error.message}. ${retry}` };
     }
-    return { ...store.settleTrash(id, batch), trashed };
+    return { ...store.settleTrash(id, batch), trashed, preview };
   }
 
   return {

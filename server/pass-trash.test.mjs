@@ -126,3 +126,11 @@ test('passing the same pitch twice while its delete waits gives one delete and o
     assert.equal((await queue.outcome(id)).trashed, 1);
     assert.equal(trasher.state.batches.length, 1);
   }));
+
+test('preview mode says so instead of claiming the mail is gone', () =>
+  withStore(async (store) => {
+    store.import([message(1)]);
+    const queue = createPassTrash({ store, trasher: { trash: async () => ({ trashed: 0, preview: true }) } });
+    const outcome = await queue.enqueue(pass(store, 1));
+    assert.equal(outcome.preview, true);
+  }));
