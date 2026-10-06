@@ -382,3 +382,18 @@ test('new mail on a passed pitch marks its Gmail trash pending again', () =>
     assert.equal(row.messageIds.length, 2);
     assert.equal(row.trashPending, true);
   }));
+
+test('mail synced while Gmail was deleting stays pending; a covering batch clears it', () =>
+  withStore((store) => {
+    store.import([message]);
+    const id = store.snapshot().opportunities[0].id;
+    store.update(id, { status: 'Passed' });
+    store.setTrashPending(id, true);
+    const batch = [...store.snapshot().opportunities[0].messageIds];
+    // The one-minute sync lands while IMAP is still moving the first batch.
+    store.import([{ ...message, id: 'followup@example.com', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    assert.equal(store.settleTrash(id, batch).trashPending, true);
+    const everything = store.snapshot().opportunities[0].messageIds;
+    assert.equal('trashPending' in store.settleTrash(id, everything), false);
+    assert.throws(() => store.settleTrash('missing', []), /not found/);
+  }));
