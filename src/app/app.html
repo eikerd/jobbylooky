@@ -357,7 +357,8 @@
                 type="button"
                 class="button secondary"
                 [class.chosen]="row.status === 'Passed'"
-                (click)="save('Passed')"
+                (click)="pass()"
+                aria-keyshortcuts="p"
                 [disabled]="busy()"
               >
                 Pass
@@ -473,6 +474,12 @@
       </div>
     }
   </main>
+</div>
+
+<div class="toasts" role="status" aria-live="polite">
+  @for (item of toasts(); track item.id) {
+    <div class="toast">{{ item.text }}</div>
+  }
 </div>
 
 <ng-template #bodyBlocks let-blocks>
