@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTrasher } from './gmail-trash.mjs';
+import { createTrasher, gmailIds } from './gmail-trash.mjs';
 
 function fakeImap(inbox) {
   const calls = { moved: [], searched: [], loggedOut: false, released: false };
@@ -56,4 +56,9 @@ test('the connection is closed when Gmail fails mid-move', async () => {
   };
   await assert.rejects(createTrasher({}, async () => client).trash(['a@recruiter.com']), /Gmail said no/);
   assert.ok(calls.released && calls.loggedOut);
+});
+
+test('only real Message-IDs count as Gmail messages', () => {
+  assert.deepEqual(gmailIds(['<a@x.com>', 'a@x.com', '6f1c2b9e-0000-4000-8000-000000000000']), ['a@x.com']);
+  assert.deepEqual(gmailIds(['6f1c2b9e-0000-4000-8000-000000000000']), []);
 });

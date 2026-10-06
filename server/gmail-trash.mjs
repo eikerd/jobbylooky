@@ -3,6 +3,9 @@ import { ImapFlow } from 'imapflow';
 const MAILBOX = 'INBOX';
 // Only real Message-IDs can be found in Gmail; pasted emails carry a local UUID instead.
 const searchable = (id) => /^[^\s<>@]+@[^\s<>@]+$/.test(String(id));
+/** The message IDs Gmail can find: deduplicated, brackets stripped, local UUIDs dropped. */
+export const gmailIds = (messageIds) =>
+  [...new Set(messageIds.map((id) => String(id).replace(/[<>]/g, '')).filter(searchable))];
 
 /**
  * Moves a passed pitch's emails out of the Gmail inbox into Trash, where Gmail keeps
@@ -34,7 +37,7 @@ export function createTrasher(env = process.env, connect = null) {
   return {
     preview,
     async trash(messageIds) {
-      const ids = [...new Set(messageIds.map((id) => String(id).replace(/[<>]/g, '')).filter(searchable))];
+      const ids = gmailIds(messageIds);
       if (!ids.length || !open) return { trashed: 0, preview };
       const client = await open();
       try {

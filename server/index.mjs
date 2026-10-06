@@ -8,7 +8,7 @@ import { readWorker } from './mail-worker.mjs';
 import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
-import { createTrasher } from './gmail-trash.mjs';
+import { createTrasher, gmailIds } from './gmail-trash.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
@@ -179,7 +179,9 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(url.pathname.slice('/api/opportunities/'.length));
         const before = store.snapshot().opportunities.find((item) => item.id === id)?.status;
         const row = store.update(id, await body(req));
-        if (row.status !== 'Passed' || (before === 'Passed' && !row.trashPending)) return json(200, row);
+        // A pasted email has no Gmail message to delete, so it never needs Gmail.
+        if (row.status !== 'Passed' || !gmailIds(row.messageIds).length || (before === 'Passed' && !row.trashPending))
+          return json(200, row);
         // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved
         // either way; a Gmail failure is reported, never hidden, and the next Pass retries it.
         // Pending is written before IMAP starts, so a crash mid-delete still leaves a retry.
