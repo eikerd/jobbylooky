@@ -329,10 +329,10 @@
             </p>
             <app-location-maps [places]="locationMaps()" [scope]="row.id" />
             <ul class="fit-tags" aria-label="How it fits">
-              @for (reason of row.reasons; track $index) {
+              @for (reason of fitTags(row); track $index) {
                 <li [class]="reasonTagClass(reason)" [attr.title]="reason.text"><span aria-hidden="true">{{ reasonMark(reason.kind) }}</span>{{ reason.label || reason.text }}</li>
               }
-              @if (row.employmentType === 'Full-time') {
+              @if (row.employmentType === 'Full-time' && !hasFitTag(row, 'pass', 'Full-time')) {
                 <li class="pass"><span aria-hidden="true">✓</span>Full-time</li>
               }
             </ul>
