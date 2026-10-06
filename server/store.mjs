@@ -221,6 +221,16 @@ export function createStore(directory) {
       commit(next);
       return structuredClone(row);
     },
+    /** A pass whose Gmail trash failed stays pending, so the next save as Passed retries it. */
+    setTrashPending(id, pending) {
+      const next = structuredClone(state);
+      const row = next.opportunities.find((item) => item.id === id);
+      if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
+      if (pending) row.trashPending = true;
+      else delete row.trashPending;
+      commit(next);
+      return structuredClone(row);
+    },
     phrases: () => structuredClone(state.trackedPhrases),
     addPhrase(input) {
       const phrase = typeof input?.phrase === 'string' ? input.phrase.replace(/\s+/g, ' ').trim() : '';

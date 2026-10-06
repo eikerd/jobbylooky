@@ -179,14 +179,17 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(url.pathname.slice('/api/opportunities/'.length));
         const before = store.snapshot().opportunities.find((item) => item.id === id)?.status;
         const row = store.update(id, await body(req));
-        if (row.status !== 'Passed' || before === 'Passed') return json(200, row);
+        if (row.status !== 'Passed' || (before === 'Passed' && !row.trashPending)) return json(200, row);
         // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved
-        // either way; a Gmail failure is reported, never hidden.
-        if (!trasher) return json(200, { ...row, trashError: 'Gmail is not set up: SMTP_USER and SMTP_PASS are missing.' });
+        // either way; a Gmail failure is reported, never hidden, and the next Pass retries it.
+        const failed = (reason) =>
+          json(200, { ...store.setTrashPending(id, true), trashError: `${reason} Click Pass again to retry.` });
+        if (!trasher) return failed('Gmail is not set up: SMTP_USER and SMTP_PASS are missing.');
         try {
-          return json(200, { ...row, trashed: (await trasher.trash(row.messageIds)).trashed });
+          const { trashed } = await trasher.trash(row.messageIds);
+          return json(200, { ...store.setTrashPending(id, false), trashed });
         } catch (error) {
-          return json(200, { ...row, trashError: `Gmail did not delete the email: ${error.message}` });
+          return failed(`Gmail did not delete the email: ${error.message}.`);
         }
       }
       if (req.method === 'POST' && url.pathname === '/api/import') {
