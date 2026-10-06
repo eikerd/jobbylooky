@@ -9,6 +9,8 @@ import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models'
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
+import { CrayonPicker } from './crayon-picker.component';
+import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 
 interface Connection {
   configured: boolean;
@@ -22,9 +24,11 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, CrayonPicker],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css'],
+  // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
+  host: { '[style]': 'phraseStyle()' },
 })
 export class App implements OnDestroy {
   private readonly sanitizer = inject(DomSanitizer);
@@ -53,7 +57,11 @@ export class App implements OnDestroy {
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
   });
   readonly phrases = signal<TrackedPhrase[]>([]);
-  readonly phraseKinds: PhraseKind[] = ['negative', 'positive'];
+  readonly phraseKinds: PhraseKind[] = ['negative', 'positive', 'neutral', 'purple', 'pink'];
+  readonly phraseKindLabels: Record<PhraseKind, string> = { negative: 'Negative', positive: 'Positive', neutral: 'Neutral', purple: 'Purple', pink: 'Pink' };
+  readonly phraseColors = signal<Record<PhraseKind, string>>(DEFAULT_PHRASE_COLORS);
+  readonly phraseStyle = computed(() => phraseColorStyle(this.phraseColors()));
+  readonly phraseKindMarks: Record<PhraseKind, string> = { negative: '×', positive: '✓', neutral: '•', purple: '•', pink: '•' };
   readonly openPhraseId = signal('');
   /** Pitches per phrase id, from the reasons the server recorded, newest first. */
   readonly phraseMatches = computed(() => {
@@ -172,15 +180,17 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection, phrases] = await Promise.all([
+      const [rows, connection, phrases, colors] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
         this.request<TrackedPhrase[]>('phrases'),
+        this.request<Record<PhraseKind, string>>('phrase-colors'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision) return;
       this.jobGroups.set(rows);
       this.phrases.set(phrases);
+      this.phraseColors.set(colors);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -292,6 +302,18 @@ export class App implements OnDestroy {
     const kind = this.phraseKind;
     if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
       this.phraseDraft = '';
+  }
+  // Optimistic: the crayon shows at once and is put back if the server refuses it.
+  async pickPhraseColor(kind: PhraseKind, color: string) {
+    const previous = this.phraseColors();
+    this.revision++;
+    this.phraseColors.set({ ...previous, [kind]: color });
+    try {
+      this.phraseColors.set(await this.request<Record<PhraseKind, string>>('phrase-colors', 'PATCH', { kind, color }));
+    } catch (error) {
+      this.phraseColors.set(previous);
+      this.error.set(this.message(error));
+    }
   }
   phrasesOf(kind: PhraseKind) {
     return this.phrases().filter((row) => row.kind === kind);

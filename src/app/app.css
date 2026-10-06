@@ -634,3 +634,6 @@ textarea {
 .opportunity .company, .opportunity .recurrence, .opportunity .follow-up { display:block; }
 .row-reasons { display:inline-flex; gap:3px; }
 .row-reasons .reason-icon { width:14px; height:auto; font-size:14px; }
+.reason-icon.neutral { color: var(--neutral-ink); }
+.reason-icon.purple { color: var(--purple-ink); }
+.reason-icon.pink { color: var(--pink-ink); }

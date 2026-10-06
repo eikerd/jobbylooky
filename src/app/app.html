@@ -122,18 +122,21 @@
           <select id="new-phrase-kind" name="kind" [(ngModel)]="phraseKind">
             <option value="negative">× Negative</option>
             <option value="positive">✓ Positive</option>
+            <option value="neutral">• Neutral</option>
+            <option value="purple">• Purple</option>
+            <option value="pink">• Pink</option>
           </select>
           <button class="button primary" type="submit" [disabled]="busy() || phraseDraft.trim().length < 2">Track</button>
         </form>
         @for (kind of phraseKinds; track kind) {
-          <h3>{{ kind === 'negative' ? 'Negative phrases' : 'Positive phrases' }}</h3>
+          <h3>{{ phraseKindLabels[kind] }} phrases <app-crayon-picker [color]="phraseColors()[kind]" [label]="phraseKindLabels[kind]" (picked)="pickPhraseColor(kind, $event)" /></h3>
           <ul>
             @for (row of phrasesOf(kind); track row.id) {
               @let matches = phraseMatches().get(row.id) ?? [];
               <li>
                 <div class="phrase-row">
-                  <button type="button" class="phrase" [class.positive]="kind === 'positive'" [attr.aria-expanded]="openPhraseId() === row.id" (click)="togglePhrase(row.id)">
-                    <span [class]="'reason-icon ' + (kind === 'positive' ? 'pass' : 'fail')" aria-hidden="true">{{ kind === 'positive' ? '✓' : '×' }}</span>{{ row.phrase }}
+                  <button type="button" [class]="'phrase ' + kind" [attr.aria-expanded]="openPhraseId() === row.id" (click)="togglePhrase(row.id)">
+                    <span [class]="'reason-icon ' + kind" aria-hidden="true">{{ phraseKindMarks[kind] }}</span>{{ row.phrase }}
                   </button>
                   <span class="phrase-count">{{ matches.length }}</span>
                   <button class="button secondary" type="button" [disabled]="busy()" (click)="removePhrase(row)" [attr.aria-label]="'Stop tracking ' + row.phrase">Remove</button>
@@ -354,7 +357,7 @@
               <ul>
                 @for (reason of row.reasons; track $index) {
                   <li>
-                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
+                    <span [class]="'reason-icon ' + reason.kind + (reason.tone ? ' ' + reason.tone : '')" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
                     <div>
                       <p>{{ reason.text }}</p>
                       @if (reason.evidence) {

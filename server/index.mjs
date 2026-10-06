@@ -131,6 +131,7 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'GET' && url.pathname === '/api/phrase-colors') return json(200, store.phraseColors());
     if (req.method === 'GET' && url.pathname === '/api/resume') {
       const resume = latestResume(resumeDir);
       if (!resume) return json(404, { error: 'No resume found. Put a PDF or Word file in the resume folder.' });
@@ -149,6 +150,8 @@ export const server = createServer(async (req, res) => {
         return json(415, { error: 'JSON content is required.' });
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
+      if (req.method === 'PATCH' && url.pathname === '/api/phrase-colors')
+        return json(200, store.setPhraseColor(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')
         return json(200, store.group(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/sync') {

@@ -217,7 +217,30 @@ test('positive phrases add a ✓ reason without overriding the fit; kinds are va
     assert.equal(row.fit, before);
     assert.equal(store.phrases().find((p) => p.phrase === '100% remote').kind, 'positive');
     assert.equal(store.phrases()[0].kind, 'negative');
-    assert.throws(() => store.addPhrase({ phrase: 'Kotlin', kind: 'neutral' }), (error) => error.status === 400);
+    assert.throws(() => store.addPhrase({ phrase: 'Kotlin', kind: 'mixed' }), (error) => error.status === 400);
+  }));
+test('neutral, purple and pink phrases add a toned ? reason and leave the fit alone', () =>
+  withStore((store) => {
+    store.import([{ ...message, body: 'Required: Angular and TypeScript. Kotlin a plus, Rust or Go welcome. 100% remote.' }]);
+    const before = store.snapshot().opportunities[0].fit;
+    const kinds = { Kotlin: 'neutral', Rust: 'purple', Go: 'pink' };
+    for (const [phrase, kind] of Object.entries(kinds)) store.addPhrase({ phrase, kind });
+    const row = store.snapshot().opportunities[0];
+    for (const [phrase, kind] of Object.entries(kinds)) {
+      const reason = row.reasons.find((item) => item.phrase === phrase);
+      assert.equal(reason.kind, 'check', phrase);
+      assert.equal(reason.tone, kind, phrase);
+      assert.equal(store.phrases().find((p) => p.phrase === phrase).kind, kind);
+    }
+    assert.equal(row.fit, before);
+  }));
+test('phrase colours default per kind, persist when picked and reject junk', () =>
+  withStore((store, dir) => {
+    assert.equal(store.phraseColors().neutral, '#ffff00');
+    assert.equal(store.setPhraseColor({ kind: 'pink', color: '#FF0080' }).pink, '#ff0080');
+    assert.equal(createStore(dir).phraseColors().pink, '#ff0080');
+    assert.throws(() => store.setPhraseColor({ kind: 'teal', color: '#008080' }), (error) => error.status === 400);
+    assert.throws(() => store.setPhraseColor({ kind: 'pink', color: 'red' }), (error) => error.status === 400);
   }));
 test('non-ISO receivedAt values are normalised so thread order stays chronological', () =>
   withStore((store) => {
