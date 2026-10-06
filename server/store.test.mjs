@@ -214,6 +214,7 @@ test('positive phrases add a ✓ reason without overriding the fit; kinds are va
     const row = store.snapshot().opportunities[0];
     const reason = row.reasons.find((item) => item.phrase === '100% remote');
     assert.equal(reason.kind, 'pass');
+    assert.equal(reason.tone, 'positive');
     assert.equal(row.fit, before);
     assert.equal(store.phrases().find((p) => p.phrase === '100% remote').kind, 'positive');
     assert.equal(store.phrases()[0].kind, 'negative');

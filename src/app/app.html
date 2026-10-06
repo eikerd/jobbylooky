@@ -194,7 +194,7 @@
                 @if (row.reasons.length) {
                   <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
                     @for (reason of row.reasons; track $index) {
-                      <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
+                      <span [class]="reasonIconClass(reason)" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
                     }
                   </span>
                 }
@@ -357,7 +357,7 @@
               <ul>
                 @for (reason of row.reasons; track $index) {
                   <li>
-                    <span [class]="'reason-icon ' + reason.kind + (reason.tone ? ' ' + reason.tone : '')" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
+                    <span [class]="reasonIconClass(reason)" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
                     <div>
                       <p>{{ reason.text }}</p>
                       @if (reason.evidence) {

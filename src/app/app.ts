@@ -456,6 +456,10 @@ export class App implements OnDestroy {
   reasonMark(kind: string) {
     return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
   }
+  // A tracked phrase's tone is its kind, so the icon wears the crayon picked for that kind.
+  reasonIconClass(reason: Opportunity['reasons'][number]) {
+    return reason.tone ? `reason-icon ${reason.kind} ${reason.tone}` : `reason-icon ${reason.kind}`;
+  }
   // The row icons are compact; screen readers get the reasons as words.
   reasonSummary(row: Opportunity) {
     return row.reasons.map((reason) => `${this.reasonMark(reason.kind)} ${reason.text}`).join('; ');

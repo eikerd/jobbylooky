@@ -72,10 +72,10 @@ function trackedPhraseReasons(text, trackedPhrases) {
     const start = text.lastIndexOf('\n', match.index) + 1;
     const end = text.indexOf('\n', match.index + match[0].length);
     const evidence = text.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ').trim();
-    // A highlight phrase is a note to look at, never a verdict: 'check' leaves the fit alone, and tone carries its colour.
-    if (HIGHLIGHT_KINDS.includes(kind))
-      return [{ kind: 'check', tone: kind, text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
-    return [{ kind: kind === 'positive' ? 'pass' : 'fail', text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
+    // tone carries the phrase kind, so its icons wear the owner's crayon. A highlight phrase is a note
+    // to look at, never a verdict: 'check' leaves the fit alone.
+    const verdict = HIGHLIGHT_KINDS.includes(kind) ? 'check' : kind === 'positive' ? 'pass' : 'fail';
+    return [{ kind: verdict, tone: kind, text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
   });
 }
 
