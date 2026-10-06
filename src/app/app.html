@@ -324,19 +324,7 @@
               <span>{{ row.company !== 'Not stated' ? row.company : 'Company not stated' }}</span>
               <span>{{ row.location !== 'Not stated' ? row.location : 'Location not stated' }}</span>
             </p>
-            @for (map of locationMaps(); track map.query) {
-              <section class="location-map" aria-label="Address previews">
-                <a [href]="map.link" target="_blank" rel="noopener noreferrer">{{ map.source }}: {{ map.query }} ↗</a>
-                @if (shownMaps().has(row.id + ' ' + map.query)) {
-                  <div class="address-thumbnails">
-                    <iframe [src]="map.src" [title]="'Satellite map of ' + map.query" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
-                    <iframe [src]="map.streetSrc" [title]="'Street map of ' + map.query" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
-                  </div>
-                } @else {
-                  <button type="button" class="button secondary" (click)="showMap(row.id + ' ' + map.query)">Show map</button>
-                }
-              </section>
-            }
+            <app-location-maps [places]="locationMaps()" [scope]="row.id" />
             <ul class="fit-tags" aria-label="How it fits">
               @for (reason of row.reasons; track $index) {
                 <li [class]="reason.kind" [attr.title]="reason.text"><span aria-hidden="true">{{ reasonMark(reason.kind) }}</span>{{ reason.label || reason.text }}</li>

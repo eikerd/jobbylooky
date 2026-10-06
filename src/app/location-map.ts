@@ -1,35 +1,167 @@
-const streetAddress = /\b\d{1,6}\s+(?:[A-Za-z0-9.'’-]+\s+){1,7}(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|parkway|pkwy|lane|ln|way|highway|hwy|court|ct|circle|cir|terrace|ter)\b/i;
+/**
+ * Google map embeds for the places a pitch names.
+ *
+ * A job maps its "Location:" field only. The street addresses in an email belong to the
+ * recruiting company that sent it (its signature), so they map on the company's page instead.
+ */
 
-export function mapLocations(location: string, body = '') {
-  const candidates: { text: string; source: string }[] = [];
-  if (location && !/\{|https?:|@/i.test(location)) {
-    const embedded = location.match(/\(([^)]*)\)/);
-    const text = embedded && streetAddress.test(embedded[1])
-      ? `${embedded[1]}, ${location.slice(0, embedded.index).trim()}`
-      : location;
-    candidates.push({ text, source: 'Job location' });
-  }
-  const lines = body.split('\n');
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index].replace(/\[https?:\/\/[^\]]*\]/g, '').trim();
-    const match = streetAddress.exec(line);
-    if (!match || /^https?:/i.test(line)) continue;
-    let text = line.slice(match.index);
-    const next = lines[index + 1]?.trim() || '';
-    if (/^[A-Za-z .'-]+,?\s+(?:[A-Z]{2})\s+\d{5}(?:-\d{4})?$/.test(next)) text += `, ${next}`;
-    candidates.push({ text, source: 'Address in email' });
-  }
+export interface MapPlace {
+  /** The text sent to Google, cleaned of conditions like "(Hybrid)" or ": 3 days onsite". */
+  query: string;
+  /** Where the place came from: "Job location" or "Office". */
+  source: string;
+  region: string;
+  zoom: number;
+  link: string;
+  /** The street-map embed; at these zooms a satellite view shows nothing a street map does not. */
+  embed: string;
+}
+
+export interface ZoomRule {
+  region: string;
+  zoom: number;
+  applies: (place: string) => boolean;
+}
+
+const MAX_MAPS = 5;
+const STATE_CODES = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'];
+const STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'District of Columbia', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'];
+// Names first so "North Carolina" is never read as a city called "North" in a state called "Carolina".
+const STATE = `(?:${[...STATE_NAMES, ...STATE_CODES].join('|')})`;
+const ZIP = '\\d{5}(?:-\\d{4})?';
+/** "Plano, TX", "Plano TX 75024", "Durham, North Carolina". Case-sensitive: "or" and "in" are words, OR and IN are states. */
+const cityState = new RegExp(`([A-Z][A-Za-z.'’-]*(?:[ -][A-Za-z.'’-]+){0,3}),?\\s+(${STATE})\\b(\\s+${ZIP})?`, 'g');
+/** The state a place ends with, allowing a ZIP and a country after it. */
+const trailingState = new RegExp(`[\\s,]+(${STATE})(?:\\s+${ZIP})?(?:,?\\s*(?:USA?|United States))?\\s*$`);
+const streetAddress = /\b\d{1,6}\s+(?:[A-Za-z0-9.'’-]+\s+){1,7}(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|parkway|pkwy|lane|ln|way|highway|hwy|court|ct|circle|cir|terrace|ter)\b/i;
+/** Template placeholders, links and email addresses are never a place. */
+const unsafe = /\{|https?:|@|[<>}]/i;
+
+const northTexasCity = /\b(?:dallas|fort worth|ft\.? worth|dfw|north texas|plano|frisco|irving|las colinas|richardson|addison|carrollton|mckinney|allen|denton|arlington|garland|grand prairie|lewisville|flower mound|southlake|westlake|grapevine|coppell|the colony|mesquite|rockwall|wylie|prosper|little elm|farmers branch)\b/i;
+
+export function stateOf(place: string) {
+  return trailingState.exec(place)?.[1] ?? null;
+}
+
+/** North Texas: a Dallas–Fort Worth ZIP when there is one, otherwise a metroplex city in Texas or with no state at all. */
+export function isNorthTexas(place: string) {
+  const state = stateOf(place);
+  if (state && state !== 'TX' && state !== 'Texas') return false;
+  const zip = /\b(7[5-9]\d{3})\b/.exec(place);
+  if (zip) return /^(?:75[0-4]|76[0-2])/.test(zip[1]);
+  return northTexasCity.test(place);
+}
+
+/**
+ * Zoom per region; the first rule that applies wins, and anywhere else gets STATE_ZOOM.
+ * The thumbnails are 200px wide. At Dallas' latitude zoom 10 spans about 16 miles side to side,
+ * an 8-mile radius and the integer zoom nearest the 10 miles asked for; zoom 6 spans about
+ * 250 miles, the state and its neighbours. Add a row here for the next region.
+ */
+export const ZOOM_RULES: ZoomRule[] = [{ region: 'North Texas', zoom: 10, applies: isNorthTexas }];
+export const STATE_ZOOM = { region: 'State', zoom: 6 };
+
+export function zoomFor(place: string) {
+  const rule = ZOOM_RULES.find((candidate) => candidate.applies(place));
+  return rule ? { region: rule.region, zoom: rule.zoom } : STATE_ZOOM;
+}
+
+export function placeMap(query: string, source: string): MapPlace {
+  const { region, zoom } = zoomFor(query);
+  return {
+    query,
+    source,
+    region,
+    zoom,
+    link: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`,
+    embed: `https://maps.google.com/maps?${new URLSearchParams({ q: query, t: 'm', z: String(zoom), output: 'embed' })}`,
+  };
+}
+
+function cleanQuery(text: string) {
+  return text
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/\s*[:–]\s*\d+\s*days?.*$/i, '')
+    .replace(/\s*\|\s*/g, ', ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s,]+|[\s,]+$/g, '');
+}
+
+function unique(queries: string[]) {
   const seen = new Set<string>();
-  return candidates.flatMap(({ text, source }) => {
-    const query = text.replace(/\([^)]*\)|\[[^\]]*\]/g, '')
-      .replace(/\s*[:–]\s*\d+\s*days?.*$/i, '')
-      .replace(/\s+/g, ' ').trim();
-    const match = streetAddress.exec(query);
-    if (!match || /https?:|@|[<>{}]/i.test(query)) return [];
-    const identity = match[0].toLowerCase().replace(/[.,]/g, '');
-    if (seen.has(identity)) return [];
-    seen.add(identity);
-    const embed = (type: string) => `https://maps.google.com/maps?${new URLSearchParams({ q: query, t: type, z: '17', output: 'embed' })}`;
-    return [{ query, source, link: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`, embed: embed('k'), streetMap: embed('m') }];
-  }).slice(0, 5);
+  return queries.filter((query) => {
+    const key = query.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Maps for a job's "Location:" field. A street address maps as written; otherwise every
+ * "City, ST" in the field maps separately, so a multi-city requisition shows each city.
+ * Remote, "Not stated" and conditions in parentheses produce nothing.
+ */
+export function mapLocations(location: string): MapPlace[] {
+  if (!location || unsafe.test(location)) return [];
+  const embedded = location.match(/\(([^)]*)\)/);
+  if (embedded && streetAddress.test(embedded[1]))
+    return [placeMap(cleanQuery(`${embedded[1]}, ${location.slice(0, embedded.index).trim()}`), 'Job location')];
+  const text = cleanQuery(location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\bremote\b/gi, ' '));
+  if (streetAddress.test(text)) return [placeMap(text, 'Job location')];
+  const pairs = [...text.matchAll(cityState)].map((match) => `${match[1].trim()}, ${match[2]}${match[3] ?? ''}`);
+  if (pairs.length) return unique(pairs).slice(0, MAX_MAPS).map((query) => placeMap(query, 'Job location'));
+  // "Plano" on its own is the metroplex city, not Plano, Illinois.
+  const city = northTexasCity.exec(text);
+  if (city) return [placeMap(`${city[0]}, TX`, 'Job location')];
+  if (text.includes(',') && /[A-Za-z]/.test(text)) return [placeMap(text, 'Job location')];
+  return [];
+}
+
+/** Lines that state where the job is; an address on one belongs to the job, not the sender. */
+const jobLocationLine = /^\s*(?:\*\*)?(?:Locations?|Work (?:location|setting)|Job location|Client location|Onsite location)\b/i;
+
+/** Street addresses written in an email, usually the sender's signature, with the "City, ST ZIP" line below each. */
+export function signatureAddresses(body: string) {
+  const lines = body.split('\n');
+  const found: string[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].replace(/\[https?:\/\/[^\]]*\]|https?:\/\/\S+/g, '').trim();
+    if (jobLocationLine.test(line)) continue;
+    const match = streetAddress.exec(line);
+    if (!match) continue;
+    let text = line.slice(match.index);
+    // An address inside parentheses ends at the closing one: "(401 Las Colinas Blvd) – ON SITE".
+    const close = text.indexOf(')');
+    if (close !== -1 && (text.indexOf('(') === -1 || text.indexOf('(') > close)) text = text.slice(0, close);
+    const next = lines[index + 1]?.trim() || '';
+    if (new RegExp(`^[A-Za-z .'-]+,?\\s+[A-Z]{2}\\s+${ZIP}$`).test(next)) text += `, ${next}`;
+    const query = cleanQuery(text);
+    if (streetAddress.test(query) && !unsafe.test(query)) found.push(query);
+  }
+  return found;
+}
+
+/**
+ * A company's offices: the signature addresses across its emails, one map per street address,
+ * most often written first. Spelling variants of one address ("4 th Floor", "4th Floor") count
+ * together and the commonest spelling is the one shown.
+ */
+export function officeLocations(bodies: string[]): MapPlace[] {
+  const offices = new Map<string, Map<string, number>>();
+  for (const body of bodies)
+    for (const query of signatureAddresses(body)) {
+      const identity = streetAddress.exec(query)![0].toLowerCase().replace(/[.,]/g, '');
+      const spellings = offices.get(identity) ?? new Map<string, number>();
+      spellings.set(query, (spellings.get(query) ?? 0) + 1);
+      offices.set(identity, spellings);
+    }
+  return [...offices.values()]
+    .map((spellings) => {
+      const ranked = [...spellings].sort((a, b) => b[1] - a[1]);
+      return { query: ranked[0][0], total: ranked.reduce((sum, [, count]) => sum + count, 0) };
+    })
+    .sort((a, b) => b.total - a.total)
+    .slice(0, MAX_MAPS)
+    .map(({ query }) => placeMap(query, 'Office'));
 }

@@ -3,10 +3,12 @@ import { DatePipe } from '@angular/common';
 import type { JobGroup } from './models';
 import { buildProfiles } from './profiles';
 import { ageInDays } from './age';
+import { LocationMaps } from './location-maps.component';
+import { officeLocations } from './location-map';
 
 @Component({
   selector:'app-profiles',
-  imports:[DatePipe],
+  imports:[DatePipe, LocationMaps],
   templateUrl:'./profiles.html',
   styleUrl:'./profiles.css',
 })
@@ -24,6 +26,8 @@ export class Profiles {
   readonly selected = computed(()=>this.entries().find(profile=>profile.id===this.selectedId()) || this.entries().at(0));
   readonly recruiter = computed(()=>this.mode()==='recruiters' ? this.directory().recruiters.find(p=>p.id===this.selected()?.id) : undefined);
   readonly company = computed(()=>this.directory().companies.find(p=>p.id===(this.recruiter()?.companyId || this.selected()?.id)));
+  /** The company's offices: street addresses its recruiters sign with, commonest first. */
+  readonly offices = computed(()=>officeLocations((this.company()?.pitches ?? []).map(pitch=>pitch.body)));
   constructor() {
     effect(()=>{this.mode(); this.selectedId.set(this.focusId()); this.detail()?.nativeElement.scrollTo({top:0});});
   }
