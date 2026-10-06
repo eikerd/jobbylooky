@@ -337,3 +337,24 @@ test('an answer in an older pitch thread goes to that pitch, not the one replied
     assert.equal(rows.find((row) => row.id === 'mail-worker:ans-x@t').respondsTo, b);
     assert.equal(rows.find((row) => row.id === b).replyReceivedAt, '2026-09-18T13:00:00.000Z');
   }));
+
+test('a failed Gmail trash stays pending until a later pass clears it', () =>
+  withStore((store) => {
+    store.import([message]);
+    const id = store.snapshot().opportunities[0].id;
+    assert.equal(store.setTrashPending(id, true).trashPending, true);
+    assert.equal(store.snapshot().opportunities[0].trashPending, true);
+    assert.equal('trashPending' in store.setTrashPending(id, false), false);
+    assert.throws(() => store.setTrashPending('missing', true), /not found/);
+  }));
+
+test('new mail on a passed pitch marks its Gmail trash pending again', () =>
+  withStore((store) => {
+    store.import([message]);
+    const id = store.snapshot().opportunities[0].id;
+    store.update(id, { status: 'Passed' });
+    store.import([{ ...message, id: 'followup@example.com', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    assert.equal(row.messageIds.length, 2);
+    assert.equal(row.trashPending, true);
+  }));

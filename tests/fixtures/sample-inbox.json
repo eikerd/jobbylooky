@@ -1,0 +1,51 @@
+[
+ {
+  "id": "sample-1@jobbylooky.example",
+  "subject": "Senior Angular Developer - Remote (Full-time)",
+  "from": "Priya N <priya@talentbridge.example.com>",
+  "receivedAt": "2026-10-05T16:00:00.000Z",
+  "body": "Hi,\n\nWe have a full-time permanent role for a Senior Angular Developer with Node.js experience.\n\nLocation: Remote (US)\nPay: $150,000 - $170,000 per year\nClient: Not disclosed\n\nRequired: Angular 17+, TypeScript, Node.js, REST APIs.\n\nThanks,\nPriya"
+ },
+ {
+  "id": "sample-2@jobbylooky.example",
+  "subject": "Direct Hire role::Senior Full-Stack Engineer::Dallas TX Hybrid",
+  "from": "Sam P <sam.p@nexgen-staffing.example.com>",
+  "receivedAt": "2026-10-05T14:00:00.000Z",
+  "body": "Hello,\n\nDirect hire opportunity.\nRole: Senior Full-Stack Engineer\nLocation: Dallas Metroplex, TX (Hybrid, 3 days onsite)\nOffice: 2100 Ross Ave, Dallas, TX 75201\n\nStack: Angular, Node.js, PostgreSQL, AWS.\n\nRegards,\nSam"
+ },
+ {
+  "id": "sample-3@jobbylooky.example",
+  "subject": "Java Developer - Spring Boot - Plano, TX (Contract)",
+  "from": "Ravi K <ravi.k@empowerpros.example.com>",
+  "receivedAt": "2026-10-05T12:00:00.000Z",
+  "body": "Hi,\n\nContract role, 12 months.\nRole: Java Developer\nLocation: Plano, TX (Onsite)\nRate: $65/hr on W-2\n\nMust have: Java 17, Spring Boot, Microservices, Kafka. C# is a plus.\n\nThanks"
+ },
+ {
+  "id": "sample-4@jobbylooky.example",
+  "subject": "UI/UX Developer / Front-End Engineer - Remote",
+  "from": "Lena M <lena@charterglobal.example.com>",
+  "receivedAt": "2026-10-05T09:00:00.000Z",
+  "body": "Hi there,\n\nRemote/WFH; travel is only required for quarterly planning.\nContract to hire, 6 months.\n\nSkills: Angular or React, CSS, design systems, accessibility.\n\nBest,\nLena"
+ },
+ {
+  "id": "sample-5@jobbylooky.example",
+  "subject": "Lead Frontend Engineer - Westlake, TX",
+  "from": "Chris D <chris.d@ceipal.example.com>",
+  "receivedAt": "2026-10-04T21:00:00.000Z",
+  "body": "Hello,\n\nLead Frontend Engineer for a financial services client in Westlake, TX. Hybrid.\nAlso hiring for Merrimack, NH.\n\nAngular, TypeScript, NgRx, Jest.\nFull-time, permanent.\n\nThanks,\nChris"
+ },
+ {
+  "id": "sample-6@jobbylooky.example",
+  "subject": "Full Stack Developer with AI Development",
+  "from": "Gaurav T <gaurav.t@longfinch.example.com>",
+  "receivedAt": "2026-10-04T15:00:00.000Z",
+  "body": "Hi,\n\nFull Stack Developer with AI development experience.\nLocation: Richardson, TX / Plano, TX\nDuration: 12+ months\n\nPython, Node.js, Angular, LLM integration.\n\nRegards,\nGaurav"
+ },
+ {
+  "id": "sample-7@jobbylooky.example",
+  "subject": ".NET Developer - C# - Irving, TX",
+  "from": "Mike R <mike.r@techsource.example.com>",
+  "receivedAt": "2026-10-03T15:00:00.000Z",
+  "body": "Hi,\n\n.NET Developer (C#, ASP.NET Core, Azure) for a client in Irving, TX. Hybrid. Contract.\n\nThanks,\nMike"
+ }
+]

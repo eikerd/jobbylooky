@@ -182,17 +182,14 @@
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
                 </span>
               </span>
-              <span class="company">
-                {{ row.company !== 'Not stated' ? row.company : sender(row.from) }}
-              </span>
               <span class="row-bottom">
-                <span>{{ row.location }}</span>
+                <span class="company">{{ row.company !== 'Not stated' ? row.company : sender(row.from) }}</span>
+                <span class="row-location">{{ row.location }}</span>
                 <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
                 @if (row.reasons.length) {
                   <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
-                    @for (reason of row.reasons; track $index) {
-                      <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
-                    }
+                    @if (reasonCount(row, 'pass'); as count) {<span class="count-pill pass" aria-hidden="true">{{ count }}</span>}
+                    @if (reasonCount(row, 'fail'); as count) {<span class="count-pill fail" aria-hidden="true">{{ count }}</span>}
                   </span>
                 }
                 @if (group.pitches.length > 1) {
@@ -232,6 +229,8 @@
           @if (selected(); as row) {
             <div class="detail-top">
               <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
+              <span class="detail-links">
+              <button type="button" class="button secondary small" (click)="linking.set(!linking())" [disabled]="busy()">{{ linking() ? 'Cancel grouping' : 'Group with another job' }}</button>
               @if (row.source !== 'manual') {
                 <a
                   class="source-link"
@@ -241,8 +240,14 @@
                   >Open in Gmail ↗</a
                 >
               }
+              </span>
             </div>
             <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phrases()" /></h2>
+            <p class="received-detail">
+              <strong>{{ ageLabel(row.receivedAt) }}</strong>
+              <span>{{ row.from }}</span>
+              <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y, h:mm a' }}</time>
+            </p>
             @if (selectedGroup(); as group) {
               @if (group.history.occurrences > 1) {
                 <section class="posting-summary" aria-label="Posting history">
@@ -287,14 +292,15 @@
                   <p class="pitch-scope">Status and notes below apply to the selected pitch.</p>
                 </section>
               }
-              <div class="group-actions">
-                <button type="button" (click)="linking.set(!linking())" [disabled]="busy()">{{ linking() ? 'Cancel grouping' : 'Group with another job' }}</button>
-                @if (group.pitches.length > 1) {
-                  <button type="button" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
-                } @else if (group.kind === 'manual') {
-                  <button type="button" (click)="groupCurrent('auto')" [disabled]="busy()">Allow automatic matching</button>
-                }
-              </div>
+              @if (group.pitches.length > 1 || group.kind === 'manual') {
+                <div class="group-actions">
+                  @if (group.pitches.length > 1) {
+                    <button type="button" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
+                  } @else {
+                    <button type="button" (click)="groupCurrent('auto')" [disabled]="busy()">Allow automatic matching</button>
+                  }
+                </div>
+              }
               @if (linking()) {
                 <form class="group-form" (ngSubmit)="groupCurrent('link')">
                   <label>Same job as<select name="linkTarget" [(ngModel)]="linkTarget" required>
@@ -307,64 +313,26 @@
                 </form>
               }
             }
-            <p class="recruiter">{{ row.from }}</p>
-            <p class="received-detail">
-              <strong>{{ ageLabel(row.receivedAt) }}</strong>
-              <span>Received <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y, h:mm a' }}</time></span>
-            </p>
-            <dl class="facts">
-              <div>
-                <dt>Company</dt>
-                <dd>{{ row.company }}</dd>
-              </div>
-              <div>
-                <dt>Location</dt>
-                <dd>{{ row.location }}</dd>
-              </div>
-              <div>
-                <dt>Pay</dt>
-                <dd>
-                  @if (row.pay; as pay) {
-                    <strong
-                      >{{ money(pay.min)
-                      }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong
-                    >
-                    / {{ pay.period }}
-                  } @else {
-                    Not stated
-                  }
-                </dd>
-              </div>
-            </dl>
-            @for (map of locationMaps(); track map.query) {
-              <section class="location-map" aria-label="Address previews">
-                <a [href]="map.link" target="_blank" rel="noopener noreferrer">{{ map.source }}: {{ map.query }} ↗</a>
-                @if (shownMaps().has(row.id + ' ' + map.query)) {
-                  <div class="address-thumbnails">
-                    <iframe [src]="map.src" [title]="'Satellite map of ' + map.query" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
-                    <iframe [src]="map.streetSrc" [title]="'Street map of ' + map.query" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe>
-                  </div>
+            <p class="facts">
+              <span>
+                @if (row.pay; as pay) {
+                  <strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}
                 } @else {
-                  <button type="button" class="button secondary" (click)="showMap(row.id + ' ' + map.query)">Show map</button>
+                  Pay not stated
                 }
-              </section>
-            }
-            <section class="assessment" aria-labelledby="assessment-title">
-              <h3 id="assessment-title">How it fits</h3>
-              <ul>
-                @for (reason of row.reasons; track $index) {
-                  <li>
-                    <span [class]="'reason-icon ' + reason.kind" aria-hidden="true">{{ reasonMark(reason.kind) }}</span>
-                    <div>
-                      <p>{{ reason.text }}</p>
-                      @if (reason.evidence) {
-                        <blockquote><app-hl [text]="sourceText(reason.evidence)" [phrases]="phrases()" /></blockquote>
-                      }
-                    </div>
-                  </li>
-                }
-              </ul>
-            </section>
+              </span>
+              <span>{{ row.company !== 'Not stated' ? row.company : 'Company not stated' }}</span>
+              <span>{{ row.location !== 'Not stated' ? row.location : 'Location not stated' }}</span>
+            </p>
+            <app-location-maps [places]="locationMaps()" [scope]="row.id" />
+            <ul class="fit-tags" aria-label="How it fits">
+              @for (reason of row.reasons; track $index) {
+                <li [class]="reason.kind" [attr.title]="reason.text"><span aria-hidden="true">{{ reasonMark(reason.kind) }}</span>{{ reason.label || reason.text }}</li>
+              }
+              @if (row.employmentType === 'Full-time') {
+                <li class="pass"><span aria-hidden="true">✓</span>Full-time</li>
+              }
+            </ul>
             <div class="decisions" aria-label="Triage this opportunity">
               <button
                 type="button"
@@ -391,6 +359,11 @@
               >
                 Pass
               </button>
+              @if (connection()?.canReply && !replying()) {
+                <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
+                <button class="button secondary" type="button" (click)="void startReply(row, 'resume')">Reply with resume</button>
+                <button class="button secondary" type="button" (click)="void startReply(row, 'client')">Ask end client</button>
+              }
             </div>
             @if (original(); as first) {
               <section class="answer-of" aria-label="Original pitch">
@@ -403,8 +376,8 @@
                 }
               </section>
             }
-            <section class="reply" aria-labelledby="reply-title">
-              <h3 id="reply-title">Reply</h3>
+            @if (row.replyReceivedAt || row.replies?.length || replying() || !connection()?.canReply) {
+            <section class="reply" aria-label="Reply">
               @if (row.replyReceivedAt) {
                 <p class="reply-back">↩ They replied {{ row.replyReceivedAt | date: 'MMM d, h:mm a' }}</p>
               }
@@ -432,14 +405,9 @@
                     <button class="button secondary" type="button" [disabled]="busy()" (click)="cancelReply()">Cancel</button>
                   </div>
                 </form>
-              } @else {
-                <div class="reply-actions">
-                  <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
-                  <button class="button secondary" type="button" (click)="void startReply(row, 'resume')">Reply with resume</button>
-                  <button class="button secondary" type="button" (click)="void startReply(row, 'client')">Ask end client</button>
-                </div>
               }
             </section>
+            }
             <section class="email-source" aria-labelledby="email-title">
               <h3 id="email-title">Email body</h3>
               @if (row.truncated) {

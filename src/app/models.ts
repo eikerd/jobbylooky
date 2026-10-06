@@ -8,7 +8,7 @@ export interface Opportunity {
   receivedAt: string;
   fit: string;
   employmentType?: 'Full-time' | 'Contract' | 'Contract-to-hire' | 'Unknown';
-  reasons: { kind: string; text: string; evidence: string; phrase?: string }[];
+  reasons: { kind: string; label?: string; text: string; evidence: string; phrase?: string }[];
   body: string;
   truncated: boolean;
   status: string;

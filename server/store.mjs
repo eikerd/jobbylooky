@@ -189,6 +189,8 @@ export function createStore(directory) {
         }
         if (existing) {
           existing.messageIds.push(message.id);
+          // New mail on a passed pitch is still in the inbox: the next Pass deletes it too.
+          if (existing.status === 'Passed') existing.trashPending = true;
           noteReplyBack(existing, message);
           // Re-evaluate the accumulated thread without discarding the user's decision or notes.
           existing.body += `\n\n${screen(message).body}`;
@@ -218,6 +220,16 @@ export function createStore(directory) {
       const row = next.opportunities.find((item) => item.id === id);
       if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
       row.replies = [...(row.replies ?? []), reply];
+      commit(next);
+      return structuredClone(row);
+    },
+    /** A pass whose Gmail trash failed stays pending, so the next save as Passed retries it. */
+    setTrashPending(id, pending) {
+      const next = structuredClone(state);
+      const row = next.opportunities.find((item) => item.id === id);
+      if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
+      if (pending) row.trashPending = true;
+      else delete row.trashPending;
       commit(next);
       return structuredClone(row);
     },

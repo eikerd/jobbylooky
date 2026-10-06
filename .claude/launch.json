@@ -4,8 +4,20 @@
     {
       "name": "jobbylooky",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && MAIL_DATABASE_URL=http://192.168.42.180:8082 npm start"],
+      "runtimeArgs": [
+        "-c",
+        "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && MAIL_DATABASE_URL=http://192.168.42.180:8082 npm start"
+      ],
       "port": 4317
+    },
+    {
+      "name": "jobbylooky-sample",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && d=$(mktemp -d) && cp tests/fixtures/sample-inbox.json \"$d/import.json\" && DATA_DIR=\"$d\" MAIL_SEND_MODE=preview PORT=4318 npm start"
+      ],
+      "port": 4318
     }
   ]
 }
