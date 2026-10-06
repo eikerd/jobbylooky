@@ -182,8 +182,9 @@ export const server = createServer(async (req, res) => {
         if (row.status !== 'Passed' || (before === 'Passed' && !row.trashPending)) return json(200, row);
         // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved
         // either way; a Gmail failure is reported, never hidden, and the next Pass retries it.
-        const failed = (reason) =>
-          json(200, { ...store.setTrashPending(id, true), trashError: `${reason} Click Pass again to retry.` });
+        // Pending is written before IMAP starts, so a crash mid-delete still leaves a retry.
+        const pending = store.setTrashPending(id, true);
+        const failed = (reason) => json(200, { ...pending, trashError: `${reason} Click Pass again to retry.` });
         if (!trasher) return failed('Gmail is not set up: SMTP_USER and SMTP_PASS are missing.');
         try {
           const { trashed } = await trasher.trash(row.messageIds);
