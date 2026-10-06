@@ -84,6 +84,9 @@ export class App implements OnDestroy {
   private trashWait: Promise<void> = Promise.resolve();
   /** While a Pass is saving, a poll could read the list from before it and show the pitch again. */
   private passesSaving = 0;
+  /** Pitches whose Gmail delete failed, listed together while the banner still shows them. */
+  private trashFailures: string[] = [];
+  private trashFailureText = '';
   readonly adding = signal(false);
   readonly dirty = signal(false);
   notes = '';
@@ -432,7 +435,8 @@ export class App implements OnDestroy {
         this.editStatus = row.status;
         this.dirty.set(edited);
       }
-      this.error.set(`${row.title}: Pass did not save: ${this.message(error)}`);
+      const lost = edited && this.selectedId() !== row.id ? ' Its note edits were not saved either.' : '';
+      this.error.set(`${row.title}: Pass did not save: ${this.message(error)}${lost}`);
     } finally {
       this.passesSaving--;
     }
@@ -454,12 +458,21 @@ export class App implements OnDestroy {
         const { trashed, trashError, skipped, preview } = await this.request<{ trashed?: number; trashError?: string; skipped?: boolean; preview?: boolean }>(
           `opportunities/${encodeURIComponent(id)}/trash`,
         );
-        if (trashError) this.error.set(`${title}: ${trashError}`);
+        if (trashError) this.reportTrashFailure(title, trashError);
         else if (!skipped) this.toast(`${preview ? 'Preview: Gmail not touched' : trashed ? 'Deleted from Gmail' : 'Already gone from Gmail'} · ${title}`);
       } catch (error) {
-        this.error.set(`${title}: could not confirm the Gmail delete: ${this.message(error)}`);
+        this.reportTrashFailure(title, `Could not confirm the delete: ${this.message(error)}`);
       }
     });
+  }
+  /** A run of Passes can fail together (Gmail down, no credentials); every failed pitch stays named. */
+  private reportTrashFailure(title: string, reason: string) {
+    if (this.error() !== this.trashFailureText) this.trashFailures = [];
+    if (!this.trashFailures.includes(title)) this.trashFailures = [...this.trashFailures, title];
+    const count = this.trashFailures.length;
+    const which = count === 1 ? title : `${count} passed pitches (${this.trashFailures.join('; ')})`;
+    this.trashFailureText = `Not deleted from Gmail: ${which}. ${reason}`;
+    this.error.set(this.trashFailureText);
   }
   private toast(text: string) {
     const id = ++this.toastId;
