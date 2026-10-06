@@ -82,6 +82,8 @@ export class App implements OnDestroy {
   private toastId = 0;
   /** Gmail deletes are collected one at a time, in the order they were passed. */
   private trashWait: Promise<void> = Promise.resolve();
+  /** While a Pass is saving, a poll could read the list from before it and show the pitch again. */
+  private passesSaving = 0;
   readonly adding = signal(false);
   readonly dirty = signal(false);
   notes = '';
@@ -191,7 +193,7 @@ export class App implements OnDestroy {
         this.request<Record<PhraseKind, string>>('phrase-colors'),
       ]);
       // A background response started before a decision must not undo its UI state.
-      if (revision !== this.revision) return;
+      if (revision !== this.revision || this.passesSaving) return;
       this.jobGroups.set(rows);
       this.phrases.set(phrases);
       this.phraseColors.set(colors);
@@ -376,7 +378,7 @@ export class App implements OnDestroy {
       this.editStatus = updated.status;
       this.dirty.set(false);
       this.notice.set('Saved.');
-      if (trashQueued) this.collectTrash(updated.id);
+      if (trashQueued) this.collectTrash(updated);
     } catch (error) {
       this.error.set(this.message(error));
     } finally {
@@ -394,18 +396,19 @@ export class App implements OnDestroy {
     const fields = { status: 'Passed', notes: this.notes, nextAction: this.nextAction, followUp: this.followUp };
     const position = this.visible().findIndex((group) => group.pitches.some((item) => item.id === row.id));
     this.revision++;
-    this.error.set('');
+    // The error banner is left alone: it may hold an earlier pitch's Gmail failure.
     this.notice.set('');
     this.replaceRow({ ...row, ...fields });
     this.dirty.set(false);
     this.replying.set(false);
     this.editStatus = 'Passed';
     const rows = this.visible();
-    if (!rows.some((group) => group.representative.id === row.id)) {
+    if (position >= 0 && !rows.some((group) => group.representative.id === row.id)) {
       const next = rows[Math.min(position, rows.length - 1)];
       if (next) this.select(next.representative);
       else this.selectedId.set('');
     }
+    this.passesSaving++;
     try {
       const { trashQueued, ...updated } = await this.request<Opportunity & { trashQueued?: boolean }>(
         `opportunities/${encodeURIComponent(row.id)}`,
@@ -414,11 +417,23 @@ export class App implements OnDestroy {
       );
       this.revision++;
       this.replaceRow(updated);
-      if (trashQueued) this.collectTrash(updated.id);
+      if (trashQueued) this.collectTrash(updated);
     } catch (error) {
       this.revision++;
       this.replaceRow(row);
-      this.error.set(`Pass did not save: ${this.message(error)}`);
+      // Edits that rode on the failed Pass come back as unsaved work on their pitch.
+      const edited = fields.notes !== row.notes || fields.nextAction !== row.nextAction || fields.followUp !== row.followUp;
+      if (edited && this.selectedId() !== row.id && !this.hasUnsavedWork()) this.select(row);
+      if (this.selectedId() === row.id) {
+        this.notes = fields.notes;
+        this.nextAction = fields.nextAction;
+        this.followUp = fields.followUp;
+        this.editStatus = row.status;
+        this.dirty.set(edited);
+      }
+      this.error.set(`${row.title}: Pass did not save: ${this.message(error)}`);
+    } finally {
+      this.passesSaving--;
     }
   }
   private replaceRow(updated: Opportunity) {
@@ -427,22 +442,21 @@ export class App implements OnDestroy {
     })));
     if (updated.id === this.selectedId() && !this.dirty()) this.editStatus = updated.status;
   }
-  /** Waits for the server's Gmail delete, then confirms it with a toast or reports the failure. */
-  private collectTrash(id: string) {
+  /**
+   * Waits for the server's Gmail delete, then confirms it with a toast or reports the failure.
+   * Only the outcome is used: the row it carries was read when the delete ran and may be older
+   * than a change made since, so the next poll brings the row up to date instead.
+   */
+  private collectTrash({ id, title }: Opportunity) {
     this.trashWait = this.trashWait.then(async () => {
       try {
-        const outcome = await this.request<Opportunity & { trashed?: number; trashError?: string; skipped?: boolean }>(
+        const { trashed, trashError, skipped } = await this.request<{ trashed?: number; trashError?: string; skipped?: boolean }>(
           `opportunities/${encodeURIComponent(id)}/trash`,
         );
-        const { trashed, trashError, skipped, ...row } = outcome;
-        if (row.id) {
-          this.revision++;
-          this.replaceRow(row);
-        }
-        if (trashError) this.error.set(trashError);
-        else if (!skipped) this.toast(`${trashed ? 'Deleted from Gmail' : 'Already gone from Gmail'} · ${row.title}`);
+        if (trashError) this.error.set(`${title}: ${trashError}`);
+        else if (!skipped) this.toast(`${trashed ? 'Deleted from Gmail' : 'Already gone from Gmail'} · ${title}`);
       } catch (error) {
-        this.error.set(`Could not confirm the Gmail delete: ${this.message(error)}`);
+        this.error.set(`${title}: could not confirm the Gmail delete: ${this.message(error)}`);
       }
     });
   }
