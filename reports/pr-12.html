@@ -257,10 +257,10 @@
   "verdict": "MERGED"
  },
  "score": {
-  "found": 6,
+  "found": 8,
   "fixed": 6,
   "rebutted": 0,
-  "grade": "A"
+  "grade": "B+"
  },
  "rounds": [
   {
@@ -294,7 +294,7 @@
    ]
   },
   {
-   "label": "Round 3 (two Codex passes: 369aa40, then 8c0c4fd after the maps session joined the PR)",
+   "label": "Round 3 (two Codex passes: 369aa40, then 8c0c4fd after the maps session joined the PR); two more Codex findings landed 3 min after the merge",
    "findings": [
     {
      "reviewer": "codex",
@@ -333,6 +333,26 @@
      "title": "Office maps on pseudo-company pages",
      "detail": "Unassigned and relay profiles pooled unrelated recruiters' signature addresses as one company's offices.",
      "response": "Fixed in fb274b5: maps only for kind === 'domain'.",
+     "confidence": "high",
+     "wouldHaveMissed": true
+    },
+    {
+     "reviewer": "codex",
+     "severity": "M",
+     "status": "open",
+     "title": "Mail synced mid-delete lost its retry",
+     "detail": "trashPending was cleared unconditionally after IMAP, so a Message-ID the sync appended while trash() ran stayed in the inbox with no retry.",
+     "response": "Open at merge (posted 15:33, merged 15:30). Fixed after the merge in #14: settleTrash clears pending only when the trashed batch covers every Message-ID.",
+     "confidence": "high",
+     "wouldHaveMissed": true
+    },
+    {
+     "reviewer": "codex",
+     "severity": "S",
+     "status": "open",
+     "title": "Spelled-out states still merged offices",
+     "detail": "The office locality used a two-letter state pattern, so 'Dallas, Texas' and 'Austin, Texas' both had no locality and merged.",
+     "response": "Open at merge. Fixed after the merge in #14: the city/state pattern with state names normalised to codes.",
      "confidence": "high",
      "wouldHaveMissed": true
     }
