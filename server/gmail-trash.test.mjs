@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { createTrasher, gmailIds } from './gmail-trash.mjs';
 
 function fakeImap(inbox) {
@@ -61,4 +62,18 @@ test('the connection is closed when Gmail fails mid-move', async () => {
 test('only real Message-IDs count as Gmail messages', () => {
   assert.deepEqual(gmailIds(['<a@x.com>', 'a@x.com', '6f1c2b9e-0000-4000-8000-000000000000']), ['a@x.com']);
   assert.deepEqual(gmailIds(['6f1c2b9e-0000-4000-8000-000000000000']), []);
+});
+
+test('a refused Gmail login is reported, not an uncaught error event that kills the server', async () => {
+  // ImapFlow both rejects connect() and emits 'error' a tick later (2026-10-06, Chungus crashed on a Pass).
+  class RefusingImap extends EventEmitter {
+    async connect() {
+      const error = Object.assign(new Error('Connection not available'), { authenticationFailed: true });
+      setImmediate(() => this.emit('error', error));
+      throw error;
+    }
+  }
+  const trasher = createTrasher({ SMTP_USER: 'me@gmail.com', SMTP_PASS: 'x' }, null, RefusingImap);
+  await assert.rejects(trasher.trash(['a@recruiter.com']), /Connection not available/);
+  await new Promise((resolve) => setImmediate(resolve));
 });

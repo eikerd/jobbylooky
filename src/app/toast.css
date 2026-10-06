@@ -1,0 +1,35 @@
+/* Confirmations that pop up and leave on their own: small, yellow, out of the way. */
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+.toast {
+  padding: 6px 12px;
+  border: 1px solid var(--select-edge);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 600;
+  max-width: min(420px, calc(100vw - 32px));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 4px 12px rgb(40 60 70 / 0.15);
+  animation: toast-life 2.4s ease both;
+}
+@keyframes toast-life {
+  0% { opacity: 0; transform: translateY(8px); }
+  8%, 85% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+}
