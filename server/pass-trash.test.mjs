@@ -111,3 +111,18 @@ test('without Gmail credentials the Pass stays saved and pending, with a clear e
     assert.equal(store.snapshot().opportunities[0].status, 'Passed');
     assert.equal(store.snapshot().opportunities[0].trashPending, true);
   }));
+
+test('passing the same pitch twice while its delete waits gives one delete and one outcome', () =>
+  withStore(async (store) => {
+    store.import([message(1)]);
+    const trasher = slowTrasher();
+    const queue = createPassTrash({ store, trasher });
+    const id = pass(store, 1);
+    const first = queue.enqueue(id);
+    const second = queue.enqueue(id);
+    assert.equal(first, second);
+    await tick();
+    trasher.release();
+    assert.equal((await queue.outcome(id)).trashed, 1);
+    assert.equal(trasher.state.batches.length, 1);
+  }));

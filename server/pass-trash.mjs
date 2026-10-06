@@ -10,9 +10,11 @@ const KEEP_OUTCOME_MS = 10 * 60 * 1000;
 export function createPassTrash({ store, trasher, keepMs = KEEP_OUTCOME_MS }) {
   let tail = Promise.resolve();
   const jobs = new Map();
+  const unfinished = new Set();
 
+  const current = (id) => store.snapshot().opportunities.find((item) => item.id === id);
   async function run(id) {
-    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    const row = current(id);
     // Un-passed (or already deleted by an earlier job) while it waited: nothing to do.
     if (!row || row.status !== 'Passed' || !row.trashPending) return { ...row, trashed: 0, skipped: true };
     const retry = 'Click Pass again to retry.';
@@ -22,7 +24,8 @@ export function createPassTrash({ store, trasher, keepMs = KEEP_OUTCOME_MS }) {
     try {
       ({ trashed } = await trasher.trash(batch));
     } catch (error) {
-      return { ...row, trashError: `Gmail did not delete the email: ${error.message}. ${retry}` };
+      // IMAP can take a while; the row may have changed meanwhile, so report the current one.
+      return { ...current(id), trashError: `Gmail did not delete the email: ${error.message}. ${retry}` };
     }
     return { ...store.settleTrash(id, batch), trashed };
   }
@@ -30,12 +33,19 @@ export function createPassTrash({ store, trasher, keepMs = KEEP_OUTCOME_MS }) {
   return {
     /** Queues the delete; the pitch must already be saved as Passed with trashPending set. */
     enqueue(id) {
+      // A second Pass while the first delete is still queued or running joins it, so the
+      // outcome the page is waiting for is not replaced by an empty "nothing left to do".
+      if (unfinished.has(id)) return jobs.get(id);
       const job = tail
         .then(() => run(id))
         .catch((error) => ({ id, trashError: `Gmail delete failed: ${error.message}. Click Pass again to retry.` }));
       tail = job;
       jobs.set(id, job);
-      void job.then(() => setTimeout(() => jobs.get(id) === job && jobs.delete(id), keepMs).unref?.());
+      unfinished.add(id);
+      void job.then(() => {
+        unfinished.delete(id);
+        setTimeout(() => jobs.get(id) === job && jobs.delete(id), keepMs).unref?.();
+      });
       return job;
     },
     /** Waits for the pitch's queued delete; null when none is queued or its outcome was collected. */
