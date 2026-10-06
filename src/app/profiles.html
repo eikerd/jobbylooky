@@ -31,7 +31,9 @@
       <p class="coverage">Imported history: {{ profile.firstSeen | date:'MMM d, y' }}–{{ profile.lastSeen | date:'MMM d, y' }}</p>
       @if (mode() === 'companies') {
         @if (company(); as firm) {
-          <app-location-maps [places]="offices()" [scope]="firm.id" />
+          @if (firm.kind === 'domain') {
+            <app-location-maps [places]="offices()" [scope]="firm.id" />
+          }
           <section class="company-people" aria-labelledby="company-people-title">
             <h3 id="company-people-title">Recruiters</h3>
             @for (person of firm.recruiters; track person.id) {
