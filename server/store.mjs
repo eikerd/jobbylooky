@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS } from './screen.mjs';
+import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS } from './screen.mjs';
 import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
@@ -240,11 +240,20 @@ export function createStore(directory) {
         throw Object.assign(new Error('A phrase must be 2–100 characters.'), { status: 400 });
       const kind = input.kind ?? 'negative';
       if (!PHRASE_KINDS.includes(kind))
-        throw Object.assign(new Error('A phrase is either negative or positive.'), { status: 400 });
+        throw Object.assign(new Error('A phrase is negative, positive, neutral, purple or pink.'), { status: 400 });
       if (state.trackedPhrases.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
         throw Object.assign(new Error('That phrase is already tracked.'), { status: 409 });
       commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase, kind }] }));
       return structuredClone(state.trackedPhrases);
+    },
+    phraseColors: () => ({ ...DEFAULT_PHRASE_COLORS, ...state.phraseColors }),
+    setPhraseColor(input) {
+      if (!PHRASE_KINDS.includes(input?.kind))
+        throw Object.assign(new Error('Unknown phrase kind.'), { status: 400 });
+      if (typeof input.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.color))
+        throw Object.assign(new Error('A colour is a #rrggbb hex value.'), { status: 400 });
+      commit({ ...state, phraseColors: { ...state.phraseColors, [input.kind]: input.color.toLowerCase() } });
+      return { ...DEFAULT_PHRASE_COLORS, ...state.phraseColors };
     },
     removePhrase(id) {
       if (!state.trackedPhrases.some((row) => row.id === id))

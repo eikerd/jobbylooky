@@ -49,7 +49,11 @@ export function emailText(body, isHtml = false) {
 
 /** Owner-maintained phrases; seeded once, then edited in the Phrases tab. */
 export const DEFAULT_TRACKED_PHRASES = ['Backend Java Engineer', 'Java Engineer'];
-export const PHRASE_KINDS = ['negative', 'positive'];
+export const PHRASE_KINDS = ['negative', 'positive', 'neutral', 'purple', 'pink'];
+/** Highlight-only kinds: coloured in the text, never a verdict on the fit. */
+export const HIGHLIGHT_KINDS = ['neutral', 'purple', 'pink'];
+/** Crayon each kind is painted with until the owner picks another (Salmon, Flora, Lemon, Lavender, Carnation). */
+export const DEFAULT_PHRASE_COLORS = { negative: '#ff6666', positive: '#66ff66', neutral: '#ffff00', purple: '#cc66ff', pink: '#ff6fcf' };
 
 /** Case-insensitive whole-word match that tolerates any whitespace between words. */
 export function phrasePattern(phrase) {
@@ -68,7 +72,10 @@ function trackedPhraseReasons(text, trackedPhrases) {
     const start = text.lastIndexOf('\n', match.index) + 1;
     const end = text.indexOf('\n', match.index + match[0].length);
     const evidence = text.slice(start, end === -1 ? undefined : end).replace(/\s+/g, ' ').trim();
-    return [{ kind: kind === 'positive' ? 'pass' : 'fail', label: phrase, text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
+    // tone carries the phrase kind, so its icons wear the owner's crayon. A highlight phrase is a note
+    // to look at, never a verdict: 'check' leaves the fit alone.
+    const verdict = HIGHLIGHT_KINDS.includes(kind) ? 'check' : kind === 'positive' ? 'pass' : 'fail';
+    return [{ kind: verdict, tone: kind, label: phrase, text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
   });
 }
 

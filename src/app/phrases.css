@@ -1,5 +1,5 @@
 .phrases { max-width: 680px; padding: 4px 0; }
-.phrases h3 { font-size: 14px; color: var(--soft); margin: 18px 0 8px; font-weight: 700; }
+.phrases h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--soft); margin: 18px 0 8px; font-weight: 700; }
 .phrases form { display: flex; gap: 8px; }
 .phrases input, .phrases select { background: var(--card); color: var(--ink); border: 1.5px solid var(--control-border); border-radius: 8px; padding: 8px 11px; font: inherit; font-size: 15px; }
 .phrases input { flex: 1 1 auto; min-width: 0; width: auto; }
@@ -8,8 +8,13 @@
 .phrases > ul { border-top: 1px solid var(--line); }
 .phrases > ul > li { border-bottom: 1px solid var(--line); font-size: 15px; }
 .phrase-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
-.phrase { flex: 1; display: flex; gap: 6px; align-items: center; background: none; border: 0; padding: 4px 0; color: var(--bad); font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
-.phrase.positive { color: var(--accent-ink); }
+.phrase { flex: 1; display: flex; gap: 6px; align-items: center; background: none; border: 0; padding: 4px 0; font: inherit; font-weight: 700; text-align: left; cursor: pointer; }
+.phrase.negative { color: var(--negative-ink); }
+.phrase.positive { color: var(--positive-ink); }
+.phrase.neutral { color: var(--neutral-ink); }
+.phrase.purple { color: var(--purple-ink); }
+.phrase.pink { color: var(--pink-ink); }
+.phrase .reason-icon { background: transparent; color: inherit; }
 .phrase-count { font-weight: 700; color: var(--ink-strong); min-width: 2ch; text-align: right; }
 .phrase-pitches { padding: 0 0 8px 22px !important; }
 .phrase-pitches button { display: flex; gap: 10px; align-items: baseline; width: 100%; background: none; border: 0; padding: 5px 0; color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }

@@ -8,6 +8,8 @@ import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models'
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
+import { CrayonPicker } from './crayon-picker.component';
+import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { LocationMaps } from './location-maps.component';
 
 interface Connection {
@@ -22,9 +24,11 @@ type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css'],
+  // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
+  host: { '[style]': 'phraseStyle()' },
 })
 export class App implements OnDestroy {
   readonly locationMaps = computed(() => mapLocations(this.selected()?.location || ''));
@@ -42,7 +46,11 @@ export class App implements OnDestroy {
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
   });
   readonly phrases = signal<TrackedPhrase[]>([]);
-  readonly phraseKinds: PhraseKind[] = ['negative', 'positive'];
+  readonly phraseKinds: PhraseKind[] = ['negative', 'positive', 'neutral', 'purple', 'pink'];
+  readonly phraseKindLabels: Record<PhraseKind, string> = { negative: 'Negative', positive: 'Positive', neutral: 'Neutral', purple: 'Purple', pink: 'Pink' };
+  readonly phraseColors = signal<Record<PhraseKind, string>>(DEFAULT_PHRASE_COLORS);
+  readonly phraseStyle = computed(() => phraseColorStyle(this.phraseColors()));
+  readonly phraseKindMarks: Record<PhraseKind, string> = { negative: '×', positive: '✓', neutral: '•', purple: '•', pink: '•' };
   readonly openPhraseId = signal('');
   /** Pitches per phrase id, from the reasons the server recorded, newest first. */
   readonly phraseMatches = computed(() => {
@@ -161,15 +169,17 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection, phrases] = await Promise.all([
+      const [rows, connection, phrases, colors] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
         this.request<TrackedPhrase[]>('phrases'),
+        this.request<Record<PhraseKind, string>>('phrase-colors'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision) return;
       this.jobGroups.set(rows);
       this.phrases.set(phrases);
+      this.phraseColors.set(colors);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -281,6 +291,25 @@ export class App implements OnDestroy {
     const kind = this.phraseKind;
     if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
       this.phraseDraft = '';
+  }
+  // Optimistic: the crayon shows at once and is put back if the server refuses it. Each answer touches
+  // only its own kind, and only while it is still that kind's latest pick, so a slow or failed earlier
+  // request never undoes a newer crayon.
+  private readonly latestColorPick = new Map<PhraseKind, number>();
+  async pickPhraseColor(kind: PhraseKind, color: string) {
+    const previous = this.phraseColors()[kind];
+    const pick = (this.latestColorPick.get(kind) ?? 0) + 1;
+    this.latestColorPick.set(kind, pick);
+    const setKind = (value: string) => this.phraseColors.update((colors) => ({ ...colors, [kind]: value }));
+    this.revision++;
+    setKind(color);
+    try {
+      const saved = await this.request<Record<PhraseKind, string>>('phrase-colors', 'PATCH', { kind, color });
+      if (this.latestColorPick.get(kind) === pick) setKind(saved[kind]);
+    } catch (error) {
+      if (this.latestColorPick.get(kind) === pick) setKind(previous);
+      this.error.set(this.message(error));
+    }
   }
   phrasesOf(kind: PhraseKind) {
     return this.phrases().filter((row) => row.kind === kind);
@@ -419,6 +448,10 @@ export class App implements OnDestroy {
   }
   reasonMark(kind: string) {
     return kind === 'pass' ? '✓' : kind === 'fail' ? '×' : '?';
+  }
+  // A tracked phrase's tone is its kind, so its tag wears the crayon picked for that kind.
+  reasonTagClass(reason: Opportunity['reasons'][number]) {
+    return reason.tone ? `${reason.kind} ${reason.tone}` : reason.kind;
   }
   reasonCount(row: Opportunity, kind: 'pass' | 'fail') {
     return row.reasons.filter((reason) => reason.kind === kind).length;

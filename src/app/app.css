@@ -615,6 +615,12 @@ textarea {
 .fit-tags .pass { background: var(--accent-soft); color: var(--accent-ink); }
 .fit-tags .check { background: var(--warn-soft); color: var(--warn); }
 .fit-tags .fail { background: var(--bad-soft); color: var(--bad); }
+/* A tracked phrase's tag wears the crayon picked for its kind. */
+.fit-tags .negative { background: var(--negative-soft); color: var(--negative-ink); }
+.fit-tags .positive { background: var(--positive-soft); color: var(--positive-ink); }
+.fit-tags .neutral { background: var(--neutral-soft); color: var(--neutral-ink); }
+.fit-tags .purple { background: var(--purple-soft); color: var(--purple-ink); }
+.fit-tags .pink { background: var(--pink-soft); color: var(--pink-ink); }
 .decisions { flex-wrap: wrap; }
 .received-detail { gap: 5px 16px; margin: 0; }
 .decisions { gap: 6px; }
