@@ -154,9 +154,11 @@ export function officeLocations(bodies: string[]): MapPlace[] {
   for (const body of bodies)
     for (const query of signatureAddresses(body)) {
       // The street plus its city and state: one street name in two cities is two offices.
-      const place = new RegExp(cityState.source).exec(query);
+      // The city is read after the street, so "West Virginia Avenue" is never a locality.
+      const street = streetAddress.exec(query)!;
+      const place = new RegExp(cityState.source).exec(query.slice(street.index + street[0].length));
       const locality = place ? `${place[1].toLowerCase()},${STATE_CODE.get(place[2]) ?? place[2]}` : '';
-      const identity = `${streetAddress.exec(query)![0].toLowerCase().replace(/[.,]/g, '')}|${locality}`;
+      const identity = `${street[0].toLowerCase().replace(/[.,]/g, '')}|${locality}`;
       const spellings = offices.get(identity) ?? new Map<string, number>();
       spellings.set(query, (spellings.get(query) ?? 0) + 1);
       offices.set(identity, spellings);

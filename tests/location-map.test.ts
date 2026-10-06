@@ -104,5 +104,7 @@ test('a company’s offices merge spellings of one address and rank by how often
   assert.equal(officeLocations(['100 Main Street, Dallas, Texas', '100 Main Street, Austin, Texas']).length, 2);
   assert.equal(officeLocations(['100 Main Street, Dallas, Texas', '100 Main Street, Dallas, TX 75201']).length, 1);
   assert.equal(officeLocations(['330 Washington St, Hoboken, New Jersey 07030', '330 Washington St, Hoboken, NJ 07030']).length, 1);
+  assert.equal(officeLocations(['100 West Virginia Avenue, Austin, TX 78701', '100 West Virginia Avenue, Phoenix, AZ 85001']).length, 2);
+  assert.equal(officeLocations(['500 Main St, Washington, DC 20001', '500 Main St, Seattle, Washington']).length, 2);
   assert.equal(officeLocations(['1 A St\n2 B St\n3 C St\n4 D St\n5 E St\n6 F St'].map((s) => s.replace(/St/g, 'Street'))).length, 5);
 });
