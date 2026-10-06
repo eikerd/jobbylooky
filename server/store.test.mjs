@@ -347,3 +347,14 @@ test('a failed Gmail trash stays pending until a later pass clears it', () =>
     assert.equal('trashPending' in store.setTrashPending(id, false), false);
     assert.throws(() => store.setTrashPending('missing', true), /not found/);
   }));
+
+test('new mail on a passed pitch marks its Gmail trash pending again', () =>
+  withStore((store) => {
+    store.import([message]);
+    const id = store.snapshot().opportunities[0].id;
+    store.update(id, { status: 'Passed' });
+    store.import([{ ...message, id: 'followup@example.com', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    assert.equal(row.messageIds.length, 2);
+    assert.equal(row.trashPending, true);
+  }));

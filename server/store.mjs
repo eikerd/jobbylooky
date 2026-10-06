@@ -189,6 +189,8 @@ export function createStore(directory) {
         }
         if (existing) {
           existing.messageIds.push(message.id);
+          // New mail on a passed pitch is still in the inbox: the next Pass deletes it too.
+          if (existing.status === 'Passed') existing.trashPending = true;
           noteReplyBack(existing, message);
           // Re-evaluate the accumulated thread without discarding the user's decision or notes.
           existing.body += `\n\n${screen(message).body}`;
