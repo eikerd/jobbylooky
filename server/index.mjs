@@ -192,8 +192,9 @@ export const server = createServer(async (req, res) => {
         const failed = (reason) => json(200, { ...pending, trashError: `${reason} Click Pass again to retry.` });
         if (!trasher) return failed('Gmail is not set up: SMTP_USER and SMTP_PASS are missing.');
         try {
-          const { trashed } = await trasher.trash(row.messageIds);
-          return json(200, { ...store.setTrashPending(id, false), trashed });
+          const batch = [...row.messageIds];
+          const { trashed } = await trasher.trash(batch);
+          return json(200, { ...store.settleTrash(id, batch), trashed });
         } catch (error) {
           return failed(`Gmail did not delete the email: ${error.message}.`);
         }
