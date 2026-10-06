@@ -151,7 +151,9 @@ export function officeLocations(bodies: string[]): MapPlace[] {
   const offices = new Map<string, Map<string, number>>();
   for (const body of bodies)
     for (const query of signatureAddresses(body)) {
-      const identity = streetAddress.exec(query)![0].toLowerCase().replace(/[.,]/g, '');
+      // The street plus its city and state: one street name in two cities is two offices.
+      const locality = /([A-Za-z][A-Za-z .'-]*),\s*([A-Z]{2})\b/.exec(query)?.slice(1).join(',').toLowerCase() ?? '';
+      const identity = `${streetAddress.exec(query)![0].toLowerCase().replace(/[.,]/g, '')}|${locality}`;
       const spellings = offices.get(identity) ?? new Map<string, number>();
       spellings.set(query, (spellings.get(query) ?? 0) + 1);
       offices.set(identity, spellings);
