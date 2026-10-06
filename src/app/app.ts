@@ -303,15 +303,22 @@ export class App implements OnDestroy {
     if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
       this.phraseDraft = '';
   }
-  // Optimistic: the crayon shows at once and is put back if the server refuses it.
+  // Optimistic: the crayon shows at once and is put back if the server refuses it. Each answer touches
+  // only its own kind, and only while it is still that kind's latest pick, so a slow or failed earlier
+  // request never undoes a newer crayon.
+  private readonly latestColorPick = new Map<PhraseKind, number>();
   async pickPhraseColor(kind: PhraseKind, color: string) {
-    const previous = this.phraseColors();
+    const previous = this.phraseColors()[kind];
+    const pick = (this.latestColorPick.get(kind) ?? 0) + 1;
+    this.latestColorPick.set(kind, pick);
+    const setKind = (value: string) => this.phraseColors.update((colors) => ({ ...colors, [kind]: value }));
     this.revision++;
-    this.phraseColors.set({ ...previous, [kind]: color });
+    setKind(color);
     try {
-      this.phraseColors.set(await this.request<Record<PhraseKind, string>>('phrase-colors', 'PATCH', { kind, color }));
+      const saved = await this.request<Record<PhraseKind, string>>('phrase-colors', 'PATCH', { kind, color });
+      if (this.latestColorPick.get(kind) === pick) setKind(saved[kind]);
     } catch (error) {
-      this.phraseColors.set(previous);
+      if (this.latestColorPick.get(kind) === pick) setKind(previous);
       this.error.set(this.message(error));
     }
   }
