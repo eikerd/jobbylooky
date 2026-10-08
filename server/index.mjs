@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, createReadStream } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +10,7 @@ import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 import { createTrasher, gmailIds } from './gmail-trash.mjs';
 import { createPassTrash } from './pass-trash.mjs';
+import { createVoicemails, phoneNumbers, MAX_AUDIO_BYTES } from './voicemails.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
@@ -18,6 +19,8 @@ const mailer = createMailer();
 const trasher = createTrasher();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const passTrash = createPassTrash({ store, trasher });
+const voicemails = createVoicemails(resolve(root, process.env.DATA_DIR || 'data'));
+const pitchExists = (id) => store.snapshot().opportunities.some((row) => row.id === id);
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 // An agent drops each new resume here; the newest file is what gets attached.
 const resumeDir = resolve(root, process.env.RESUME_DIR || resolve(root, process.env.DATA_DIR || 'data', 'resume'));
@@ -90,6 +93,33 @@ async function body(req) {
     throw Object.assign(new Error('Invalid JSON body.'), { status: 400 });
   }
 }
+async function rawBody(req, limit) {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw Object.assign(new Error('The upload is too large.'), { status: 413 });
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+/** Safari plays audio only from a server that answers Range requests. */
+function sendAudio(req, res, { path, size }) {
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+  const headers = { 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes' };
+  if (!range || (!range[1] && !range[2])) {
+    res.writeHead(200, { ...headers, 'Content-Length': size });
+    return req.method === 'HEAD' ? res.end() : createReadStream(path).pipe(res);
+  }
+  const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+  const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+  if (start > end || start >= size) {
+    res.writeHead(416, { 'Content-Range': `bytes */${size}` });
+    return res.end();
+  }
+  res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 });
+  return req.method === 'HEAD' ? res.end() : createReadStream(path, { start, end }).pipe(res);
+}
 
 export const server = createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -117,9 +147,31 @@ export const server = createServer(async (req, res) => {
     }
     if (!url.pathname.startsWith(`${BASE}/`)) return json(404, { error: 'Page not found.' });
     url.pathname = url.pathname.slice(BASE.length);
-    if (req.method === 'GET' && url.pathname === '/api/groups') return json(200, store.groups());
+    if (req.method === 'GET' && url.pathname === '/api/groups')
+      return json(200, store.groups().map((group) => ({ ...group, pitches: voicemails.attach(group.pitches) })));
     if (req.method === 'GET' && url.pathname === '/api/opportunities')
-      return json(200, store.snapshot().opportunities);
+      return json(200, voicemails.attach(store.snapshot().opportunities));
+    // What the Mac's voicemail sweep matches against: each pitch's phone numbers, and the
+    // voicemails already here, so it uploads each one once.
+    if (req.method === 'GET' && url.pathname === '/api/voicemails/index') {
+      return json(200, {
+        pitches: store.snapshot().opportunities.map(({ id, title, company, from, status, receivedAt, body }) => ({
+          id, title, company, from, status, receivedAt, phones: phoneNumbers(body),
+        })),
+        voicemails: voicemails.list().map(({ id, matches, audio }) => ({ id, pitchIds: matches.map((match) => match.pitchId), audio })),
+      });
+    }
+    const audioPath = url.pathname.match(/^\/api\/voicemails\/([^/]+)\/audio$/);
+    if (['GET', 'HEAD'].includes(req.method) && audioPath) {
+      const file = voicemails.audioFile(decodeURIComponent(audioPath[1]));
+      if (!file) return json(404, { error: 'No audio for this voicemail.' });
+      return sendAudio(req, res, file);
+    }
+    if (req.method === 'PUT' && audioPath) {
+      if (req.headers['content-type'] !== 'audio/mp4') return json(415, { error: 'Audio must be sent as audio/mp4.' });
+      voicemails.setAudio(decodeURIComponent(audioPath[1]), await rawBody(req, MAX_AUDIO_BYTES));
+      return json(200, { stored: true });
+    }
     if (req.method === 'GET' && url.pathname === '/api/connection') {
       const { account, lastSync, importedAt } = store.snapshot();
       return json(200, {
@@ -168,6 +220,14 @@ export const server = createServer(async (req, res) => {
         return json(200, store.setPhraseColor(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')
         return json(200, store.group(await body(req)));
+      if (req.method === 'POST' && url.pathname === '/api/voicemails')
+        return json(200, voicemails.upsert(await body(req), pitchExists));
+      const seenPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/voicemails-seen$/);
+      if (req.method === 'POST' && seenPath) {
+        const id = decodeURIComponent(seenPath[1]);
+        if (!pitchExists(id)) return json(404, { error: 'Opportunity not found.' });
+        return json(200, { changed: voicemails.markSeen(id) });
+      }
       if (req.method === 'POST' && url.pathname === '/api/sync') {
         if (!workerUrl) return json(409, { error: 'The mail-worker database is not connected.' });
         return json(200, { added: await sync() });
@@ -188,7 +248,7 @@ export const server = createServer(async (req, res) => {
         if (wanted && resume?.name !== wanted)
           return json(409, { error: 'The resume folder changed since you opened this reply. Reopen it to attach the newest resume.' });
         // The recipient always comes from the stored pitch, never from the request.
-        return json(200, store.recordReply(id, await mailer.reply(row, input.body.trim(), resume)));
+        return json(200, voicemails.attach([store.recordReply(id, await mailer.reply(row, input.body.trim(), resume))])[0]);
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/')) {
         const id = decodeURIComponent(url.pathname.slice('/api/opportunities/'.length));
@@ -196,14 +256,14 @@ export const server = createServer(async (req, res) => {
         const row = store.update(id, await body(req));
         // A pasted email has no Gmail message to delete, so it never needs Gmail.
         if (row.status !== 'Passed' || !gmailIds(row.messageIds).length || (before === 'Passed' && !row.trashPending))
-          return json(200, row);
+          return json(200, voicemails.attach([row])[0]);
         // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved now and
         // the delete is queued; the page collects its outcome from GET …/trash. A Gmail failure
         // is reported, never hidden, and the next Pass retries it. Pending is written before
         // IMAP starts, so a crash mid-delete still leaves a retry.
         const pending = store.setTrashPending(id, true);
         passTrash.enqueue(id);
-        return json(200, { ...pending, trashQueued: true });
+        return json(200, { ...voicemails.attach([pending])[0], trashQueued: true });
       }
       if (req.method === 'POST' && url.pathname === '/api/import') {
         const input = await body(req);
