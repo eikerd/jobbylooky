@@ -21,7 +21,7 @@ fi
 
 app=$build/$app_name.app
 mkdir -p "$app/Contents/MacOS"
-swiftc -O -o "$app/Contents/MacOS/$app_name" "$here/main.swift"
+swiftc -O -o "$app/Contents/MacOS/$app_name" "$here"/*.swift
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -36,6 +36,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>26.0</string>
   <key>LSUIElement</key><true/>
+  <key>NSSpeechRecognitionUsageDescription</key><string>Transcribes voicemails that Apple did not transcribe, on this Mac, for Jobbylooky.</string>
 </dict>
 </plist>
 PLIST
