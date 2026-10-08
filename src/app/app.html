@@ -176,10 +176,10 @@
               [class.full-time]="row.employmentType === 'Full-time'"
               [class.selected]="selectedGroup()?.id === group.id"
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
-              (click)="select(row)"
+              (click)="open(row)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong>{{ ageLabel(row.receivedAt) }}</strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -277,7 +277,7 @@
                   <p class="match-evidence">{{ group.evidence }}</p>
                   <div class="pitch-list">
                     @for (pitch of group.pitches; track pitch.id) {
-                      <button type="button" class="pitch" [class.full-time]="pitch.employmentType === 'Full-time'" [attr.aria-pressed]="pitch.id === selectedId()" (click)="select(pitch)" [disabled]="busy()">
+                      <button type="button" class="pitch" [class.full-time]="pitch.employmentType === 'Full-time'" [attr.aria-pressed]="pitch.id === selectedId()" (click)="open(pitch)" [disabled]="busy()">
                         <span class="pitch-sender source-title"><app-source-icon [from]="pitch.from" />{{ pitch.from }}</span>
                         <span class="pitch-terms">
                           <span>{{ ageLabel(pitch.receivedAt) }} · {{ pitch.receivedAt | date: 'MMM d' }}</span>
@@ -336,6 +336,25 @@
                 <li class="pass"><span aria-hidden="true">✓</span>Full-time</li>
               }
             </ul>
+            @if (row.voicemails?.length) {
+              <section class="voicemails" aria-labelledby="voicemails-title">
+                <h3 id="voicemails-title">{{ row.voicemails!.length === 1 ? 'Voicemail' : row.voicemails!.length + ' voicemails' }}</h3>
+                @for (voicemail of row.voicemails; track voicemail.id) {
+                  <article class="voicemail">
+                    <p class="voicemail-meta">
+                      <time [attr.datetime]="voicemail.receivedAt">{{ voicemail.receivedAt | date: 'MMM d, h:mm a' }}</time>
+                      <span>{{ phone(voicemail.from) }}</span>
+                      <span>{{ duration(voicemail.durationSeconds) }}</span>
+                      @if (voicemail.matchedBy === 'name') {<span class="likely">likely match</span>}
+                    </p>
+                    @if (voicemail.audio) {
+                      <audio controls preload="none" [src]="audioUrl(voicemail)"></audio>
+                    }
+                    <p class="voicemail-transcript" [class.none]="!voicemail.transcript">{{ voicemail.transcript || 'No transcript.' }}</p>
+                  </article>
+                }
+              </section>
+            }
             <div class="decisions" aria-label="Triage this opportunity">
               <button
                 type="button"
