@@ -120,6 +120,18 @@ export function mapLocations(location: string): MapPlace[] {
   return [];
 }
 
+/**
+ * What the received line shows for a location none of which maps: "Remote" for a remote or
+ * unknown one (the owner, 2026-10-09), otherwise the text as written ("Austin", "Hybrid").
+ * "Remote (US)" is remote; "New York (no remote)" is not.
+ */
+export function unmappedLocation(location: string) {
+  const text = location.trim();
+  const outside = text.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ');
+  const remote = /\bremote\b/i.test(outside) && !/\b(?:no|not|non)[\s-]+remote\b/i.test(outside);
+  return !text || text === 'Not stated' || remote ? 'Remote' : text;
+}
+
 /** Lines that state where the job is; an address on one belongs to the job, not the sender. */
 const jobLocationLine = /^\s*(?:\*\*)?(?:Locations?|Work (?:location|setting)|Job location|Client location|Onsite location)\b/i;
 

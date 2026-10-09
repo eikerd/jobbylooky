@@ -413,9 +413,9 @@ export class App implements OnDestroy {
         body,
         attachResume: this.replyResume() || undefined,
       });
-      this.jobGroups.update((groups) => groups.map((group) => ({
-        ...group, pitches: group.pitches.map((item) => (item.id === updated.id ? updated : item)),
-      })));
+      this.replaceRow(updated);
+      // A resume reply can move the pitch to Pursue; a later save must not send the old status back.
+      if (updated.status !== row.status && updated.id === this.selectedId()) this.editStatus = updated.status;
       this.replying.set(false);
       this.replyDraft = '';
       this.notice.set(`Reply sent to ${this.sender(updated.replies?.at(-1)?.to ?? row.from)}.`);

@@ -1,9 +1,10 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import type { MapPlace } from './location-map';
+import { unmappedLocation, type MapPlace } from './location-map';
 
 /**
- * A job's places as inline links in the received line, "Remote" when nothing maps. Clicking a
+ * A job's places as inline links in the received line. A location that does not map ("Austin",
+ * "Onsite") shows as written; "Remote" stands for a remote or unknown one (the owner, 2026-10-09). Clicking a
  * place toggles its map below the line; no iframe exists until then, because a foreign iframe
  * makes Claude's built-in browser ask before every action. Revealed maps are remembered per scope.
  * The host is display:contents, so the links sit in the parent's flex row and the map wraps
@@ -14,7 +15,7 @@ import type { MapPlace } from './location-map';
   template: `@for (place of maps(); track place.query) {
       <button type="button" class="place" [attr.aria-expanded]="isShown(place.query)" (click)="toggle(place.query)">{{ place.query }}</button>
     } @empty {
-      <span>Remote</span>
+      <span>{{ unmapped() }}</span>
     }
     @for (place of maps(); track place.query) {
       @if (isShown(place.query)) {
@@ -33,6 +34,9 @@ import type { MapPlace } from './location-map';
 export class PlaceLinks {
   private readonly sanitizer = inject(DomSanitizer);
   readonly places = input.required<MapPlace[]>();
+  /** The job's location as stated in the email, shown as is when none of it maps. */
+  readonly location = input('');
+  readonly unmapped = computed(() => unmappedLocation(this.location()));
   /** The pitch the places belong to; revealed maps are remembered per scope. */
   readonly scope = input('');
   readonly shown = signal<ReadonlySet<string>>(new Set());

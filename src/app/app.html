@@ -305,7 +305,7 @@
             }
             <p class="received-detail">
               <strong>{{ ageLabel(row.receivedAt) }}</strong>
-              <app-place-links [places]="locationMaps()" [scope]="row.id" />
+              <app-place-links [places]="locationMaps()" [location]="row.location" [scope]="row.id" />
               <span>{{ row.from }}</span>
               <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y, h:mm a' }}</time>
             </p>

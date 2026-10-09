@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapLocations, officeLocations, signatureAddresses, isNorthTexas, zoomFor, STATE_ZOOM } from '../src/app/location-map.ts';
+import { mapLocations, unmappedLocation, officeLocations, signatureAddresses, isNorthTexas, zoomFor, STATE_ZOOM } from '../src/app/location-map.ts';
 
 test('remote, unstated and templated locations create no maps', () => {
   for (const location of ['Remote', 'Remote (US)', 'Not stated', '', 'Remote – (East coast Only, Preferred Miami, FL due to client visits)', '{JobPosting : city}, Texas', 'Dallas, TX 75214 - https://cts.indeed.com/v3/abc', 'Hybrid', 'Fully Remote', 'Multiple locations']) {
@@ -107,4 +107,10 @@ test('a company’s offices merge spellings of one address and rank by how often
   assert.equal(officeLocations(['100 West Virginia Avenue, Austin, TX 78701', '100 West Virginia Avenue, Phoenix, AZ 85001']).length, 2);
   assert.equal(officeLocations(['500 Main St, Washington, DC 20001', '500 Main St, Seattle, Washington']).length, 2);
   assert.equal(officeLocations(['1 A St\n2 B St\n3 C St\n4 D St\n5 E St\n6 F St'].map((s) => s.replace(/St/g, 'Street'))).length, 5);
+});
+test('a location that does not map reads Remote only when it is remote or unknown', () => {
+  for (const location of ['', 'Not stated', 'Remote', 'Remote (US)', 'Hybrid/Remote', '100% remote'])
+    assert.equal(unmappedLocation(location), 'Remote', location);
+  for (const location of ['Austin', 'Hybrid', 'Onsite', 'Multiple locations', 'New York (no remote)', 'Onsite, not remote'])
+    assert.equal(unmappedLocation(location), location, location);
 });

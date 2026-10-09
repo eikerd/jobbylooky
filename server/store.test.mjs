@@ -276,8 +276,11 @@ test('a sent resume reply marks the pitch Pursue unless it is already being purs
     const rows = store.snapshot().opportunities;
     const statuses = ['New', 'Maybe', 'Passed', 'Applied', 'Interviewing'];
     rows.forEach((row, index) => store.update(row.id, { status: statuses[index] }));
-    const after = rows.map((row, index) => store.recordReply(row.id, { ...resume, id: `mine${index}@me` }).status);
-    assert.deepEqual(after, ['Pursue', 'Pursue', 'Pursue', 'Applied', 'Interviewing']);
+    store.setTrashPending(rows[2].id, true);
+    const after = rows.map((row, index) => store.recordReply(row.id, { ...resume, id: `mine${index}@me` }));
+    assert.deepEqual(after.map((row) => row.status), ['Pursue', 'Pursue', 'Pursue', 'Applied', 'Interviewing']);
+    // Leaving Passed cancels the Gmail trash that was still pending.
+    assert.equal('trashPending' in after[2], false);
   }));
 test('a plain reply or an unsent preview with a resume leaves the status alone', () =>
   withStore((store) => {
