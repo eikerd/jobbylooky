@@ -4,7 +4,7 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageHeat, ageInDays } from './age';
 import { conversationState } from './conversation';
-import { Rules, type RuleDraft } from './rules.component';
+import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import { daysUp, jobState } from './link-state';
@@ -221,7 +221,8 @@ export class App implements OnDestroy {
     void this.pass();
   };
   private beforeUnload = (event: BeforeUnloadEvent) => {
-    if (this.hasUnsavedWork()) event.preventDefault();
+    // A rule draft survives moving between views, but not a reload or a closed tab.
+    if (this.hasUnsavedWork() || hasRuleDraft()) event.preventDefault();
   };
   // An edited reply counts as unsaved work; the untouched greeting does not.
   private hasUnsavedWork() {

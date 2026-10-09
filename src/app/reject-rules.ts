@@ -95,3 +95,10 @@ export function runTester(rows: readonly TesterPitch[], pattern: string, field: 
   });
   return { hits, pasted: pasted.trim() ? matchSnippet(regex, pasted) : null };
 }
+
+export interface RuleFields { name: string; pattern: string; field: RuleField }
+/** Typed but not saved: a new rule with any text, or a loaded rule whose fields changed. */
+export function draftUnsaved(current: RuleFields, loaded: RuleFields | null): boolean {
+  if (!loaded) return Boolean(current.name.trim() || current.pattern.trim());
+  return current.name !== loaded.name || current.pattern !== loaded.pattern || current.field !== loaded.field;
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compileRule, keptMatches, matchSnippet, nextTesterSort, runTester, sortTester, testerRows } from '../src/app/reject-rules.ts';
+import { compileRule, draftUnsaved, keptMatches, matchSnippet, nextTesterSort, runTester, sortTester, testerRows } from '../src/app/reject-rules.ts';
 import type { Opportunity } from '../src/app/models.ts';
 
 const pitch = (id: string, subject: string, body: string, status = 'New', receivedAt = '2026-10-01T12:00:00Z') =>
@@ -48,4 +48,12 @@ test('a tester run matches stored pitches and pasted text, and is null for no pa
   assert.equal(runTester(rows, 'java', 'any', '   ')!.pasted, null);
   assert.equal(runTester(rows, '', 'any', 'x'), null);
   assert.equal(runTester(rows, '(', 'any', 'x'), null);
+});
+test('a draft is unsaved when a new rule has text or a loaded rule was changed', () => {
+  const empty = { name: '', pattern: '  ', field: 'any' as const };
+  assert.equal(draftUnsaved(empty, null), false);
+  assert.equal(draftUnsaved({ ...empty, pattern: 'java' }, null), true);
+  const loaded = { name: 'Java', pattern: 'java', field: 'any' as const };
+  assert.equal(draftUnsaved(loaded, loaded), false);
+  assert.equal(draftUnsaved({ ...loaded, field: 'body' }, loaded), true);
 });

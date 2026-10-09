@@ -3,7 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { Opportunity, RejectRule, RuleField, RuleMode } from './models';
 import { ageHeat, ageInDays } from './age';
-import { compileRule, DEFAULT_TESTER_SORT, keptMatches, nextTesterSort, runTester, sortTester, type TesterKey, type TesterResult, type TesterRow } from './reject-rules';
+import { compileRule, DEFAULT_TESTER_SORT, draftUnsaved, keptMatches, nextTesterSort, runTester, sortTester, type TesterKey, type RuleFields, type TesterResult, type TesterRow } from './reject-rules';
 
 export interface RuleDraft { id: string | null; name: string; pattern: string; field: RuleField }
 type RuleKey = 'name' | 'pattern' | 'field' | 'mode';
@@ -19,7 +19,12 @@ const draft = {
   pattern: signal(''),
   field: signal<RuleField>('any'),
   pasted: signal(''),
+  /** The saved rule's fields as loaded for editing, to tell an edit from an untouched rule. */
+  loaded: signal<RuleFields | null>(null),
 };
+/** For the page's unload guard: a rule typed or edited but not saved. */
+export const hasRuleDraft = () =>
+  draftUnsaved({ name: draft.name(), pattern: draft.pattern(), field: draft.field() }, draft.loaded());
 
 /** Auto-reject rules and their tester. The tester only reads: it never changes or deletes mail. */
 @Component({
@@ -85,7 +90,11 @@ export class Rules {
     const seq = ++this.seq;
     clearTimeout(this.deadline);
     this.tooSlow.set(false);
-    if (!job.valid) return this.result.set(null);
+    if (!job.valid) {
+      // A runaway from the previous pattern would otherwise keep a CPU core busy until the tab closes.
+      if (this.running) this.stopWorker();
+      return this.result.set(null);
+    }
     if (typeof Worker === 'undefined') return this.result.set(runTester(job.rows, job.pattern, job.field, job.pasted));
     // A run still going is the old pattern's runaway, or soon stale: replace the worker.
     if (this.running) this.stopWorker();
@@ -172,12 +181,14 @@ export class Rules {
   /** Called by the page once the server has stored the rule. */
   clear() {
     this.editingId.set(null);
+    draft.loaded.set(null);
     this.name.set('');
     this.pattern.set('');
     this.field.set('any');
   }
   edit(rule: RejectRule) {
     this.editingId.set(rule.id);
+    draft.loaded.set({ name: rule.name, pattern: rule.pattern, field: rule.field });
     this.name.set(rule.name);
     this.pattern.set(rule.pattern);
     this.field.set(rule.field);
