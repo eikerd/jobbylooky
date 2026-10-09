@@ -190,6 +190,11 @@ export class Rules {
   }
   toggleMode(rule: RejectRule) {
     const mode: RuleMode = rule.mode === 'live' ? 'test' : 'live';
+    // Go live switches the saved rule; the edited pattern in the tester would not be what goes live.
+    if (mode === 'live' && this.editingId() === rule.id && hasRuleDraft()) {
+      window.alert(`Save or cancel your edits to "${rule.name}" first. Go live uses the saved pattern, not the one you are testing.`);
+      return;
+    }
     if (mode === 'live' && !window.confirm(`Make "${rule.name}" live? New mail it matches will be passed and deleted from Gmail.`)) return;
     this.setMode.emit({ rule, mode });
   }

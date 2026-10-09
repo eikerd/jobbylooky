@@ -2,9 +2,9 @@
   <h2 id="rules-title" class="visually-hidden">Auto-reject rules</h2>
 
   <form class="rule-form" (ngSubmit)="submit()">
-    <label>Rule name<input name="name" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="e.g. Java only" maxlength="80" autocomplete="off" /></label>
-    <label class="pattern">Regex<input name="pattern" [ngModel]="pattern()" (ngModelChange)="pattern.set($event)" placeholder="e.g. \bjava\b(?!script)" maxlength="300" autocomplete="off" spellcheck="false" /></label>
-    <label>Looks in<select name="field" [ngModel]="field()" (ngModelChange)="field.set($event)">
+    <label>Rule name<input name="name" [ngModel]="name()" (ngModelChange)="name.set($event)" [disabled]="busy()" placeholder="e.g. Java only" maxlength="80" autocomplete="off" /></label>
+    <label class="pattern">Regex<input name="pattern" [ngModel]="pattern()" (ngModelChange)="pattern.set($event)" [disabled]="busy()" placeholder="e.g. \bjava\b(?!script)" maxlength="300" autocomplete="off" spellcheck="false" /></label>
+    <label>Looks in<select name="field" [ngModel]="field()" (ngModelChange)="field.set($event)" [disabled]="busy()">
       @for (option of fields; track option) {
         <option [value]="option">{{ fieldLabels[option] }}</option>
       }
