@@ -1,5 +1,6 @@
 // Auto-reject rules: owner-written regexes, separate from the highlight-only tracked phrases.
 // A rule is a test until the owner switches it live; only live rules ever pass a pitch.
+import { createContext, runInContext } from 'node:vm';
 
 export const RULE_FIELDS = ['any', 'subject', 'body'];
 export const RULE_MODES = ['test', 'live'];
@@ -7,6 +8,25 @@ const MAX_PATTERN = 300;
 const MAX_NAME = 80;
 
 const invalid = (message) => Object.assign(new Error(message), { status: 400 });
+
+// JavaScript regexes cannot be interrupted, and a backtracking pattern like ^(a+)+$ can run for
+// minutes on one subject. Matching runs in a vm context, whose timeout V8 does enforce on a regex,
+// so a runaway rule costs one sync a fraction of a second instead of freezing the server.
+const MATCH_TIMEOUT_MS = 100;
+const PROBE_TIMEOUT_MS = 50;
+const PROBES = [`${'a'.repeat(40)}!`, `${'ab '.repeat(30)}!`, `${'1'.repeat(40)}!`, `${'a-'.repeat(30)}!`];
+const TIMED_OUT = Symbol('timed out');
+const sandbox = createContext({});
+function timedMatch(pattern, text, timeout) {
+  sandbox.pattern = pattern;
+  sandbox.text = text;
+  try {
+    return runInContext('(() => { const m = new RegExp(pattern, "i").exec(text); return m ? m[0] : null; })()', sandbox, { timeout });
+  } catch (error) {
+    if (error?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') return TIMED_OUT;
+    throw error;
+  }
+}
 
 /** Case-insensitive, like the phrase matcher; an invalid pattern throws the engine's own message. */
 export function compileRule(pattern) {
@@ -29,6 +49,8 @@ export function validRule(input, current = {}) {
   } catch (error) {
     throw invalid(`That pattern is not a valid regex: ${error.message}`);
   }
+  if (PROBES.some((probe) => timedMatch(pattern, probe, PROBE_TIMEOUT_MS) === TIMED_OUT))
+    throw invalid('That pattern is too slow: it backtracks without end on some text. Avoid nested repeats like (a+)+.');
   return { name, pattern, field, mode };
 }
 
@@ -39,10 +61,12 @@ export function ruleText(field, row) {
   return field === 'subject' ? subject : field === 'body' ? body : `${subject}\n${body}`;
 }
 
-/** The first matched text, or null. Mirrored by src/app/reject-rules.ts for the page's tester. */
+/** The first matched text, or null; a match that runs too long counts as none. Mirrored by src/app/reject-rules.ts. */
 export function ruleMatch(rule, row) {
-  const found = compileRule(rule.pattern).exec(ruleText(rule.field, row));
-  return found ? found[0] : null;
+  const found = timedMatch(rule.pattern, ruleText(rule.field, row), MATCH_TIMEOUT_MS);
+  if (found !== TIMED_OUT) return found;
+  console.error(`Reject rule "${rule.name}" timed out and was skipped for one email.`);
+  return null;
 }
 
 /** The first live rule that matches the pitch, or null. Test rules never reject anything. */

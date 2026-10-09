@@ -36,3 +36,14 @@ test('only a live rule rejects; the first live match wins', () => {
   assert.equal(liveRejection(rules.slice(0, 1), row), null);
   assert.equal(liveRejection(undefined, row), null);
 });
+test('a runaway regex is cut off instead of blocking the server, and counts as no match', () => {
+  const started = Date.now();
+  const rule = { id: 'r', name: 'Runaway', pattern: '^(a+)+$', field: 'subject', mode: 'live' };
+  assert.equal(ruleMatch(rule, { subject: `${'a'.repeat(40)}b`, body: '' }), null);
+  assert.equal(liveRejection([rule], { subject: `${'a'.repeat(40)}b`, body: '' }), null);
+  assert.ok(Date.now() - started < 2000);
+});
+test('a pattern that runs away on probe text is refused when saved', () => {
+  assert.throws(() => validRule({ name: 'Runaway', pattern: '^(a+)+$' }), /too slow/);
+  assert.throws(() => validRule({ name: 'Runaway', pattern: '(\\w+\\s?)+$' }), /too slow/);
+});

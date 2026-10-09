@@ -466,3 +466,19 @@ test('editing a live rule\'s pattern or field drops it back to test unless live 
     store.updateRejectRule(id, { field: 'body', mode: 'live' });
     assert.equal(store.rejectRules()[0].mode, 'live');
   }));
+test('a live rule also passes a new email merged into an existing thread, unless the owner engaged', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'm1@x', threadId: 'tm', subject: 'Angular role' }], { synced: true });
+    store.addRejectRule({ name: 'Onsite', pattern: 'onsite', field: 'any', mode: 'live' });
+    store.import([{ ...message, id: 'm2@x', threadId: 'tm', subject: 'Re: Angular role', body: 'Update: now onsite five days.', receivedAt: '2026-09-18T12:00:00.000Z' }], { synced: true });
+    const row = store.snapshot().opportunities.find((item) => item.id.endsWith(':tm'));
+    assert.equal(row.status, 'Passed');
+    assert.equal(row.rejectedBy.name, 'Onsite');
+    assert.equal(row.trashPending, true);
+    // A decision the owner made is never overridden by a rule.
+    store.import([{ ...message, id: 'k1@x', threadId: 'tk', subject: 'Angular role' }], { synced: true });
+    const kept = store.snapshot().opportunities.find((item) => item.id.endsWith(':tk'));
+    store.update(kept.id, { status: 'Pursue' });
+    store.import([{ ...message, id: 'k2@x', threadId: 'tk', body: 'Now onsite.', receivedAt: '2026-09-18T12:00:00.000Z' }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((item) => item.id === kept.id).status, 'Pursue');
+  }));

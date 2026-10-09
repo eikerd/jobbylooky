@@ -208,6 +208,11 @@ export function createStore(directory) {
             existing,
             screen({ ...message, subject: existing.subject, body: existing.body, isHtml: false, truncated: existing.truncated || message.truncated }),
           );
+          // New mail in a known thread meets the live rules too, judged on its own text. A rule never
+          // overrides the owner: only an untouched New row with no reply from the owner is passed.
+          const engaged = existing.status !== 'New' || existing.replies?.some((reply) => !reply.preview);
+          const rule = synced && !engaged ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }) : null;
+          if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
         } else {
           const row = newRow(message, id);
           // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
