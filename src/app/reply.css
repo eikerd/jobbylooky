@@ -28,3 +28,6 @@
 .reply.convo-waiting .sent-reply { border-left-color: var(--convo-waiting); }
 .reply.convo-live .sent-reply, .answer-of.convo-live .email-reading { border-left-color: var(--convo-live); }
 .reply.convo-live .reply-back, .answer-of.convo-live p, .opportunity.convo-live .replied, .opportunity.convo-live .answer-mark { color: var(--convo-live-ink); }
+
+/* A card a live reject rule passed names the rule. */
+.rejected-by { font-size: 12px; font-weight: 800; padding: 1px 8px; border-radius: 999px; background: var(--bad-soft); color: var(--bad); }

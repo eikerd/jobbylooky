@@ -46,6 +46,7 @@ async function sync() {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
     const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders() });
     const added = store.import(messages, { synced: true });
+    trashRejected();
     syncError = '';
     return added;
   } catch (error) {
@@ -79,6 +80,14 @@ function passEndedJobs() {
   for (const row of store.snapshot().opportunities)
     if (row.status === 'Passed' && row.trashPending && linkChecks.wasAutoPassed(row.id)) passTrash.enqueue(row.id);
   return passed;
+}
+/**
+ * Mail a live reject rule passed goes to Gmail Trash like a Pass from the page. The store
+ * marks it pending as it rejects, so a crash or a Gmail failure is retried on the next sync.
+ */
+function trashRejected() {
+  for (const row of store.snapshot().opportunities)
+    if (row.status === 'Passed' && row.rejectedBy && row.trashPending && gmailIds(row.messageIds).length) passTrash.enqueue(row.id);
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -231,6 +240,7 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'GET' && url.pathname === '/api/reject-rules') return json(200, store.rejectRules());
     if (req.method === 'GET' && url.pathname === '/api/phrase-colors') return json(200, store.phraseColors());
     if (req.method === 'GET' && url.pathname === '/api/resume') {
       const resume = latestResume(resumeDir);
@@ -270,6 +280,8 @@ export const server = createServer(async (req, res) => {
       // Nothing queued: the server restarted mid-delete, or the outcome was already collected.
       return json(200, row.trashPending ? { ...row, trashError: 'Gmail did not finish deleting this email. Click Pass again to retry.' } : { ...row, trashed: 0, skipped: true });
     }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/reject-rules/'))
+      return json(200, store.removeRejectRule(decodeURIComponent(url.pathname.slice('/api/reject-rules/'.length))));
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
@@ -277,6 +289,10 @@ export const server = createServer(async (req, res) => {
         return json(415, { error: 'JSON content is required.' });
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
+      if (req.method === 'POST' && url.pathname === '/api/reject-rules')
+        return json(201, store.addRejectRule(await body(req)));
+      if (req.method === 'PATCH' && url.pathname.startsWith('/api/reject-rules/'))
+        return json(200, store.updateRejectRule(decodeURIComponent(url.pathname.slice('/api/reject-rules/'.length)), await body(req)));
       if (req.method === 'PATCH' && url.pathname === '/api/phrase-colors')
         return json(200, store.setPhraseColor(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')

@@ -36,6 +36,9 @@
       <button type="button" [class.active]="directoryMode() === 'phrases'" [attr.aria-current]="directoryMode() === 'phrases' ? 'page' : null" (click)="openDirectory('phrases')">
         <span class="nav-icon" aria-hidden="true">×</span>Phrases
       </button>
+      <button type="button" [class.active]="directoryMode() === 'rules'" [attr.aria-current]="directoryMode() === 'rules' ? 'page' : null" (click)="openDirectory('rules')">
+        <span class="nav-icon" aria-hidden="true">⊘</span>Rules
+      </button>
       <button type="button" [class.active]="directoryMode() === 'postings'" [attr.aria-current]="directoryMode() === 'postings' ? 'page' : null" (click)="openDirectory('postings')">
         <span class="nav-icon" aria-hidden="true">◷</span>Postings
       </button>
@@ -60,7 +63,7 @@
   </aside>
   <main>
     <header class="page-header">
-      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'postings' ? 'Job postings' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'postings' ? 'Job postings' : directoryMode() === 'rules' ? 'Auto-reject rules' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
       <div class="header-actions">
         <button
           class="button secondary"
@@ -166,6 +169,8 @@
           </ul>
         }
       </section>
+    } @else if (directoryMode() === 'rules') {
+      <app-rules [rows]="opportunities()" [rules]="rejectRules()" [busy]="busy()" (save)="saveRule($event)" (setMode)="setRuleMode($event)" (remove)="removeRule($event)" (openPitch)="openProfilePitch($event)" />
     } @else if (directoryMode() === 'postings') {
       <app-postings [rows]="opportunities()" (openPitch)="openProfilePitch($event)" />
     } @else if (profileMode(); as mode) {
@@ -210,6 +215,9 @@
                   }
                   @if (row.status !== 'New') {
                     <span class="decision">{{ row.status }}</span>
+                  }
+                  @if (row.status === 'Passed' && row.rejectedBy) {
+                    <span class="rejected-by" [attr.title]="'Passed by the rule ' + row.rejectedBy.name">Rule: {{ row.rejectedBy.name }}</span>
                   }
                   @if (row.replyReceivedAt) {
                     <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>

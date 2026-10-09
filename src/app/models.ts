@@ -25,6 +25,8 @@ export interface Opportunity {
   replyReceivedAt?: string;
   /** The pitch whose reply this message answers. */
   respondsTo?: string;
+  /** The live reject rule that passed this pitch as it arrived. */
+  rejectedBy?: { id: string; name: string; at: string };
   /** Voicemails the Mac's sweep tied to this pitch, newest first. */
   voicemails?: PitchVoicemail[];
   /** A voicemail not yet seen: the pitch is pinned to the top until it is opened. */
@@ -87,6 +89,17 @@ export interface JobGroup {
   };
 }
 export type PhraseKind = 'negative' | 'positive' | 'neutral' | 'purple' | 'pink';
+export type RuleField = 'any' | 'subject' | 'body';
+export type RuleMode = 'test' | 'live';
+/** An owner-written regex; mirrors server/reject-rules.mjs. Only a live rule passes mail. */
+export interface RejectRule {
+  id: string;
+  name: string;
+  pattern: string;
+  field: RuleField;
+  mode: RuleMode;
+  createdAt: string;
+}
 export interface TrackedPhrase {
   id: string;
   phrase: string;

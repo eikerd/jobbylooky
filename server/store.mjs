@@ -5,6 +5,7 @@ import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
 import { originalReceivedAt } from './received-date.mjs';
+import { validRule, liveRejection } from './reject-rules.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -208,7 +209,12 @@ export function createStore(directory) {
             screen({ ...message, subject: existing.subject, body: existing.body, isHtml: false, truncated: existing.truncated || message.truncated }),
           );
         } else {
-          next.opportunities.push(newRow(message, id));
+          const row = newRow(message, id);
+          // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
+          const rule = synced ? liveRejection(next.rejectRules, row) : null;
+          // Pending before any delete starts, like a Pass from the page, so a failed delete is retried.
+          if (rule) Object.assign(row, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
+          next.opportunities.push(row);
           added++;
         }
       }
@@ -255,6 +261,25 @@ export function createStore(directory) {
       if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
       const covered = new Set(trashedIds);
       return this.setTrashPending(id, !row.messageIds.every((messageId) => covered.has(messageId)));
+    },
+    rejectRules: () => structuredClone(state.rejectRules ?? []),
+    addRejectRule(input) {
+      const rule = { id: randomUUID(), ...validRule(input), createdAt: new Date().toISOString() };
+      commit({ ...state, rejectRules: [...(state.rejectRules ?? []), rule] });
+      return structuredClone(state.rejectRules);
+    },
+    updateRejectRule(id, input) {
+      const current = (state.rejectRules ?? []).find((rule) => rule.id === id);
+      if (!current) throw Object.assign(new Error('Rule not found.'), { status: 404 });
+      const next = { ...current, ...validRule(input, current) };
+      commit({ ...state, rejectRules: state.rejectRules.map((rule) => (rule.id === id ? next : rule)) });
+      return structuredClone(state.rejectRules);
+    },
+    removeRejectRule(id) {
+      if (!(state.rejectRules ?? []).some((rule) => rule.id === id))
+        throw Object.assign(new Error('Rule not found.'), { status: 404 });
+      commit({ ...state, rejectRules: state.rejectRules.filter((rule) => rule.id !== id) });
+      return structuredClone(state.rejectRules);
     },
     phrases: () => structuredClone(state.trackedPhrases),
     addPhrase(input) {

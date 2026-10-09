@@ -4,10 +4,11 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageHeat, ageInDays } from './age';
 import { conversationState } from './conversation';
+import { Rules, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import { daysUp, jobState } from './link-state';
-import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
+import type { RejectRule, RuleMode, Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -35,7 +36,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -51,7 +52,9 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | 'rules' | null>(null);
+  readonly rejectRules = signal<RejectRule[]>([]);
+  readonly rulesView = viewChild(Rules);
   readonly profileMode = computed(() => {
     const mode = this.directoryMode();
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
@@ -258,17 +261,19 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection, phrases, colors] = await Promise.all([
+      const [rows, connection, phrases, colors, rules] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
         this.request<TrackedPhrase[]>('phrases'),
         this.request<Record<PhraseKind, string>>('phrase-colors'),
+        this.request<RejectRule[]>('reject-rules'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision || this.passesSaving) return;
       this.jobGroups.set(this.withSeenHere(rows));
       this.phrases.set(phrases);
       this.phraseColors.set(colors);
+      this.rejectRules.set(rules);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -349,7 +354,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings' | 'rules', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -473,6 +478,34 @@ export class App implements OnDestroy {
   }
   removePhrase(row: TrackedPhrase) {
     void this.changePhrases(() => this.request<TrackedPhrase[]>(`phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
+  }
+  async saveRule(draft: RuleDraft) {
+    const { id, ...rule } = draft;
+    const saved = await this.changeRules(() =>
+      id ? this.request<RejectRule[]>(`reject-rules/${encodeURIComponent(id)}`, 'PATCH', rule) : this.request<RejectRule[]>('reject-rules', 'POST', rule),
+    );
+    if (saved) this.rulesView()?.clear();
+  }
+  setRuleMode({ rule, mode }: { rule: RejectRule; mode: RuleMode }) {
+    void this.changeRules(() => this.request<RejectRule[]>(`reject-rules/${encodeURIComponent(rule.id)}`, 'PATCH', { mode }));
+  }
+  removeRule(rule: RejectRule) {
+    void this.changeRules(() => this.request<RejectRule[]>(`reject-rules/${encodeURIComponent(rule.id)}`, 'DELETE'));
+  }
+  /** Rules change no pitch until new mail arrives, so nothing else needs reloading. */
+  private async changeRules(change: () => Promise<RejectRule[]>) {
+    if (this.busy()) return false;
+    this.busy.set(true);
+    this.error.set('');
+    try {
+      this.rejectRules.set(await change());
+      return true;
+    } catch (error) {
+      this.error.set(this.message(error));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
   }
   private async changePhrases(change: () => Promise<TrackedPhrase[]>) {
     if (this.busy()) return false;

@@ -428,3 +428,29 @@ test('mail synced while Gmail was deleting stays pending; a covering batch clear
     assert.equal('trashPending' in store.settleTrash(id, everything), false);
     assert.throws(() => store.settleTrash('missing', []), /not found/);
   }));
+
+test('a live reject rule passes newly synced mail and names itself; test rules never act', () =>
+  withStore((store) => {
+    store.addRejectRule({ name: 'Java only', pattern: 'java\\b', field: 'subject', mode: 'test' });
+    store.import([{ ...message, id: 'a@x', threadId: 'ta', subject: 'Java Developer' }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta')).status, 'New');
+    const [rule] = store.rejectRules();
+    store.updateRejectRule(rule.id, { mode: 'live' });
+    store.import([{ ...message, id: 'b@x', threadId: 'tb', subject: 'Java Developer II' }], { synced: true });
+    const rejected = store.snapshot().opportunities.find((row) => row.id.endsWith(':tb'));
+    assert.equal(rejected.status, 'Passed');
+    assert.equal(rejected.rejectedBy.name, 'Java only');
+    assert.equal(rejected.trashPending, true);
+    // New mail only: the row that arrived while the rule was a test stays the owner's.
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta')).status, 'New');
+  }));
+test('a pasted email is never auto-rejected, and bad rules are refused', () =>
+  withStore((store) => {
+    store.addRejectRule({ name: 'Angular', pattern: 'angular', mode: 'live' });
+    store.import([{ ...message, id: 'c@x', threadId: 'tc' }]);
+    assert.equal(store.snapshot().opportunities[0].status, 'New');
+    assert.throws(() => store.addRejectRule({ name: 'Bad', pattern: '[' }), /not a valid regex/);
+    assert.throws(() => store.updateRejectRule('missing', { mode: 'live' }), /Rule not found/);
+    store.removeRejectRule(store.rejectRules()[0].id);
+    assert.deepEqual(store.rejectRules(), []);
+  }));
