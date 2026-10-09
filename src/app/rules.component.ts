@@ -55,6 +55,10 @@ export class Rules {
   /** The latest finished tester run; null while there is no valid pattern or after a runaway. */
   readonly result = signal<TesterResult | null>(null);
   readonly tooSlow = signal(false);
+  /** The pattern and field the last finished tester run covered; Save waits for the current pair. */
+  private readonly testedFor = signal('');
+  private pendingKey = '';
+  private readonly draftKey = computed(() => `${this.field()}\n${this.pattern()}`);
   readonly matches = computed<TesterRow[]>(() => {
     const byId = new Map(this.rows().map((row) => [row.id, row]));
     return (this.result()?.hits ?? []).flatMap(({ id, snippet }) => {
@@ -74,7 +78,7 @@ export class Rules {
 
   constructor() {
     effect(() => {
-      const job = { rows: this.rows(), pattern: this.pattern(), field: this.field(), pasted: this.pasted(), valid: this.compiled().regex !== null };
+      const job = { rows: this.rows(), pattern: this.pattern(), field: this.field(), pasted: this.pasted(), valid: this.compiled().regex !== null, key: this.draftKey() };
       clearTimeout(this.debounce);
       this.debounce = setTimeout(() => this.test(job), TESTER_DEBOUNCE_MS);
     });
@@ -86,8 +90,9 @@ export class Rules {
   }
 
   /** Runs the tester in a worker with a deadline; a regex that backtracks forever cannot hang the page. */
-  private test(job: { rows: Opportunity[]; pattern: string; field: RuleField; pasted: string; valid: boolean }) {
+  private test(job: { rows: Opportunity[]; pattern: string; field: RuleField; pasted: string; valid: boolean; key: string }) {
     const seq = ++this.seq;
+    this.pendingKey = job.key;
     clearTimeout(this.deadline);
     this.tooSlow.set(false);
     if (!job.valid) {
@@ -95,7 +100,10 @@ export class Rules {
       if (this.running) this.stopWorker();
       return this.result.set(null);
     }
-    if (typeof Worker === 'undefined') return this.result.set(runTester(job.rows, job.pattern, job.field, job.pasted));
+    if (typeof Worker === 'undefined') {
+      this.result.set(runTester(job.rows, job.pattern, job.field, job.pasted));
+      return this.testedFor.set(job.key);
+    }
     // A run still going is the old pattern's runaway, or soon stale: replace the worker.
     if (this.running) this.stopWorker();
     if (!this.worker) {
@@ -105,6 +113,7 @@ export class Rules {
         this.running = false;
         clearTimeout(this.deadline);
         this.result.set(data.result);
+        this.testedFor.set(this.pendingKey);
       };
     }
     if (this.sentRows !== job.rows) {
@@ -165,7 +174,9 @@ export class Rules {
   }
 
   canSave() {
-    return !this.busy() && !this.tooSlow() && this.name().trim().length > 0 && this.compiled().regex !== null;
+    // A pattern saves only once the tester has run it over stored mail without timing out:
+    // pressing Enter during the debounce or the run must not save a runaway the server probes miss.
+    return !this.busy() && !this.tooSlow() && this.testedFor() === this.draftKey() && this.name().trim().length > 0 && this.compiled().regex !== null;
   }
   submit() {
     if (!this.canSave()) return;
