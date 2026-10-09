@@ -1,0 +1,105 @@
+// Which links in a pitch's email the daily link sweep (mac/link-sweep.mjs) may visit, and what
+// each one is. Visiting a link can do something: an Unsubscribe link unsubscribes, Indeed's
+// Yes/No/Maybe links answer its survey. Those are never fetched. Only a link to the posting
+// itself can decide that a job is closed; every other link is only checked for being dead.
+
+const URL_PATTERN = /\bhttps?:\/\/[^\s<>"]+/gi;
+
+const count = (text, char) => text.split(char).length - 1;
+/** Same trimming as src/app/email-body.ts, so the page finds each link by its exact text. */
+function trimUrl(raw) {
+  let url = raw;
+  for (;;) {
+    const last = url.at(-1);
+    if (last && '.,;:!?'.includes(last)) url = url.slice(0, -1);
+    else if (last === ')' && count(url, ')') > count(url, '(')) url = url.slice(0, -1);
+    else if (last === ']' && count(url, ']') > count(url, '[')) url = url.slice(0, -1);
+    else return url;
+  }
+}
+
+// A label or address that marks a link as doing something when it is opened.
+const ACTION_WORDS =
+  /unsubscri|opt[\s-]?out|optout|preferences|settings|manage|privacy|terms|help|support|feedback|survey|contact us|edit profile|recent work experience|base pay|interested|click here|report|learn why|view people|request_unsubscribe|mypreferences|^(yes|no|maybe|location)\b/i;
+// In an address only these: a careers path such as /project-manager-123 says "manage" too.
+const ACTION_PATHS = /unsubscri|opt[-_]?out|preferences|settings|survey|feedback|respon[sd]|confirm|accept|decline/i;
+const ACTION_HOSTS = /^(unsubscribe\.|.*surveymonkey\.com$|myaccount\.google\.com$)/i;
+// Pages that never die and refuse scripts anyway: checking them only adds noise.
+const SKIP_HOSTS = /(^|\.)(facebook|instagram|x|twitter|youtube|bilibili|weixin\.qq|tiktok)\.com$|^maps\.google\.|^(www\.)?google\.com$/i;
+// Click trackers hide where they lead; one is visited only when its label says it is the job.
+const TRACKER = /^(clicks?\.|url\d+\.|email\.|links?\.|c\.gle$|c\.apple\.com$)|\/ls\/click|\/wf\/click/i;
+const IMAGE = /\.(png|jpe?g|gif|svg|webp|ico)$/i;
+const POSTING_LABEL = /view (the )?job\b|job details|job description|job link|job posting|apply (now|here|online|to this|for this)\b/i;
+const POSTING_URL =
+  /greenhouse\.io|lever\.co|myworkdayjobs\.com|icims\.com|smartrecruiters\.com|ashbyhq\.com|jobvite\.com|workable\.com|ziprecruiter\.com\/(c|jobs?)\/|dice\.com\/job-detail|linkedin\.com\/(comm\/)?jobs\/view\/\d|\/(job|jobs|careers?|positions?|openings?|requisitions?)\/[^/?#]*\d|\/job-?details?\b|[?&](jk|jobid|job_id|gh_jid|reqid)=/i;
+
+/**
+ * Outlook's safelinks carry the real address in `url=`, Proofpoint's urldefense between `__`
+ * marks; the real address is what gets judged.
+ */
+function unwrap(url) {
+  try {
+    const parsed = new URL(url);
+    if (/safelinks\.protection\.outlook\.com$/i.test(parsed.host) && parsed.searchParams.get('url'))
+      return new URL(parsed.searchParams.get('url')).href;
+    const defended = /^https:\/\/urldefense\.com\/v3\/__(.+?)__/.exec(url);
+    if (defended) return new URL(defended[1].replace(/^(https?):\/(?!\/)/, '$1://')).href;
+  } catch {
+    /* Not a URL the sweep could visit; classify() skips it. */
+  }
+  return null;
+}
+
+/**
+ * What a link is: 'posting' (the job itself: can mark the pitch closed), 'other' (checked only
+ * for being dead), or null (never visited). `board` is 'indeed' when Indeed's job page has to
+ * be read in a real browser.
+ */
+export function classify(url, label = '') {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+  const inner = unwrap(url);
+  if (inner) {
+    const judged = classify(inner, label);
+    return judged && { ...judged, target: inner };
+  }
+  const host = parsed.host.toLowerCase();
+  const text = label.trim();
+  if (ACTION_WORDS.test(text) || ACTION_PATHS.test(parsed.pathname + parsed.search) || ACTION_HOSTS.test(host)) return null;
+  // Ceipal's /articles/ links are the logos embedded in recruiters' signatures.
+  if (IMAGE.test(parsed.pathname) || SKIP_HOSTS.test(host) || /ceipal\.com$/.test(host)) return null;
+  // Indeed's mail links all go through cts.indeed.com; only "View job" leads to the posting.
+  if (host === 'cts.indeed.com') return /^view job\b/i.test(text) ? { kind: 'posting', board: 'indeed' } : null;
+  if (/(^|\.)indeed\.com$/.test(host))
+    return /[?&]jk=/.test(parsed.search) ? { kind: 'posting', board: 'indeed' } : null;
+  // LinkedIn answers scripts with HTTP 999 whatever the page; only a job view says anything.
+  if (/(^|\.)linkedin\.com$/.test(host))
+    return /\/jobs\/view\/\d/.test(parsed.pathname) ? { kind: 'posting', board: 'browser' } : null;
+  if (TRACKER.test(host) || TRACKER.test(parsed.pathname))
+    return POSTING_LABEL.test(text) ? { kind: 'posting', board: 'web' } : null;
+  if (POSTING_URL.test(url) || POSTING_LABEL.test(text)) return { kind: 'posting', board: 'web' };
+  return { kind: 'other', board: 'web' };
+}
+
+/** Every visitable link in an email body, once each, with the text before it on its line. */
+export function jobLinks(body) {
+  const found = new Map();
+  for (const line of String(body ?? '').split('\n')) {
+    let previous = 0;
+    for (const match of line.matchAll(URL_PATTERN)) {
+      const url = trimUrl(match[0]);
+      // The label is the text since the previous link on the line ("View job: <url>").
+      const label = line.slice(previous, match.index).replace(/^[\s\].,;:)\-–|]+|[\s:\-–|]+$/g, '').slice(-80);
+      previous = match.index + url.length;
+      if (found.has(url)) continue;
+      const kind = classify(url, label);
+      if (kind) found.set(url, { url, label, ...kind });
+    }
+  }
+  return [...found.values()];
+}
