@@ -454,3 +454,15 @@ test('a pasted email is never auto-rejected, and bad rules are refused', () =>
     store.removeRejectRule(store.rejectRules()[0].id);
     assert.deepEqual(store.rejectRules(), []);
   }));
+test('editing a live rule\'s pattern or field drops it back to test unless live is asked for again', () =>
+  withStore((store) => {
+    store.addRejectRule({ name: 'Onsite', pattern: 'onsite', mode: 'live' });
+    const id = store.rejectRules()[0].id;
+    store.updateRejectRule(id, { name: 'Onsite only' });
+    assert.equal(store.rejectRules()[0].mode, 'live');
+    store.updateRejectRule(id, { pattern: 'on-?site' });
+    assert.equal(store.rejectRules()[0].mode, 'test');
+    store.updateRejectRule(id, { mode: 'live' });
+    store.updateRejectRule(id, { field: 'body', mode: 'live' });
+    assert.equal(store.rejectRules()[0].mode, 'live');
+  }));

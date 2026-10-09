@@ -272,6 +272,9 @@ export function createStore(directory) {
       const current = (state.rejectRules ?? []).find((rule) => rule.id === id);
       if (!current) throw Object.assign(new Error('Rule not found.'), { status: 404 });
       const next = { ...current, ...validRule(input, current) };
+      // A live rule whose matching changed has not been through "Go live" in its new form.
+      const rematched = next.pattern !== current.pattern || next.field !== current.field;
+      if (rematched && input?.mode !== 'live') next.mode = 'test';
       commit({ ...state, rejectRules: state.rejectRules.map((rule) => (rule.id === id ? next : rule)) });
       return structuredClone(state.rejectRules);
     },

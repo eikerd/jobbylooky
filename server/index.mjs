@@ -84,10 +84,25 @@ function passEndedJobs() {
 /**
  * Mail a live reject rule passed goes to Gmail Trash like a Pass from the page. The store
  * marks it pending as it rejects, so a crash or a Gmail failure is retried on the next sync.
+ * No page waits on these deletes, so a failure is kept here and shown in the connection banner.
  */
+const rejectTrashFailures = new Map();
 function trashRejected() {
-  for (const row of store.snapshot().opportunities)
-    if (row.status === 'Passed' && row.rejectedBy && row.trashPending && gmailIds(row.messageIds).length) passTrash.enqueue(row.id);
+  for (const row of store.snapshot().opportunities) {
+    if (row.status !== 'Passed' || !row.rejectedBy || !row.trashPending || !gmailIds(row.messageIds).length) continue;
+    void passTrash.enqueue(row.id).then((outcome) => {
+      if (outcome?.trashError) rejectTrashFailures.set(row.id, row.title);
+      else rejectTrashFailures.delete(row.id);
+    });
+  }
+}
+function rejectTrashError() {
+  // Un-passed, or deleted by a later Pass, since it failed: no longer the rule's to report.
+  const pending = new Set(store.snapshot().opportunities.filter((row) => row.status === 'Passed' && row.trashPending).map((row) => row.id));
+  const titles = [...rejectTrashFailures].filter(([id]) => pending.has(id)).map(([, title]) => title);
+  if (!titles.length) return '';
+  const more = titles.length > 1 ? ` and ${titles.length - 1} more` : '';
+  return `A reject rule passed "${titles[0]}"${more}, but Gmail did not delete it. It retries on every mail check.`;
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -232,7 +247,7 @@ export const server = createServer(async (req, res) => {
         canReply: Boolean(mailer),
         replyPreview: Boolean(mailer?.preview),
         syncing,
-        error: syncError,
+        error: syncError || rejectTrashError(),
         account,
         lastSync,
         importedAt,

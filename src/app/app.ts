@@ -496,6 +496,8 @@ export class App implements OnDestroy {
   private async changeRules(change: () => Promise<RejectRule[]>) {
     if (this.busy()) return false;
     this.busy.set(true);
+    // A poll that started before this change must not restore the old rules.
+    this.revision++;
     this.error.set('');
     try {
       this.rejectRules.set(await change());
