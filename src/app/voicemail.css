@@ -1,0 +1,12 @@
+/* Voicemails tied to a pitch by the Mac's sweep. The unseen badge borrows the Pass toast's yellow. */
+.voicemail-badge { color: var(--soft); }
+.voicemail-badge.unseen { color: var(--ink-strong); background: var(--mark); border-radius: 999px; padding: 0 5px; font-weight: 800; }
+.voicemails { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; display: grid; gap: 10px; }
+.voicemails h3 { margin: 0; }
+.voicemail { display: grid; gap: 6px; border-left: 3px solid var(--mark); padding-left: 10px; }
+.voicemail-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 13px; color: var(--soft); }
+.voicemail-meta time { font-weight: 700; color: var(--ink); }
+.voicemail-meta .likely { color: var(--warn); font-weight: 700; }
+.voicemail audio { width: 100%; max-width: 420px; height: 32px; }
+.voicemail-transcript { margin: 0; font-size: 15px; line-height: 1.55; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.voicemail-transcript.none { color: var(--muted); font-style: italic; }

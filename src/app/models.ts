@@ -25,6 +25,24 @@ export interface Opportunity {
   replyReceivedAt?: string;
   /** The pitch whose reply this message answers. */
   respondsTo?: string;
+  /** Voicemails the Mac's sweep tied to this pitch, newest first. */
+  voicemails?: PitchVoicemail[];
+  /** A voicemail not yet seen: the pitch is pinned to the top until it is opened. */
+  voicemailUnseen?: boolean;
+}
+export interface PitchVoicemail {
+  id: string;
+  from: string;
+  receivedAt: string;
+  durationSeconds: number;
+  kind: 'voicemail' | 'live';
+  transcript: string | null;
+  transcriptSource: 'apple' | 'local' | null;
+  seen: boolean;
+  audio: boolean;
+  /** 'name': Claude matched it by recruiter or company named in the transcript, not by number. */
+  matchedBy: 'number' | 'name';
+  note?: string;
 }
 export interface SentReply {
   id: string;

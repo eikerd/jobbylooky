@@ -4,7 +4,7 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
 import { formatEmailBody, urlRows } from './email-body';
-import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind } from './models';
+import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -32,7 +32,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
   selector: 'app-root',
   imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
   templateUrl: './app.html',
-  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css'],
+  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
   host: { '[style]': 'phraseStyle()' },
 })
@@ -107,6 +107,25 @@ export class App implements OnDestroy {
   importBody = '';
   private poll: ReturnType<typeof setInterval>;
   private revision = 0;
+  /**
+   * The pitch whose voicemail was just seen: its job keeps its place until another job is opened.
+   * A pitch id, not a group id, because a likely group's id changes when a newer pitch joins it.
+   */
+  private readonly pinnedWhileOpen = signal('');
+  /**
+   * Voicemails marked seen in this page ("pitchId voicemailId"). A poll that read the server just
+   * before the seen request committed cannot pin them again; a voicemail that arrives later can.
+   */
+  private readonly seenHere = new Set<string>();
+  private withSeenHere(groups: JobGroup[]): JobGroup[] {
+    if (!this.seenHere.size) return groups;
+    const apply = (row: Opportunity): Opportunity => {
+      if (!row.voicemails?.some((item) => !item.seen && this.seenHere.has(`${row.id} ${item.id}`))) return row;
+      const voicemails = row.voicemails.map((item) => (this.seenHere.has(`${row.id} ${item.id}`) ? { ...item, seen: true } : item));
+      return { ...row, voicemails, voicemailUnseen: voicemails.some((item) => !item.seen) };
+    };
+    return groups.map((group) => ({ ...group, pitches: group.pitches.map(apply) }));
+  }
   readonly visible = computed(() => {
     const folder = this.folder();
     const matchesFolder = (row: Opportunity) =>
@@ -117,13 +136,25 @@ export class App implements OnDestroy {
     return this.jobGroups()
       .filter(group => group.pitches.some(matchesFolder))
       .map(group => ({ ...group, representative: group.pitches.find(matchesFolder)! }))
-      .sort((a, b) => Date.parse(b.representative.receivedAt) - Date.parse(a.representative.receivedAt));
+      // A job with an unseen voicemail is pinned above everything else, newest first within each.
+      .sort((a, b) =>
+        Number(this.pinned(b)) - Number(this.pinned(a)) ||
+        Date.parse(b.representative.receivedAt) - Date.parse(a.representative.receivedAt));
   });
   /** Ticks on rows that left the folder since, or were passed already, are ignored, not counted. */
   readonly checkedRows = computed(() => {
     const ids = this.checked();
     return this.visible().map((group) => group.representative).filter((row) => ids.has(row.id) && row.status !== 'Passed');
   });
+  private pinned(group: JobGroup) {
+    return group.pitches.some((row) => row.id === this.pinnedWhileOpen() || row.voicemailUnseen);
+  }
+  /** The newest voicemail across a job's pitches, for its row badge. */
+  groupVoicemail(group: JobGroup) {
+    const all = group.pitches.flatMap((row) => row.voicemails ?? []);
+    const newest = all.sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))[0];
+    return newest ? { ...newest, unseen: group.pitches.some((row) => row.voicemailUnseen) } : null;
+  }
   readonly selectedGroup = computed(() =>
     this.jobGroups().find(group => group.pitches.some(row => row.id === this.selectedId())),
   );
@@ -211,7 +242,7 @@ export class App implements OnDestroy {
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision || this.passesSaving) return;
-      this.jobGroups.set(rows);
+      this.jobGroups.set(this.withSeenHere(rows));
       this.phrases.set(phrases);
       this.phraseColors.set(colors);
       this.connection.set(connection);
@@ -225,8 +256,51 @@ export class App implements OnDestroy {
   canLeave() {
     return !this.hasUnsavedWork() || window.confirm('Discard your unsaved changes?');
   }
+  /**
+   * A click or a pick from the group list. Opening a pitch unpins it: the voicemails it shows count
+   * as seen. A queue row opens the job's pitch that has an unseen voicemail, so what is marked seen
+   * is what is on screen; another pitch's voicemail keeps the job pinned until it is opened too.
+   * Load, folder changes and moving on after a Pass call select() and leave the pin alone.
+   */
+  open(row: Opportunity, fromQueue = false) {
+    const group = this.jobGroups().find((item) => item.pitches.some((pitch) => pitch.id === row.id));
+    const target = (fromQueue && !row.voicemailUnseen && group?.pitches.find((pitch) => pitch.voicemailUnseen)) || row;
+    if (!this.select(target) || !target.voicemailUnseen || !group) return;
+    this.pinnedWhileOpen.set(target.id);
+    void this.markVoicemailsSeen(target);
+  }
+  private async markVoicemailsSeen({ id, voicemails = [] }: Opportunity) {
+    const keys = voicemails.filter((item) => !item.seen).map((item) => `${id} ${item.id}`);
+    keys.forEach((key) => this.seenHere.add(key));
+    this.jobGroups.update((groups) => this.withSeenHere(groups));
+    try {
+      await this.request(`opportunities/${encodeURIComponent(id)}/voicemails-seen`, 'POST', {});
+    } catch (error) {
+      // Pinned again at once, with the reason, rather than reappearing unexplained at the next poll.
+      keys.forEach((key) => this.seenHere.delete(key));
+      this.revision++;
+      void this.refresh();
+      this.error.set(`Could not mark the voicemail seen: ${this.message(error)}`);
+    }
+  }
+  audioUrl(voicemail: PitchVoicemail) {
+    return new URL(`api/voicemails/${encodeURIComponent(voicemail.id)}/audio`, document.baseURI).href;
+  }
+  /** "+15028900699" → "(502) 890-0699"; anything else as stored. */
+  phone(value: string) {
+    const digits = value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+    return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value || 'Unknown caller';
+  }
+  duration(seconds: number) {
+    const whole = Math.round(seconds);
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+  }
+  /** False when nothing changed: busy, or the user kept their unsaved work. */
   select(row: Opportunity) {
-    if (this.busy() || !this.canLeave()) return;
+    if (this.busy() || !this.canLeave()) return false;
+    const pinned = this.pinnedWhileOpen();
+    if (pinned && !this.jobGroups().find((group) => group.pitches.some((pitch) => pitch.id === row.id))?.pitches.some((pitch) => pitch.id === pinned))
+      this.pinnedWhileOpen.set('');
     this.selectedId.set(row.id);
     this.detailPane()?.nativeElement.scrollTo({ top: 0 });
     this.notes = row.notes;
@@ -240,6 +314,7 @@ export class App implements OnDestroy {
     this.replying.set(false);
     this.showOriginal.set(false);
     this.replyDraft = '';
+    return true;
   }
   changeFolder(folder: Folder) {
     if (this.busy() || !this.canLeave()) return;
@@ -266,15 +341,18 @@ export class App implements OnDestroy {
   }
   selectPitchId(id: string) {
     const row = this.opportunities().find(item=>item.id===id);
-    if (row) this.select(row);
+    if (row) this.open(row);
   }
   openProfilePitch(id: string) {
     const row = this.opportunities().find(item => item.id === id);
     if (!row || this.busy() || !this.canLeave()) return;
+    // Discarding was just confirmed; open() must not ask a second time.
     this.dirty.set(false);
+    this.replying.set(false);
     this.directoryMode.set(null);
     this.folder.set('All opportunities');
-    this.select(row);
+    // Opened from a profile or the "Original pitch" link: its voicemail is on screen, so it is seen.
+    this.open(row);
   }
   async startReply(row: Opportunity, kind: 'plain' | 'resume' | 'client' = 'plain') {
     // Ask the server: it picks the recipient with the same rule it sends with.
@@ -376,7 +454,7 @@ export class App implements OnDestroy {
     }
     // The phrase change is committed; a failed reload is reported and the next poll reconciles fits.
     try {
-      this.jobGroups.set(await this.request<JobGroup[]>('groups'));
+      this.jobGroups.set(this.withSeenHere(await this.request<JobGroup[]>('groups')));
     } catch (error) {
       this.error.set(`Phrase saved, but the list did not refresh: ${this.message(error)}`);
     } finally {
@@ -572,7 +650,7 @@ export class App implements OnDestroy {
       const groups = await this.request<JobGroup[]>('grouping', 'POST', {
         action, sourceId: row.id, targetId: action === 'link' ? this.linkTarget : undefined,
       });
-      this.jobGroups.set(groups);
+      this.jobGroups.set(this.withSeenHere(groups));
       this.notes = row.notes;
       this.nextAction = row.nextAction;
       this.followUp = row.followUp;
