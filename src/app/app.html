@@ -509,7 +509,7 @@
 </div>
 
 <app-selection-phrase [within]="detailPane()?.nativeElement" [phrases]="phrases()" [kinds]="phraseKinds" [labels]="phraseKindLabels"
-  [marks]="phraseKindMarks" [save]="trackSelection" [busy]="busy()" [error]="error()" />
+  [marks]="phraseKindMarks" [save]="trackSelection" [busy]="busy()" />
 
 <div class="toasts" role="status" aria-live="polite">
   @for (item of toasts(); track item.id) {
