@@ -5,8 +5,8 @@
 .related-head h3 { margin: 0; font-size: 15px; }
 .related-head .link-action { margin-left: auto; }
 .related-scroll { overflow-x: auto; margin-top: 6px; }
-.related-grid { width: 100%; min-width: 560px; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
-.c-received { width: 156px; } .c-pay { width: 144px; } .c-fit { width: 112px; } .c-status { width: 72px; }
+.related-grid { width: 100%; min-width: 640px; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.c-received { width: 156px; } .c-pay { width: 144px; } .c-fit { width: 112px; } .c-status { width: 104px; }
 .related-grid th, .related-grid td { padding: 4px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line); }
 .related-grid th button { all: unset; cursor: pointer; font-weight: 700; color: var(--soft); }
 .sort-mark { margin-left: 4px; font-size: 10px; }

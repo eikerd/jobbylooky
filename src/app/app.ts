@@ -779,6 +779,10 @@ export class App implements OnDestroy {
   sourceText(body: string) {
     return body.replace(/\$/g, '');
   }
+  /** The date pipe throws on a string it cannot parse; a fallback row can carry one. */
+  isDate(value: string) {
+    return Number.isFinite(Date.parse(value));
+  }
   ageColor(receivedAt: string) {
     return ageHeat(ageInDays(receivedAt));
   }
