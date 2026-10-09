@@ -447,13 +447,14 @@ export class App implements OnDestroy {
     // A passed row stays listed in All opportunities; its tick must not offer a second Pass.
     const passed = new Set(rows.map((row) => row.id));
     this.checked.update((ids) => new Set([...ids].filter((id) => !passed.has(id))));
-    if (passes.some(({ row }) => row.id === openId)) {
+    if (passed.has(openId)) {
       this.dirty.set(false);
       this.replying.set(false);
       this.editStatus = 'Passed';
     }
     const after = this.visible();
-    if (position >= 0 && !after.some((group) => group.representative.id === openId)) {
+    // Only a passed open pitch moves the pane; an open pitch deeper in a group is not a representative.
+    if (position >= 0 && passed.has(openId) && !after.some((group) => group.representative.id === openId)) {
       // The open job's group if it is still listed, else the nearest one below it, else above it.
       const order = [...before.slice(position), ...before.slice(0, position).reverse()];
       const next = order.map((group) => after.find((item) => item.id === group.id)).find(Boolean);
