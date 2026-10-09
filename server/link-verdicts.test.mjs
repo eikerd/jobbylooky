@@ -23,12 +23,15 @@ test('Indeed’s own state decides open or closed, with the posting dates', () =
   // A template without isJobExpired still carries showExpiredHeader.
   assert.equal(indeedVerdict({ ...base, html: '{"expiredJobMetadataModel":null,"showExpiredHeader":true}' }).result, 'closed');
   assert.equal(indeedVerdict({ ...base, html: '{"expiredJobMetadataModel":null,"showExpiredHeader":false}' }).result, 'live');
+  assert.equal(indeedVerdict({ ...base, html: '{"showExpiredHeader":false,"i18n":"This job has expired on Indeed"}' }).result, 'live');
 });
 
 test('a block page or sign-in wall proves nothing', () => {
   assert.equal(indeedVerdict({ status: 403, title: 'Blocked - Indeed.com', url: 'https://www.indeed.com/viewjob?jk=1', html: '' }).result, 'unknown');
   assert.equal(indeedVerdict({ status: 200, title: 'Sign in', url: 'https://www.indeed.com/account/login?from=bot-detection-anonymous', html: page('false') }).result, 'unknown');
-  assert.equal(indeedVerdict({ status: 200, title: 'Indeed', url: 'https://www.indeed.com/jobs', html: '<p>Search</p>' }).result, 'unknown');
+  assert.equal(indeedVerdict({ status: 200, title: 'Indeed', url: 'https://www.indeed.com/jobs', html: '<p>Search</p>' }).blocked, undefined);
+  // Cloudflare's challenge: the sweep stops visiting Indeed for the rest of the run.
+  assert.equal(indeedVerdict({ status: 403, title: 'Just a moment...', url: 'https://www.indeed.com/viewjob?jk=1', html: 'Additional Verification Required' }).blocked, true);
 });
 
 test('other links: 404 and vanished domains are dead, refusals prove nothing, posting text can close a job', () => {

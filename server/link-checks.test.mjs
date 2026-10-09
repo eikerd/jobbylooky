@@ -35,30 +35,52 @@ test('the index lists unpassed pitches with their visitable links and the job ke
     ]);
   }));
 
-test('a closed posting passes a New pitch once, with its posted and closed dates for the page', () =>
+test('a posting closed on two different days passes a New pitch once, with its dates for the page', () =>
   withChecks((open) => {
     const checks = open();
     const rows = [pitch('a'), pitch('kept', 'Maybe')];
-    checks.record({ results: [result(VIEW, 'closed', '2026-10-09T09:00:00Z', { postedAt: '2026-08-18T16:14:51Z' })] }, rows);
+    const sweep = (at) => checks.record({ results: [result(VIEW, 'closed', at, { postedAt: '2026-08-18T16:14:51Z' })] }, rows);
+    sweep('2026-10-09T09:00:00Z');
+    sweep('2026-10-09T15:00:00Z');
+    assert.deepEqual(checks.dueToPass(rows), [], 'two readings on one day are one');
+    sweep('2026-10-10T09:00:00Z');
     assert.deepEqual(checks.dueToPass(rows), [{ id: 'a', reason: 'closed' }]);
-    checks.markPassed('a', 'closed', '2026-10-09T09:01:00Z');
+    checks.markPassed('a', 'closed', '2026-10-10T09:01:00Z');
     // Moved back to New by the owner: not passed a second time.
     assert.deepEqual(checks.dueToPass(rows), []);
     const [a, kept] = open().attach(rows);
-    assert.deepEqual(a.autoPassed, { at: '2026-10-09T09:01:00Z', reason: 'closed' });
+    assert.deepEqual(a.autoPassed, { at: '2026-10-10T09:01:00Z', reason: 'closed' });
     assert.equal(kept.autoPassed, undefined);
     assert.deepEqual(kept.linkChecks[0], {
       url: VIEW, kind: 'posting', host: 'cts.indeed.com', jobKey: null, status: 'closed', postedAt: '2026-08-18T16:14:51.000Z',
-      closedAt: '2026-10-09T09:00:00.000Z', checkedAt: '2026-10-09T09:00:00.000Z', httpStatus: null,
+      closedAt: '2026-10-09T09:00:00.000Z', checkedAt: '2026-10-10T09:00:00.000Z', httpStatus: null,
     });
     assert.equal(kept.linkChecks[1].status, 'unchecked');
   }));
 
-test('a link is dead only after two sweeps in a row; a live one in between starts over', () =>
+test('a pitch the owner engaged with, or brought back from Passed, is never passed by the sweep', () =>
+  withChecks((open) => {
+    const checks = open();
+    const rows = [
+      { ...pitch('replied'), replies: [{ to: 'r@x.com' }] },
+      { ...pitch('noted'), notes: 'call Friday' },
+      { ...pitch('follow'), followUp: '2026-10-12' },
+      { ...pitch('voicemail'), voicemails: [{ id: 'v' }] },
+      { ...pitch('answer'), respondsTo: 'gmail:x' },
+      pitch('restored'),
+      pitch('plain'),
+    ];
+    checks.keep('restored');
+    for (const at of ['2026-10-09T09:00:00Z', '2026-10-10T09:00:00Z']) checks.record({ results: [result(VIEW, 'closed', at)] }, rows);
+    assert.deepEqual(checks.dueToPass(rows), [{ id: 'plain', reason: 'closed' }]);
+  }));
+
+test('a link is dead only on two different days; a live reading in between starts over', () =>
   withChecks((open) => {
     const checks = open();
     const rows = [pitch('a', 'New', `View job: ${VIEW}`)];
     const sweep = (outcome, day) => checks.record({ results: [result(VIEW, outcome, `2026-10-${day}T09:00:00Z`, { httpStatus: 404 })] }, rows);
+    sweep('dead', '01');
     sweep('dead', '01');
     assert.deepEqual(checks.dueToPass(rows), []);
     sweep('live', '02');

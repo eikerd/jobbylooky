@@ -26,13 +26,14 @@ export const postingDates = (html) => ({ postedAt: field(html, 'datePosted'), va
  */
 export function indeedVerdict({ status, title, url, html }) {
   if (status === 404 || status === 410) return { result: 'dead', httpStatus: status };
-  if (/blocked/i.test(title) || /\/account\/login|bot-detection/.test(url))
-    return { result: 'unknown', httpStatus: status, error: 'Indeed asked for a sign-in or blocked the page.' };
+  if (/blocked|just a moment|verification/i.test(title) || /\/account\/login|bot-detection/.test(url) || /Additional Verification Required/.test(html))
+    return { result: 'unknown', httpStatus: status, blocked: true, error: 'Indeed asked for a sign-in or blocked the page.' };
   // showExpiredHeader is on every job page template; isJobExpired only on some.
   const expired = /"(?:showExpiredHeader|isJobExpired)"\s*:\s*(true|false)/.exec(html)?.[1];
   const dates = postingDates(html);
-  if (expired === 'true' || /This job has expired on Indeed/i.test(html)) return { result: 'closed', httpStatus: status, ...dates };
+  // Indeed's own flag first: the phrase alone could sit in a live page's text bundle.
   if (expired === 'false') return { result: 'live', httpStatus: status, ...dates };
+  if (expired === 'true' || /This job has expired on Indeed/i.test(html)) return { result: 'closed', httpStatus: status, ...dates };
   return { result: 'unknown', httpStatus: status, error: 'Indeed’s page did not say whether the job is open.' };
 }
 
@@ -46,6 +47,7 @@ const CLOSED_TEXT =
  * and server errors prove nothing.
  */
 export function webVerdict({ kind, status, html = '', error }) {
+  // The sweep passes ENOTFOUND only when the Mac's DNS answers for other names.
   if (error) return error === 'ENOTFOUND' ? { result: 'dead', httpStatus: null, error: 'The domain no longer exists.' } : { result: 'unknown', httpStatus: null, error };
   if (status === 404 || status === 410) return { result: 'dead', httpStatus: status };
   if (status < 200 || status >= 400) return { result: 'unknown', httpStatus: status, error: `HTTP ${status}` };

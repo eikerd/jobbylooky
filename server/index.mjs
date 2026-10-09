@@ -59,9 +59,11 @@ async function sync() {
  */
 function passEndedJobs() {
   const passed = [];
-  for (const { id, reason } of linkChecks.dueToPass(store.snapshot().opportunities)) {
-    const row = store.update(id, { status: 'Passed' });
+  // With their voicemails: a pitch with one is the owner's to decide on.
+  for (const { id, reason } of linkChecks.dueToPass(voicemails.attach(store.snapshot().opportunities))) {
+    // Recorded first: a crash after it leaves a reason and a retry, never a silent Pass.
     linkChecks.markPassed(id, reason);
+    const row = store.update(id, { status: 'Passed' });
     if (gmailIds(row.messageIds).length) store.setTrashPending(id, true);
     passed.push(id);
   }
@@ -293,6 +295,7 @@ export const server = createServer(async (req, res) => {
         const id = decodeURIComponent(url.pathname.slice('/api/opportunities/'.length));
         const before = store.snapshot().opportunities.find((item) => item.id === id)?.status;
         const row = store.update(id, await body(req));
+        if (before === 'Passed' && row.status !== 'Passed') linkChecks.keep(id);
         // A pasted email has no Gmail message to delete, so it never needs Gmail.
         if (row.status !== 'Passed' || !gmailIds(row.messageIds).length || (before === 'Passed' && !row.trashPending))
           return json(200, decorate([row])[0]);

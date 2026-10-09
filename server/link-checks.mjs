@@ -8,8 +8,10 @@ import { jobLinks } from './job-links.mjs';
 // or the posting doesn't exist anymore … we can just delete them".
 
 const RESULTS = ['live', 'closed', 'dead', 'unknown'];
-// One 404 can be a site's bad hour; a link is dead only on two daily sweeps in a row.
-const DEAD_AFTER = 2;
+// One 404 or one odd page can be a site's bad hour: a link has ended only once sweeps on two
+// different days said so, with no open reading in between. Two runs on one day count once.
+const ENDED_AFTER_DAYS = 2;
+const day = (iso) => iso.slice(0, 10);
 const MAX_RESULTS = 500;
 const invalid = (message) => Object.assign(new Error(message), { status: 400 });
 const isoOrNull = (value, name) => {
@@ -42,6 +44,11 @@ function validResult(input) {
   };
 }
 
+const ended = (record) => record?.status === 'closed' || record?.status === 'dead';
+/** Anything the owner did with a pitch: then it is theirs to pass, not the sweep's. */
+const engaged = (row) =>
+  Boolean(row.replies?.length || row.notes?.trim() || row.nextAction?.trim() || row.followUp || row.voicemails?.length || row.respondsTo);
+
 /** A record updated by one sweep's result. Unknown (blocked, timed out) leaves the verdict alone. */
 function apply(record, incoming) {
   const next = {
@@ -55,24 +62,22 @@ function apply(record, incoming) {
     postedAt: incoming.postedAt ?? record.postedAt ?? null,
     validThrough: incoming.validThrough ?? record.validThrough ?? null,
   };
-  if (incoming.result === 'live') return { ...next, status: 'live', closedAt: null, deadStreak: 0, deadSince: null };
-  if (incoming.result === 'closed')
-    return { ...next, status: 'closed', closedAt: record.status === 'closed' ? record.closedAt : incoming.checkedAt, deadStreak: 0, deadSince: null };
-  if (incoming.result === 'dead') {
-    const deadStreak = (record.deadStreak ?? 0) + 1;
-    const deadSince = record.deadSince ?? incoming.checkedAt;
-    if (deadStreak < DEAD_AFTER) return { ...next, deadStreak, deadSince };
-    return { ...next, deadStreak, deadSince, status: 'dead', closedAt: record.status === 'dead' ? record.closedAt : deadSince };
+  if (incoming.result === 'live') return { ...next, status: 'live', closedAt: null, endedDays: [], endedSince: null };
+  if (incoming.result === 'closed' || incoming.result === 'dead') {
+    const endedDays = [...new Set([...(record.endedDays ?? []), day(incoming.checkedAt)])];
+    const endedSince = record.endedSince ?? incoming.checkedAt;
+    if (endedDays.length < ENDED_AFTER_DAYS) return { ...next, endedDays, endedSince };
+    return { ...next, endedDays, endedSince, status: incoming.result, closedAt: ended(record) ? record.closedAt : endedSince };
   }
   return next;
 }
 
-const ended = (record) => record?.status === 'closed' || record?.status === 'dead';
 
 export function createLinkChecks(directory) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const path = join(directory, 'link-checks.json');
   let state = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { links: {}, autoPassed: {} };
+  state.kept ??= {};
   function commit(next) {
     writeFileSync(`${path}.tmp`, JSON.stringify(next, null, 2), { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
@@ -109,12 +114,12 @@ export function createLinkChecks(directory) {
     },
     /**
      * New pitches whose postings have all ended, with why. Pitches the owner kept (Maybe, Pursue
-     * and after) are only flagged; one passed automatically before is never passed again, so
-     * moving it back to New sticks.
+     * and after), engaged with (a reply, notes, a follow-up, a voicemail) or brought back from
+     * Passed are only flagged; one passed automatically before is never passed again.
      */
     dueToPass(rows) {
       return rows.flatMap((row) => {
-        if (row.status !== 'New' || state.autoPassed[row.id]) return [];
+        if (row.status !== 'New' || state.autoPassed[row.id] || state.kept[row.id] || engaged(row)) return [];
         const postings = linksOf(row).filter((link) => link.kind === 'posting').map((link) => state.links[link.url]);
         if (!postings.length || !postings.every(ended)) return [];
         const closed = postings.some((record) => record.status === 'closed');
@@ -122,6 +127,10 @@ export function createLinkChecks(directory) {
       });
     },
     wasAutoPassed: (id) => Boolean(state.autoPassed[id]),
+    /** The owner moved a pitch out of Passed: the sweep never passes it again. */
+    keep(id) {
+      if (!state.kept[id]) commit({ ...state, kept: { ...state.kept, [id]: new Date().toISOString() } });
+    },
     markPassed(id, reason, at = new Date().toISOString()) {
       commit({ ...state, autoPassed: { ...state.autoPassed, [id]: { at, reason } } });
     },

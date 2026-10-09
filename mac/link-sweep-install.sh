@@ -35,5 +35,10 @@ cat > "$plist" <<PLIST
 </plist>
 PLIST
 launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$plist"
+# The old service can still be tearing down ("Input/output error: 5"); give it a few seconds.
+for attempt in 1 2 3 4 5; do
+  launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null && break
+  [ "$attempt" = 5 ] && { launchctl bootstrap "gui/$(id -u)" "$plist"; exit 1; }
+  sleep 1
+done
 echo "Installed $label: $dest, log $log"

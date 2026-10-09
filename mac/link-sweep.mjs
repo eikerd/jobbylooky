@@ -9,6 +9,7 @@
 // Indeed refuses scripts and headless browsers (HTTP 401/403), so its job pages are read in
 // the Mac's own Google Chrome, in a window of its own profile. Everything else is fetched.
 
+import { lookup } from 'node:dns/promises';
 import { chromium } from 'playwright-core';
 import { indeedJobKey, indeedVerdict, webVerdict } from '../server/link-verdicts.mjs';
 
@@ -18,8 +19,9 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 const FETCH_TIMEOUT_MS = 20000;
 const WEB_CONCURRENCY = 4;
 const MAX_HTML_BYTES = 1024 * 1024;
-// The server takes 500 results per push; 100 keeps a batch of Indeed's long links under its 150 KB body limit.
-const PUSH_BATCH = 100;
+// The server's body limit is 150 KB; safelinks and tracker URLs run to 2 KB each, so batches are cut by size.
+const PUSH_BYTES = 100 * 1024;
+const PUSH_MAX = 500;
 // A person's pace between Indeed pages, so one run does not look like a crawl.
 const pause = () => new Promise((done) => setTimeout(done, 2000 + Math.random() * 2000));
 
@@ -46,7 +48,17 @@ async function readSome(response) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function checkWeb(link) {
+/** A missing domain proves a link dead only while DNS answers for names that surely exist. */
+async function dnsAnswers() {
+  try {
+    await lookup('www.indeed.com');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function checkWeb(link, dnsWorks) {
   try {
     const response = await fetch(link.target ?? link.url, {
       headers: { 'User-Agent': UA, Accept: 'text/html,*/*' },
@@ -57,7 +69,8 @@ async function checkWeb(link) {
     if (!html) await response.body?.cancel().catch(() => {});
     return webVerdict({ kind: link.kind, status: response.status, html });
   } catch (error) {
-    return webVerdict({ kind: link.kind, error: error.cause?.code ?? error.name ?? 'fetch failed' });
+    const code = error.cause?.code ?? error.name ?? 'fetch failed';
+    return webVerdict({ kind: link.kind, error: code === 'ENOTFOUND' && !dnsWorks ? 'DNS not answering' : code });
   }
 }
 
@@ -98,7 +111,10 @@ async function readPage(page, url, verdict, ready) {
   }
 }
 // Indeed's job data, or a page that will never carry it.
-const indeedReady = () => /"(showExpiredHeader|isJobExpired)"/.test(document.documentElement.innerHTML) || /blocked|sign in/i.test(document.title) || /\/account\/login/.test(location.pathname);
+const indeedReady = () =>
+  /"(showExpiredHeader|isJobExpired)"|Additional Verification Required/.test(document.documentElement.innerHTML) ||
+  /blocked|sign in/i.test(document.title) ||
+  /\/account\/login/.test(location.pathname);
 const pageReady = () => document.readyState === 'complete';
 
 async function pool(items, size, work) {
@@ -117,41 +133,59 @@ async function main() {
   // Indeed: each tracker resolved once to its job key, then each job's page read once.
   const byJob = new Map();
   for (const link of [...links.values()].filter((item) => item.board === 'indeed')) {
-    const resolved = link.jobKey ? { jobKey: link.jobKey } : indeedJobKey(link.url) ? { jobKey: indeedJobKey(link.url) } : await resolveIndeed(link.url);
+    const address = link.target ?? link.url;
+    const resolved = link.jobKey ? { jobKey: link.jobKey } : indeedJobKey(address) ? { jobKey: indeedJobKey(address) } : await resolveIndeed(address);
     if (resolved.verdict) report(link, resolved.verdict);
     else byJob.set(resolved.jobKey, [...(byJob.get(resolved.jobKey) ?? []), link]);
   }
   const browserLinks = [...links.values()].filter((item) => item.board === 'browser');
-  await pool([...links.values()].filter((item) => item.board === 'web'), WEB_CONCURRENCY, async (link) => report(link, await checkWeb(link)));
+  const dnsWorks = await dnsAnswers();
+  await pool([...links.values()].filter((item) => item.board === 'web'), WEB_CONCURRENCY, async (link) => report(link, await checkWeb(link, dnsWorks)));
 
   if (byJob.size || browserLinks.length) {
-    // headless Chrome is refused by Indeed outright; a visible window of the real browser is not.
-    const browser = await chromium.launch({ channel: 'chrome', headless: false });
-    try {
-      // Each page in a fresh profile with no cookies: once Indeed has set its cookies (its front
-      // page does, and so does its first job page), the next job page is a sign-in wall.
-      const visit = async (url, verdict, ready) => {
-        const context = await browser.newContext();
-        try {
-          return await readPage(await context.newPage(), url, verdict, ready);
-        } finally {
-          await context.close();
+    // Headless Chrome is refused by Indeed outright; a visible window of the real browser is
+    // not. No window possible (the Mac half awake, the screen locked): those links are unknown
+    // today, and everything fetched is still reported.
+    const browser = await chromium.launch({ channel: 'chrome', headless: false }).catch((error) => {
+      const verdict = { result: 'unknown', httpStatus: null, error: `Chrome did not start: ${String(error.message).split('\n')[0].slice(0, 150)}` };
+      for (const group of byJob.values()) for (const link of group) report(link, verdict);
+      for (const link of browserLinks) report(link, verdict);
+      return null;
+    });
+    if (browser) {
+      try {
+        // Each page in a fresh profile with no cookies: once Indeed has set its cookies (its front
+        // page does, and so does its first job page), the next job page is a sign-in wall.
+        const visit = async (url, verdict, ready) => {
+          const context = await browser.newContext();
+          try {
+            return await readPage(await context.newPage(), url, verdict, ready);
+          } finally {
+            await context.close();
+          }
+        };
+        let blocked = false;
+        for (const [jobKey, group] of byJob) {
+          const url = `https://www.indeed.com/viewjob?jk=${jobKey}`;
+          // Once Indeed blocks or challenges the Mac, every further visit only deepens the block:
+          // the rest wait for tomorrow. A challenge is never answered by the sweep.
+          let verdict = blocked
+            ? { result: 'unknown', httpStatus: null, error: 'Skipped: Indeed blocked an earlier page in this run.' }
+            : await visit(url, indeedVerdict, indeedReady);
+          // A challenge that did not settle in time usually does on a second, fresh visit.
+          if (verdict.result === 'unknown' && !verdict.blocked && !blocked) verdict = await pause().then(() => visit(url, indeedVerdict, indeedReady));
+          if (verdict.blocked) blocked = true;
+          const { blocked: _, ...reported } = verdict;
+          for (const link of group) report(link, reported, { jobKey });
+          if (!blocked) await pause();
         }
-      };
-      for (const [jobKey, group] of byJob) {
-        const url = `https://www.indeed.com/viewjob?jk=${jobKey}`;
-        let verdict = await visit(url, indeedVerdict, indeedReady);
-        // A challenge that did not settle in time usually does on a second, fresh visit.
-        if (verdict.result === 'unknown') verdict = await pause().then(() => visit(url, indeedVerdict, indeedReady));
-        for (const link of group) report(link, verdict, { jobKey });
-        await pause();
+        for (const link of browserLinks) {
+          report(link, await visit(link.target ?? link.url, ({ status, html }) => webVerdict({ kind: 'posting', status, html }), pageReady));
+          await pause();
+        }
+      } finally {
+        await browser.close();
       }
-      for (const link of browserLinks) {
-        report(link, await visit(link.url, ({ status, html }) => webVerdict({ kind: 'posting', status, html }), pageReady));
-        await pause();
-      }
-    } finally {
-      await browser.close();
     }
   }
 
@@ -161,12 +195,23 @@ async function main() {
     console.log(`  ${result.padEnd(7)} ${httpStatus ?? ''} ${url.slice(0, 100)}${error ? ` (${error})` : ''}`);
   if (DRY_RUN) return;
   const autoPassed = [];
-  // An empty sweep still sends one final batch, so pitches whose links are all known get passed.
-  for (let start = 0; start === 0 || start < results.length; start += PUSH_BATCH) {
+  const batches = [[]];
+  let size = 0;
+  for (const result of results) {
+    const bytes = Buffer.byteLength(JSON.stringify(result)) + 1;
+    if (batches.at(-1).length && (size + bytes > PUSH_BYTES || batches.at(-1).length >= PUSH_MAX)) {
+      batches.push([]);
+      size = 0;
+    }
+    batches.at(-1).push(result);
+    size += bytes;
+  }
+  // The last batch is marked final, even an empty one: only then are a pitch's links all from today.
+  for (const [index, batch] of batches.entries()) {
     const answer = await api('links/results', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ results: results.slice(start, start + PUSH_BATCH), final: start + PUSH_BATCH >= results.length }),
+      body: JSON.stringify({ results: batch, final: index === batches.length - 1 }),
     });
     autoPassed.push(...answer.autoPassed);
   }

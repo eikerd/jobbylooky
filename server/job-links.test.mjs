@@ -31,6 +31,24 @@ test('unsubscribe, opt-out, interest replies and surveys are never visited', () 
     assert.equal(classify(url, label), null, url);
 });
 
+test('unlabelled token links are never visited, even under a line asking to stop emails', () => {
+  assert.deepEqual(jobLinks('To stop emails, click here:\nhttps://app.recruitco.com/u/8f3a9c'), []);
+  for (const url of ['https://mailchi.mp/abc123/xyz', 'https://acme.com/remove?e=a@b.com', 'https://acme.com/stop?e=1', 'https://acme.com/?u=1'])
+    assert.equal(classify(url), null, url);
+  assert.equal(classify('https://acme.com/', 'Remove me'), null);
+  const wrapped = `https://nam02.safelinks.protection.outlook.com/?url=${encodeURIComponent('https://app.recruitco.com/u/8f3a9c')}`;
+  assert.equal(classify(wrapped), null);
+});
+
+test('an email cannot point the Mac at its own network', () => {
+  for (const url of ['http://192.168.1.1/', 'http://localhost:4317/', 'http://chungus.local/', 'http://router/', 'https://acme.com:8443/', 'http://[::1]/', 'https://chungus.tail1d505c.ts.net/'])
+    assert.equal(classify(url), null, url);
+});
+
+test('a link alone on its line takes the line above as its label', () => {
+  assert.deepEqual(jobLinks('View job:\nhttps://cts.indeed.com/v3/H4sIAAAAAAAA_x').map((link) => link.label), ['View job']);
+});
+
 test('a careers path that says "manage" is still a posting', () => {
   assert.deepEqual(classify('https://acme.com/careers/project-manager-12345'), { kind: 'posting', board: 'web' });
 });

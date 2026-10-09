@@ -20,7 +20,7 @@ function trimUrl(raw) {
 
 // A label or address that marks a link as doing something when it is opened.
 const ACTION_WORDS =
-  /unsubscri|opt[\s-]?out|optout|preferences|settings|manage|privacy|terms|help|support|feedback|survey|contact us|edit profile|recent work experience|base pay|interested|click here|report|learn why|view people|request_unsubscribe|mypreferences|^(yes|no|maybe|location)\b/i;
+  /unsubscri|opt[\s-]?out|optout|preferences|settings|manage|privacy|terms|help|support|feedback|survey|remove me|stop (receiving|emails)|contact us|edit profile|recent work experience|base pay|interested|click here|report|learn why|view people|request_unsubscribe|mypreferences|^(yes|no|maybe|location)\b/i;
 // In an address only these: a careers path such as /project-manager-123 says "manage" too.
 const ACTION_PATHS = /unsubscri|opt[-_]?out|preferences|settings|survey|feedback|respon[sd]|confirm|accept|decline/i;
 const ACTION_HOSTS = /^(unsubscribe\.|.*surveymonkey\.com$|myaccount\.google\.com$)/i;
@@ -29,6 +29,8 @@ const SKIP_HOSTS = /(^|\.)(facebook|instagram|x|twitter|youtube|bilibili|weixin\
 // Click trackers hide where they lead; one is visited only when its label says it is the job.
 const TRACKER = /^(clicks?\.|url\d+\.|email\.|links?\.|c\.gle$|c\.apple\.com$)|\/ls\/click|\/wf\/click/i;
 const IMAGE = /\.(png|jpe?g|gif|svg|webp|ico)$/i;
+// An email must not steer the Mac at its own network: IP literals, localhost, .local, bare names.
+const PRIVATE_HOST = /^(\d+\.\d+\.\d+\.\d+|\[.*\]|localhost|[^.]+|.*\.(local|localhost|internal|lan|home|ts\.net))$/i;
 const POSTING_LABEL = /view (the )?job\b|job details|job description|job link|job posting|apply (now|here|online|to this|for this)\b/i;
 const POSTING_URL =
   /greenhouse\.io|lever\.co|myworkdayjobs\.com|icims\.com|smartrecruiters\.com|ashbyhq\.com|jobvite\.com|workable\.com|ziprecruiter\.com\/(c|jobs?)\/|dice\.com\/job-detail|linkedin\.com\/(comm\/)?jobs\/view\/\d|\/(job|jobs|careers?|positions?|openings?|requisitions?)\/[^/?#]*\d|\/job-?details?\b|[?&](jk|jobid|job_id|gh_jid|reqid)=/i;
@@ -66,9 +68,11 @@ export function classify(url, label = '') {
   const inner = unwrap(url);
   if (inner) {
     const judged = classify(inner, label);
-    return judged && { ...judged, target: inner };
+    // A wrapper inside a wrapper: the innermost address is the one judged and fetched.
+    return judged && { ...judged, target: judged.target ?? inner };
   }
-  const host = parsed.host.toLowerCase();
+  const host = parsed.hostname.toLowerCase();
+  if (PRIVATE_HOST.test(host) || parsed.port) return null;
   const text = label.trim();
   if (ACTION_WORDS.test(text) || ACTION_PATHS.test(parsed.pathname + parsed.search) || ACTION_HOSTS.test(host)) return null;
   // Ceipal's /articles/ links are the logos embedded in recruiters' signatures.
@@ -83,23 +87,30 @@ export function classify(url, label = '') {
   if (TRACKER.test(host) || TRACKER.test(parsed.pathname))
     return POSTING_LABEL.test(text) ? { kind: 'posting', board: 'web' } : null;
   if (POSTING_URL.test(url) || POSTING_LABEL.test(text)) return { kind: 'posting', board: 'web' };
-  return { kind: 'other', board: 'web' };
+  // Default deny: only a site's home page is safe to open without knowing what it does.
+  return /^\/?$/.test(parsed.pathname) && !parsed.search ? { kind: 'other', board: 'web' } : null;
 }
 
-/** Every visitable link in an email body, once each, with the text before it on its line. */
+const tidy = (text) => text.replace(/^[\s\].,;:)\-–|]+|[\s:\-–|]+$/g, '').slice(-80);
+/**
+ * Every visitable link in an email body, once each, with the text before it on its line, or
+ * the line above when the link starts its line ("To stop emails, click here:" / <url>).
+ */
 export function jobLinks(body) {
   const found = new Map();
+  let above = '';
   for (const line of String(body ?? '').split('\n')) {
     let previous = 0;
     for (const match of line.matchAll(URL_PATTERN)) {
       const url = trimUrl(match[0]);
       // The label is the text since the previous link on the line ("View job: <url>").
-      const label = line.slice(previous, match.index).replace(/^[\s\].,;:)\-–|]+|[\s:\-–|]+$/g, '').slice(-80);
+      const label = tidy(line.slice(previous, match.index)) || (previous === 0 ? tidy(above) : '');
       previous = match.index + url.length;
       if (found.has(url)) continue;
       const kind = classify(url, label);
       if (kind) found.set(url, { url, label, ...kind });
     }
+    if (line.trim()) above = line;
   }
   return [...found.values()];
 }
