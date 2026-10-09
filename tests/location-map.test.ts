@@ -132,6 +132,8 @@ test('the work mode a location states, if any', () => {
     ["Dallas, TX - remote isn't available", 'Onsite'],
     ['Remote work is not permitted', 'Onsite'],
     ['Remote is not an option', 'Onsite'],
+    // A qualified "not" beside a remote schedule is a mix, not an office job (Codex, PR #26).
+    ["Remote isn't available Mondays; remote Tuesday-Friday", 'Hybrid'],
   ];
   for (const [location, mode] of cases) assert.equal(workMode(location), mode, location);
 });

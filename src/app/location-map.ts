@@ -136,7 +136,8 @@ export function workMode(location: string): WorkMode | null {
   const text = location.replace(notRemote, ' onsite ');
   const remote = /\bremote\b/i.test(text);
   const onsite = officeDays.test(text) || text !== location;
-  if (/\bhybrid\b/i.test(text) || (remote && onsite && text === location)) return 'Hybrid';
+  // A remote mention left after the "no remote" phrases are gone is a remote day beside office ones.
+  if (/\bhybrid\b/i.test(text) || (remote && onsite)) return 'Hybrid';
   if (onsite) return 'Onsite';
   return remote ? 'Remote' : null;
 }
