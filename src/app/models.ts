@@ -29,6 +29,24 @@ export interface Opportunity {
   voicemails?: PitchVoicemail[];
   /** A voicemail not yet seen: the pitch is pinned to the top until it is opened. */
   voicemailUnseen?: boolean;
+  /** What the Mac's daily link sweep found at each visitable link in the body. */
+  linkChecks?: LinkCheck[];
+  /** Set when the sweep passed the pitch because its postings had all closed. */
+  autoPassed?: { at: string; reason: 'closed' | 'dead' };
+}
+export interface LinkCheck {
+  url: string;
+  /** 'posting' is the job itself; 'other' links are only checked for being dead. */
+  kind: 'posting' | 'other';
+  /** The link's real destination host, without www. */
+  host: string;
+  /** Indeed's job key, once the sweep has resolved the tracker; one job, several emails. */
+  jobKey: string | null;
+  status: 'live' | 'closed' | 'dead' | 'unchecked';
+  postedAt: string | null;
+  closedAt: string | null;
+  checkedAt: string | null;
+  httpStatus: number | null;
 }
 export interface PitchVoicemail {
   id: string;

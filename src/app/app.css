@@ -584,7 +584,7 @@ textarea {
 .source-title { display:flex; gap:10px; align-items:flex-start; min-width:0; }
 .opportunity.full-time { border-left-color:var(--full-time); }
 .opportunity.full-time.selected { border-left-color:var(--select-edge); }
-.opportunity.full-time .row-heading, .role-title.full-time, .pitch.full-time .pitch-sender { color:var(--full-time); }
+.opportunity.full-time .row-heading, .role-title.full-time { color:var(--full-time); }
 /* Tracking links run to hundreds of characters; one clipped line keeps the body readable. */
 .url-line { display:inline-flex; width:100%; vertical-align:bottom; }
 /* The URL's huge shrink factor makes it give up width before its label wraps. */

@@ -1,0 +1,20 @@
+.postings { padding: 0 24px 24px; min-width: 0; }
+/* Wider than a phone: the table scrolls in its own box, never the page. */
+.postings-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
+.c-job { width: 29%; } .c-company { width: 17%; } .c-site { width: 12%; } .c-posted { width: 12%; }
+.c-days { width: 11%; } .c-status { width: 10%; } .c-checked { width: 9%; }
+th, td { padding: 7px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line); }
+th button { all: unset; cursor: pointer; font-weight: 800; font-size: 13px; color: var(--soft); white-space: nowrap; }
+th button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.arrow { margin-left: 4px; font-size: 10px; }
+.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--accent-soft); }
+tbody tr:last-child td { border-bottom: 0; }
+.job { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; font-weight: 700; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job:focus-visible { outline: 2px solid var(--accent-ink); }
+.state { font-size: 12px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
+.state.open { background: var(--accent-soft); color: var(--accent-ink); }
+.state.closed, .state.dead { background: var(--bad-soft); color: var(--bad); }
+.postings-empty { color: var(--soft); }

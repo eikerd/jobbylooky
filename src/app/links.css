@@ -1,0 +1,8 @@
+/* What the daily link sweep found: a posting still up, or a link that no longer leads anywhere. */
+.job-state { flex: none; font-size: 12px; font-weight: 800; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.job-state.open { background: var(--accent-soft); color: var(--accent-ink); }
+.job-state.closed, .job-state.dead { background: var(--bad-soft); color: var(--bad); }
+/* The link itself is gone from the page; this sits where it was. */
+.link-ended { flex: none; color: var(--bad); font-weight: 700; white-space: nowrap; }
+.link-open { flex: none; margin-left: 8px; color: var(--accent-ink); font-weight: 700; white-space: nowrap; }
+.auto-passed { margin: 4px 0 0; color: var(--bad); font-weight: 700; font-size: 14px; }
