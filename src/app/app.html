@@ -170,6 +170,12 @@
         <section class="queue" aria-label="Opportunities">
           @for (group of visible(); track group.id) {
             @let row = group.representative;
+            <div class="queue-item">
+            @if (row.status !== 'Passed') {
+              <label class="pick">
+                <input type="checkbox" [attr.aria-label]="'Select ' + row.title + ', ' + sender(row.from)" [checked]="checked().has(row.id)" (change)="toggleChecked(row.id)" [disabled]="busy()" />
+              </label>
+            }
             <button
               type="button"
               class="opportunity"
@@ -214,6 +220,7 @@
                 </span>
               }
             </button>
+            </div>
           } @empty {
             <div class="empty">
               <span class="empty-icon" aria-hidden="true">○</span>
@@ -227,9 +234,48 @@
               </p>
             </div>
           }
+          @if (checkedRows().length; as count) {
+            <div class="bulk-bar" role="toolbar" aria-label="Selected opportunities">
+              <button type="button" class="button secondary" (click)="passChecked()" [disabled]="busy()">Pass {{ count }} selected</button>
+              <button type="button" class="link-button" (click)="checked.set(emptyChecked)">Clear</button>
+            </div>
+          }
         </section>
         <section #detailPane class="detail" aria-label="Opportunity details">
           @if (selected(); as row) {
+            <div class="decisions" aria-label="Triage this opportunity">
+              <button
+                type="button"
+                class="button primary"
+                [class.chosen]="row.status === 'Pursue'"
+                (click)="save('Pursue')"
+                [disabled]="busy()"
+              >
+                ↗ Pursue</button
+              ><button
+                type="button"
+                class="button secondary"
+                [class.chosen]="row.status === 'Maybe'"
+                (click)="save('Maybe')"
+                [disabled]="busy()"
+              >
+                Maybe</button
+              ><button
+                type="button"
+                class="button secondary"
+                [class.chosen]="row.status === 'Passed'"
+                (click)="pass()"
+                aria-keyshortcuts="p"
+                [disabled]="busy()"
+              >
+                Pass
+              </button>
+              @if (connection()?.canReply && !replying()) {
+                <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
+                <button class="button secondary" type="button" (click)="void startReply(row, 'resume')">Reply with resume</button>
+                <button class="button secondary" type="button" (click)="void startReply(row, 'client')">Ask end client</button>
+              }
+            </div>
             <div class="detail-top">
               <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
               <span class="detail-links">
@@ -355,39 +401,6 @@
                 }
               </section>
             }
-            <div class="decisions" aria-label="Triage this opportunity">
-              <button
-                type="button"
-                class="button primary"
-                [class.chosen]="row.status === 'Pursue'"
-                (click)="save('Pursue')"
-                [disabled]="busy()"
-              >
-                ↗ Pursue</button
-              ><button
-                type="button"
-                class="button secondary"
-                [class.chosen]="row.status === 'Maybe'"
-                (click)="save('Maybe')"
-                [disabled]="busy()"
-              >
-                Maybe</button
-              ><button
-                type="button"
-                class="button secondary"
-                [class.chosen]="row.status === 'Passed'"
-                (click)="pass()"
-                aria-keyshortcuts="p"
-                [disabled]="busy()"
-              >
-                Pass
-              </button>
-              @if (connection()?.canReply && !replying()) {
-                <button class="button secondary" type="button" (click)="void startReply(row)">↩ Reply</button>
-                <button class="button secondary" type="button" (click)="void startReply(row, 'resume')">Reply with resume</button>
-                <button class="button secondary" type="button" (click)="void startReply(row, 'client')">Ask end client</button>
-              }
-            </div>
             @if (original(); as first) {
               <section class="answer-of" aria-label="Original pitch">
                 <p>↩ Answer to <button type="button" class="link-button" (click)="openProfilePitch(first.id)">{{ first.title }}</button></p>
