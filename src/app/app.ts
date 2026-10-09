@@ -2,9 +2,11 @@ import { Component, computed, signal, OnDestroy, ElementRef, viewChild } from '@
 import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ageInDays } from './age';
+import { ageHeat, ageInDays } from './age';
+import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
-import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail } from './models';
+import { daysUp, jobState } from './link-state';
+import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -12,6 +14,7 @@ import { CrayonPicker } from './crayon-picker.component';
 import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { LocationMaps } from './location-maps.component';
 import { SelectionPhrase } from './selection-phrase.component';
+import { Postings } from './postings.component';
 
 interface Connection {
   configured: boolean;
@@ -31,9 +34,9 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker, SelectionPhrase],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker, SelectionPhrase, Postings],
   templateUrl: './app.html',
-  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css'],
+  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
   host: { '[style]': 'phraseStyle()' },
 })
@@ -47,7 +50,7 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | null>(null);
   readonly profileMode = computed(() => {
     const mode = this.directoryMode();
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
@@ -159,23 +162,41 @@ export class App implements OnDestroy {
   readonly selectedGroup = computed(() =>
     this.jobGroups().find(group => group.pitches.some(row => row.id === this.selectedId())),
   );
+  readonly relatedColumns = RELATED_COLUMNS;
+  readonly relatedSort = signal(DEFAULT_RELATED_SORT);
+  /** Every email for the open job, as grid rows in the chosen order. */
+  readonly related = computed(() => {
+    const group = this.selectedGroup();
+    return group ? sortRelated(relatedRows(group), this.relatedSort()) : [];
+  });
+  sortRelatedBy(key: RelatedKey) {
+    this.relatedSort.update((sort) => nextRelatedSort(sort, key));
+  }
+  ariaSort(key: RelatedKey) {
+    const sort = this.relatedSort();
+    return sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
+  }
   readonly linkOptions = computed(() => this.jobGroups().filter(group => group.id !== this.selectedGroup()?.id));
 
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  readonly emailBlocks = computed(() => this.blocks(this.selected()?.body || ''));
+  readonly emailBlocks = computed(() => this.blocks(this.selected()));
   /** The pitch an answer row replies to, and whether its email is shown under the answer. */
   readonly original = computed(() => {
     const id = this.selected()?.respondsTo;
     return id ? this.opportunities().find((row) => row.id === id) : undefined;
   });
   readonly showOriginal = signal(false);
-  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()?.body || '') : []));
-  private blocks(body: string) {
-    return formatEmailBody(body).map((block) => ({
+  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()) : []));
+  /** The email as blocks, each link carrying what the daily link sweep found there. */
+  private blocks(row: Opportunity | undefined) {
+    const checks = new Map((row?.linkChecks ?? []).map((check) => [check.url, check]));
+    return formatEmailBody(row?.body || '').map((block) => ({
       ...block,
-      rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`),
+      rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`).map((line) =>
+        line.kind === 'links' ? { ...line, parts: line.parts.map((part) => ({ ...part, check: part.url ? checks.get(part.text) : undefined })) } : line,
+      ),
     }));
   }
   constructor() {
@@ -327,7 +348,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies' | 'phrases', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -773,6 +794,25 @@ export class App implements OnDestroy {
   }
   sourceText(body: string) {
     return body.replace(/\$/g, '');
+  }
+  readonly jobState = jobState;
+  /** Why the sweep passed a pitch, for the line under its title. */
+  autoPassedReason(row: Opportunity) {
+    if (row.autoPassed?.reason === 'dead') return 'its job link is dead';
+    const indeed = row.linkChecks?.some((check) => check.kind === 'posting' && check.status === 'closed' && /(^|\.)indeed\.com$/.test(check.host));
+    return indeed ? 'the job closed on Indeed' : 'the job posting closed';
+  }
+  /** "52d": how long a posting has been up, or nothing when its posted date is unknown. */
+  upFor(check: LinkCheck) {
+    const days = daysUp(check);
+    return days === null ? '' : `${days}d`;
+  }
+  /** The date pipe throws on a string it cannot parse; a fallback row can carry one. */
+  isDate(value: string) {
+    return Number.isFinite(Date.parse(value));
+  }
+  ageColor(receivedAt: string) {
+    return ageHeat(ageInDays(receivedAt));
   }
   ageLabel(receivedAt: string) {
     const days = ageInDays(receivedAt);
