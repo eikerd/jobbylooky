@@ -122,7 +122,9 @@ export function mapLocations(location: string): MapPlace[] {
 
 export type WorkMode = 'Remote' | 'Hybrid' | 'Onsite';
 
-const notRemote = /\b(?:no|not|non)[\s-]+remote\b|\bremote\s+not\s+(?:allowed|available|possible)\b/gi;
+// "Remote is not allowed" must not read as Remote (Codex, PR #23 round 3).
+const notRemote =
+  /\b(?:no|not|non)[\s-]+remote\b|\bremote(?:\s+work)?\s+(?:(?:is|are)\s+not|isn['’]t|aren['’]t|not)\s+(?:allowed|available|possible|permitted|offered|an\s+option)\b/gi;
 const officeDays = /\bon[\s-]?site\b|\bin[\s-]?(?:the\s+)?(?:client\s+)?office\b|\b\d\s*days?\s*(?:a|per|\/)\s*week\b|\boffice\s+\d\s*days?\b/i;
 
 /**
