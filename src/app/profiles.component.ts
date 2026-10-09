@@ -2,13 +2,13 @@ import { Component, computed, input, output, signal, effect, ElementRef, viewChi
 import { DatePipe } from '@angular/common';
 import type { JobGroup } from './models';
 import { buildProfiles } from './profiles';
-import { ageInDays } from './age';
+import { Age } from './age.component';
 import { LocationMaps } from './location-maps.component';
 import { officeLocations } from './location-map';
 
 @Component({
   selector:'app-profiles',
-  imports:[DatePipe, LocationMaps],
+  imports:[DatePipe, LocationMaps, Age],
   templateUrl:'./profiles.html',
   styleUrl:'./profiles.css',
 })
@@ -32,6 +32,5 @@ export class Profiles {
     effect(()=>{this.mode(); this.selectedId.set(this.focusId()); this.detail()?.nativeElement.scrollTo({top:0});});
   }
   select(id:string) { this.selectedId.set(id); this.detail()?.nativeElement.scrollTo({top:0}); }
-  age(date:string) { const days=ageInDays(date); return days===null ? 'Age unknown' : `${days} ${days===1?'day':'days'} old`; }
   companyLabel(id:string) { return this.directory().companies.find(p=>p.id===id)?.name || 'Unassigned company'; }
 }

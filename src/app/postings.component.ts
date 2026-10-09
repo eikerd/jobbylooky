@@ -1,12 +1,13 @@
 import { Component, computed, input, output, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
+import { Age } from './age.component';
 import type { Opportunity } from './models';
 import { postingRows, sortPostings, type PostingColumn } from './link-state';
 
 /** Every job posting the link sweep has read, to see how long jobs stay up. */
 @Component({
   selector: 'app-postings',
-  imports: [DatePipe],
+  imports: [DatePipe, Age],
   templateUrl: './postings.html',
   styleUrl: './postings.css',
 })

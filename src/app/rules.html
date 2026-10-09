@@ -87,7 +87,7 @@
           <tbody>
             @for (row of sortedMatches(); track row.pitch.id) {
               <tr (click)="openPitch.emit(row.pitch.id)">
-                <td><strong [style.color]="ageColor(row.pitch.receivedAt)">{{ ageLabel(row.pitch.receivedAt) }}</strong> · <time [attr.datetime]="row.pitch.receivedAt">{{ row.pitch.receivedAt | date: 'MMM d' }}</time></td>
+                <td><app-age [at]="row.pitch.receivedAt" /> · <time [attr.datetime]="row.pitch.receivedAt">{{ row.pitch.receivedAt | date: 'MMM d' }}</time></td>
                 <td><button type="button" class="job" (click)="openPitch.emit(row.pitch.id); $event.stopPropagation()">{{ row.pitch.title }}</button></td>
                 <td>{{ row.pitch.from }}</td>
                 <td>{{ row.pitch.status }}</td>

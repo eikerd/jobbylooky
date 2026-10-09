@@ -2,7 +2,7 @@ import { Component, DestroyRef, computed, effect, inject, input, output, signal 
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { Opportunity, RejectRule, RuleField, RuleMode } from './models';
-import { ageHeat, ageInDays } from './age';
+import { Age } from './age.component';
 import { compileRule, DEFAULT_TESTER_SORT, draftUnsaved, keptMatches, nextTesterSort, runTester, sortTester, type TesterKey, type RuleFields, type TesterResult, type TesterRow } from './reject-rules';
 
 export interface RuleDraft { id: string | null; name: string; pattern: string; field: RuleField }
@@ -29,7 +29,7 @@ export const hasRuleDraft = () =>
 /** Auto-reject rules and their tester. The tester only reads: it never changes or deletes mail. */
 @Component({
   selector: 'app-rules',
-  imports: [DatePipe, FormsModule],
+  imports: [DatePipe, FormsModule, Age],
   templateUrl: './rules.html',
   styleUrl: './rules.css',
 })
@@ -164,13 +164,6 @@ export class Rules {
     return sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
   }
 
-  ageLabel(receivedAt: string) {
-    const days = ageInDays(receivedAt);
-    return days === null ? 'Age unknown' : `${days} ${days === 1 ? 'day' : 'days'} old`;
-  }
-  ageColor(receivedAt: string) {
-    return ageHeat(ageInDays(receivedAt));
-  }
   canSave() {
     return !this.busy() && !this.tooSlow() && this.name().trim().length > 0 && this.compiled().regex !== null;
   }

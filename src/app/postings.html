@@ -20,10 +20,10 @@
               <td><button type="button" class="job" (click)="openPitch.emit(row.pitchId); $event.stopPropagation()">{{ row.title }}</button></td>
               <td>{{ row.company }}</td>
               <td>{{ row.site }}</td>
-              <td>@if (row.postedAt) {<time [attr.datetime]="row.postedAt">{{ row.postedAt | date: 'MMM d, y' }}</time>}</td>
+              <td>@if (row.postedAt) {<time [attr.datetime]="row.postedAt">{{ row.postedAt | date: 'MMM d, y' }}</time> · <app-age [at]="row.postedAt" />}</td>
               <td class="numeric">{{ row.daysOpen }}</td>
               <td><span [class]="'state ' + row.status.toLowerCase()">{{ row.status }}</span></td>
-              <td>@if (row.checkedAt) {<time [attr.datetime]="row.checkedAt">{{ row.checkedAt | date: 'MMM d' }}</time>}</td>
+              <td>@if (row.checkedAt) {<time [attr.datetime]="row.checkedAt">{{ row.checkedAt | date: 'MMM d' }}</time> · <app-age [at]="row.checkedAt" />}</td>
             </tr>
           }
         </tbody>

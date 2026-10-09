@@ -28,7 +28,7 @@
         <span><strong>{{ profile.jobs.length }}</strong> jobs</span>
         <span><strong>{{ profile.recentCount }}</strong> pitches in last 30 days</span>
       </div>
-      <p class="coverage">Imported history: {{ profile.firstSeen | date:'MMM d, y' }}–{{ profile.lastSeen | date:'MMM d, y' }}</p>
+      <p class="coverage">Imported history: {{ profile.firstSeen | date:'MMM d, y' }} (<app-age [at]="profile.firstSeen" />)–{{ profile.lastSeen | date:'MMM d, y' }} (<app-age [at]="profile.lastSeen" />)</p>
       @if (mode() === 'companies') {
         @if (company(); as firm) {
           @if (firm.kind === 'domain') {
@@ -50,10 +50,10 @@
         @for (job of profile.jobs; track job.id) {
           @let latest = job.pitches[0];
           <article class="profile-job">
-            <div class="job-heading"><h4>{{ latest.title }}</h4><span class="age">{{ age(latest.receivedAt) }}<time [attr.datetime]="latest.receivedAt">{{ latest.receivedAt | date:'MMM d, y' }}</time></span></div>
+            <div class="job-heading"><h4>{{ latest.title }}</h4><span class="age"><app-age [at]="latest.receivedAt" /><time [attr.datetime]="latest.receivedAt">{{ latest.receivedAt | date:'MMM d, y' }}</time></span></div>
             <p>{{ latest.company !== 'Not stated' ? latest.company + ' · ' : '' }}{{ latest.location }}</p>
             @if (job.history.occurrences > 1) {
-              <p class="overlap">First seen {{ job.history.firstSeen | date:'MMM d, y' }} · {{ job.history.spanDays }}-day span · longest gap {{ job.history.longestGapDays }} days</p>
+              <p class="overlap">First seen {{ job.history.firstSeen | date:'MMM d, y' }} (<app-age [at]="job.history.firstSeen" />) · {{ job.history.spanDays }}-day span · longest gap {{ job.history.longestGapDays }} days</p>
             }
             @if (job.totalPitches > 1) { <p class="overlap">{{ job.totalPitches }} pitches for this job across your inbox</p> }
             @for (pitch of job.pitches; track pitch.id) {

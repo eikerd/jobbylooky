@@ -2,7 +2,8 @@ import { Component, computed, signal, OnDestroy, ElementRef, viewChild } from '@
 import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ageHeat, ageInDays } from './age';
+import { ageText, daysSince } from './age';
+import { Age } from './age.component';
 import { conversationState } from './conversation';
 import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
@@ -36,7 +37,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -855,12 +856,9 @@ export class App implements OnDestroy {
   conversation(pitches: readonly Opportunity[]) {
     return conversationState(pitches);
   }
-  ageColor(receivedAt: string) {
-    return ageHeat(ageInDays(receivedAt));
-  }
-  ageLabel(receivedAt: string) {
-    const days = ageInDays(receivedAt);
-    return days === null ? 'Age unknown' : `${days} ${days === 1 ? 'day' : 'days'} old`;
+  /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
+  ageWords(date: string) {
+    return ageText(daysSince(date));
   }
   due(date: string) {
     const today = new Date();
