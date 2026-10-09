@@ -122,7 +122,9 @@ export function mapLocations(location: string): MapPlace[] {
 
 export type WorkMode = 'Remote' | 'Hybrid' | 'Onsite';
 
-const notRemote = /\b(?:no|not|non)[\s-]+remote\b|\bremote\s+not\s+(?:allowed|available|possible)\b/gi;
+// "Remote is not allowed" must not read as Remote (Codex, PR #23 round 3).
+const notRemote =
+  /\b(?:no|not|non)[\s-]+remote\b|\bremote(?:\s+work)?\s+(?:(?:is|are)\s+not|isn['’]t|aren['’]t|not)\s+(?:allowed|available|possible|permitted|offered|an\s+option)\b/gi;
 const officeDays = /\bon[\s-]?site\b|\bin[\s-]?(?:the\s+)?(?:client\s+)?office\b|\b\d\s*days?\s*(?:a|per|\/)\s*week\b|\boffice\s+\d\s*days?\b/i;
 
 /**
@@ -134,7 +136,8 @@ export function workMode(location: string): WorkMode | null {
   const text = location.replace(notRemote, ' onsite ');
   const remote = /\bremote\b/i.test(text);
   const onsite = officeDays.test(text) || text !== location;
-  if (/\bhybrid\b/i.test(text) || (remote && onsite && text === location)) return 'Hybrid';
+  // A remote mention left after the "no remote" phrases are gone is a remote day beside office ones.
+  if (/\bhybrid\b/i.test(text) || (remote && onsite)) return 'Hybrid';
   if (onsite) return 'Onsite';
   return remote ? 'Remote' : null;
 }

@@ -111,7 +111,7 @@ test('a company’s offices merge spellings of one address and rank by how often
 test('a location that does not map reads Remote only when it is remote or unknown', () => {
   for (const location of ['', 'Not stated', 'Remote', 'Remote (US)', '100% remote', '{JobPosting : city}, Texas', 'See https://cts.indeed.com/v3/abc'])
     assert.equal(unmappedLocation(location), 'Remote', location);
-  for (const location of ['Austin', 'Hybrid', 'Onsite', 'Multiple locations', 'New York (no remote)', 'Onsite, not remote', 'Hybrid/Remote', 'Hybrid, 2 days remote'])
+  for (const location of ['Austin', 'Hybrid', 'Onsite', 'Multiple locations', 'New York (no remote)', 'Onsite, not remote', 'Hybrid/Remote', 'Hybrid, 2 days remote', 'Remote is not allowed'])
     assert.equal(unmappedLocation(location), location, location);
 });
 test('the work mode a location states, if any', () => {
@@ -128,6 +128,12 @@ test('the work mode a location states, if any', () => {
     ['Denver, CO and work in the client Office 5 days per week.', 'Onsite'],
     ['New York (no remote)', 'Onsite'],
     ['Remote not allowed', 'Onsite'],
+    ['Remote is not allowed', 'Onsite'],
+    ["Dallas, TX - remote isn't available", 'Onsite'],
+    ['Remote work is not permitted', 'Onsite'],
+    ['Remote is not an option', 'Onsite'],
+    // A qualified "not" beside a remote schedule is a mix, not an office job (Codex, PR #26).
+    ["Remote isn't available Mondays; remote Tuesday-Friday", 'Hybrid'],
   ];
   for (const [location, mode] of cases) assert.equal(workMode(location), mode, location);
 });

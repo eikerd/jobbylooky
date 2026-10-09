@@ -8,6 +8,7 @@ pr: https://github.com/eikerd/jobbylooky/pull/24 (also landed #20, #25, #23)
 state: merged
 deployed: jobbylooky container on chungus.local; #20, #24 and #25 at f8f843e, md5-checked. The #23 deploy follows this note's merge in the same session; its md5 result is in the closing message to the owner
 loose_ends: 5 (listed below)
+follow_up: https://github.com/eikerd/jobbylooky/pull/26 fixes Codex's round-3 P2 on #23, read after the merge: "Remote is not allowed" displayed as "Remote"
 supersedes: none
 ---
 
@@ -58,7 +59,7 @@ src/app/selection-phrase.component.ts. #23 deploys after this note merges.
    elements isn't widened.
    (d) `placeAtSelection()` doesn't clamp the bottom edge, so on touch, after a scroll, the button
    can land off screen.
-3. `src/app/location-maps.component.ts` is no longer imported anywhere since #23. It's probably dead.
+3. (Corrected) `src/app/location-maps.component.ts` is still used by the profiles view; app.ts just stopped importing it in #23. It is not dead.
 4. The Gmail-thread cache lives in memory, so the first click after a restart takes 2–11 s.
 5. Figma: jobbylooky has no Figma file (the owner deferred it). #20's and #23's visual changes
    reached no Figma file.
