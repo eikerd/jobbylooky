@@ -13,6 +13,10 @@ const invalid = (message) => Object.assign(new Error(message), { status: 400 });
 // minutes on one subject. Matching runs in a vm context, whose timeout V8 does enforce on a regex,
 // so a runaway rule costs one sync a fraction of a second instead of freezing the server.
 const MATCH_TIMEOUT_MS = 100;
+// Per-match timeouts alone still add up: five slow rules over a batch of mail would each get a
+// fresh 100 ms per email. One mail check shares this budget, and a rule that times out once sits
+// out the rest of that check.
+const IMPORT_BUDGET_MS = 500;
 const PROBE_TIMEOUT_MS = 50;
 const PROBES = [`${'a'.repeat(40)}!`, `${'ab '.repeat(30)}!`, `${'1'.repeat(40)}!`, `${'a-'.repeat(30)}!`];
 const TIMED_OUT = Symbol('timed out');
@@ -61,15 +65,34 @@ export function ruleText(field, row) {
   return field === 'subject' ? subject : field === 'body' ? body : `${subject}\n${body}`;
 }
 
-/** The first matched text, or null; a match that runs too long counts as none. Mirrored by src/app/reject-rules.ts. */
-export function ruleMatch(rule, row) {
-  const found = timedMatch(rule.pattern, ruleText(rule.field, row), MATCH_TIMEOUT_MS);
+/** Regex time for one mail check, shared by every rule and email in it. */
+export function ruleBudget(totalMs = IMPORT_BUDGET_MS) {
+  return { left: totalMs, slow: new Set(), exhausted: false };
+}
+
+/**
+ * The first matched text, or null; a match that runs too long counts as none, and so does a rule
+ * the budget has benched or any rule once the budget is spent. Mirrored by src/app/reject-rules.ts.
+ */
+export function ruleMatch(rule, row, budget = ruleBudget(MATCH_TIMEOUT_MS)) {
+  const key = rule.id ?? rule.pattern;
+  if (budget.slow.has(key)) return null;
+  if (budget.left <= 0) {
+    if (!budget.exhausted) console.error('Reject rules ran out of time for this mail check; the rest of its emails were not checked.');
+    budget.exhausted = true;
+    return null;
+  }
+  const started = performance.now();
+  // vm timeouts are whole milliseconds and must be at least 1.
+  const found = timedMatch(rule.pattern, ruleText(rule.field, row), Math.max(1, Math.ceil(Math.min(MATCH_TIMEOUT_MS, budget.left))));
+  budget.left -= performance.now() - started;
   if (found !== TIMED_OUT) return found;
-  console.error(`Reject rule "${rule.name}" timed out and was skipped for one email.`);
+  budget.slow.add(key);
+  console.error(`Reject rule "${rule.name}" timed out and was skipped for the rest of this mail check.`);
   return null;
 }
 
 /** The first live rule that matches the pitch, or null. Test rules never reject anything. */
-export function liveRejection(rules, row) {
-  return (rules ?? []).find((rule) => rule.mode === 'live' && ruleMatch(rule, row) !== null) ?? null;
+export function liveRejection(rules, row, budget = ruleBudget()) {
+  return (rules ?? []).find((rule) => rule.mode === 'live' && ruleMatch(rule, row, budget) !== null) ?? null;
 }

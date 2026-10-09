@@ -5,7 +5,7 @@ import { groupOpportunities } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
 import { originalReceivedAt } from './received-date.mjs';
-import { validRule, liveRejection } from './reject-rules.mjs';
+import { validRule, liveRejection, ruleBudget } from './reject-rules.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -133,6 +133,8 @@ export function createStore(directory) {
     import(messages, { synced = false, account = null } = {}) {
       const next = structuredClone(state);
       let added = 0;
+      // One regex budget for the whole batch, so slow live rules cannot stall the server per email.
+      const budget = ruleBudget();
       const newRow = (message, id) => ({
         ...screen(message),
         id,
@@ -211,12 +213,12 @@ export function createStore(directory) {
           // New mail in a known thread meets the live rules too, judged on its own text. A rule never
           // overrides the owner: only an untouched New row with no reply from the owner is passed.
           const engaged = existing.status !== 'New' || existing.replies?.some((reply) => !reply.preview);
-          const rule = synced && !engaged ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }) : null;
+          const rule = synced && !engaged ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }, budget) : null;
           if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
         } else {
           const row = newRow(message, id);
           // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
-          const rule = synced ? liveRejection(next.rejectRules, row) : null;
+          const rule = synced ? liveRejection(next.rejectRules, row, budget) : null;
           // Pending before any delete starts, like a Pass from the page, so a failed delete is retried.
           if (rule) Object.assign(row, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
           next.opportunities.push(row);

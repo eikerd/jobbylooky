@@ -444,6 +444,16 @@ test('a live reject rule passes newly synced mail and names itself; test rules n
     // New mail only: the row that arrived while the rule was a test stays the owner's.
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta')).status, 'New');
   }));
+test('slow live rules share one regex budget per mail check instead of stalling on every email', () =>
+  withStore((store) => {
+    for (let i = 0; i < 5; i++) store.addRejectRule({ name: `Slow ${i}`, pattern: '^(x+)+$', field: 'subject', mode: 'live' });
+    const batch = Array.from({ length: 10 }, (_, i) => ({ ...message, id: `s${i}@x`, threadId: `ts${i}`, subject: `${'x'.repeat(40)}!` }));
+    const started = Date.now();
+    store.import(batch, { synced: true });
+    assert.ok(Date.now() - started < 1500, `took ${Date.now() - started} ms`);
+    // A rule that never finished never rejects: the mail lands for the owner to judge.
+    assert.equal(store.snapshot().opportunities.filter((row) => row.id.includes(':ts') && row.status === 'New').length, 10);
+  }));
 test('a pasted email is never auto-rejected, and bad rules are refused', () =>
   withStore((store) => {
     store.addRejectRule({ name: 'Angular', pattern: 'angular', mode: 'live' });
