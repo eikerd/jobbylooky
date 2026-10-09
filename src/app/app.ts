@@ -11,6 +11,7 @@ import { SourceIcon } from './source-icon.component';
 import { CrayonPicker } from './crayon-picker.component';
 import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { LocationMaps } from './location-maps.component';
+import { SelectionPhrase } from './selection-phrase.component';
 
 interface Connection {
   configured: boolean;
@@ -30,7 +31,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker, SelectionPhrase],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -189,7 +190,7 @@ export class App implements OnDestroy {
   private shortcut = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== 'p' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target;
-    if ((target instanceof Element && target.closest('input:not([type=checkbox]), textarea, select, [contenteditable]')) || this.directoryMode()) return;
+    if ((target instanceof Element && target.closest('input:not([type=checkbox]), textarea, select, [contenteditable], dialog')) || this.directoryMode()) return;
     event.preventDefault();
     void this.pass();
   };
@@ -412,6 +413,12 @@ export class App implements OnDestroy {
     if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
       this.phraseDraft = '';
   }
+  /** Text selected in a pitch and tracked from the selection modal. */
+  readonly trackSelection = async (phrase: string, kind: PhraseKind) => {
+    const saved = await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind }));
+    if (saved) this.toast(`Tracking “${phrase}” as ${this.phraseKindLabels[kind]}`);
+    return saved;
+  };
   // Optimistic: the crayon shows at once and is put back if the server refuses it. Each answer touches
   // only its own kind, and only while it is still that kind's latest pick, so a slow or failed earlier
   // request never undoes a newer crayon.
