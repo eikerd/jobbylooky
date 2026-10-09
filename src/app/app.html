@@ -294,6 +294,7 @@
             <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phrases()" /></h2>
             <p class="received-detail">
               <strong>{{ ageLabel(row.receivedAt) }}</strong>
+              <app-place-links [places]="locationMaps()" [scope]="row.id" />
               <span>{{ row.from }}</span>
               <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y, h:mm a' }}</time>
             </p>
@@ -371,9 +372,7 @@
                 }
               </span>
               <span>{{ row.company !== 'Not stated' ? row.company : 'Company not stated' }}</span>
-              <span>{{ row.location !== 'Not stated' ? row.location : 'Location not stated' }}</span>
             </p>
-            <app-location-maps [places]="locationMaps()" [scope]="row.id" />
             <ul class="fit-tags" aria-label="How it fits">
               @for (reason of fitTags(row); track $index) {
                 <li [class]="reasonTagClass(reason)" [attr.title]="reason.text"><span aria-hidden="true">{{ reasonMark(reason.kind) }}</span>{{ reason.label || reason.text }}</li>
