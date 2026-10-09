@@ -12,7 +12,7 @@ export const gmailIds = (messageIds) =>
  * them for 30 days. Same app password as replies (SMTP_USER/SMTP_PASS). Returns null
  * when it is not set up; MAIL_SEND_MODE=preview counts matches without touching Gmail.
  */
-export function createTrasher(env = process.env, connect = null) {
+export function createTrasher(env = process.env, connect = null, Imap = ImapFlow) {
   const user = env.SMTP_USER || '';
   const preview = env.MAIL_SEND_MODE === 'preview';
   if (!connect && !preview && !(user && env.SMTP_PASS)) return null;
@@ -21,7 +21,7 @@ export function createTrasher(env = process.env, connect = null) {
     (preview
       ? null
       : async () => {
-          const client = new ImapFlow({
+          const client = new Imap({
             host: env.IMAP_HOST || 'imap.gmail.com',
             port: Number(env.IMAP_PORT || 993),
             secure: true,
@@ -31,6 +31,10 @@ export function createTrasher(env = process.env, connect = null) {
             greetingTimeout: 15000,
             socketTimeout: 30000,
           });
+          // ImapFlow also emits failures (a refused login, a dropped socket) as 'error' events;
+          // with no listener Node treats that as uncaught and the whole server exits. The same
+          // failure still rejects connect() or the command in flight, which is where it is reported.
+          client.on('error', () => {});
           await client.connect();
           return client;
         });

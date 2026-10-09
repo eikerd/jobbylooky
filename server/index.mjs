@@ -9,6 +9,7 @@ import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 import { createTrasher, gmailIds } from './gmail-trash.mjs';
+import { createPassTrash } from './pass-trash.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
@@ -16,6 +17,7 @@ const workerUrl = process.env.MAIL_DATABASE_URL || '';
 const mailer = createMailer();
 const trasher = createTrasher();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
+const passTrash = createPassTrash({ store, trasher });
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 // An agent drops each new resume here; the newest file is what gets attached.
 const resumeDir = resolve(root, process.env.RESUME_DIR || resolve(root, process.env.DATA_DIR || 'data', 'resume'));
@@ -145,6 +147,16 @@ export const server = createServer(async (req, res) => {
       if (!row) return json(404, { error: 'Opportunity not found.' });
       return json(200, { to: replyRecipient(row, mailer?.from ?? '') });
     }
+    const trashPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/trash$/);
+    if (req.method === 'GET' && trashPath) {
+      const id = decodeURIComponent(trashPath[1]);
+      const outcome = await passTrash.outcome(id);
+      if (outcome) return json(200, outcome);
+      const row = store.snapshot().opportunities.find((item) => item.id === id);
+      if (!row) return json(404, { error: 'Opportunity not found.' });
+      // Nothing queued: the server restarted mid-delete, or the outcome was already collected.
+      return json(200, row.trashPending ? { ...row, trashError: 'Gmail did not finish deleting this email. Click Pass again to retry.' } : { ...row, trashed: 0, skipped: true });
+    }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
@@ -185,19 +197,13 @@ export const server = createServer(async (req, res) => {
         // A pasted email has no Gmail message to delete, so it never needs Gmail.
         if (row.status !== 'Passed' || !gmailIds(row.messageIds).length || (before === 'Passed' && !row.trashPending))
           return json(200, row);
-        // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved
-        // either way; a Gmail failure is reported, never hidden, and the next Pass retries it.
-        // Pending is written before IMAP starts, so a crash mid-delete still leaves a retry.
+        // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved now and
+        // the delete is queued; the page collects its outcome from GET …/trash. A Gmail failure
+        // is reported, never hidden, and the next Pass retries it. Pending is written before
+        // IMAP starts, so a crash mid-delete still leaves a retry.
         const pending = store.setTrashPending(id, true);
-        const failed = (reason) => json(200, { ...pending, trashError: `${reason} Click Pass again to retry.` });
-        if (!trasher) return failed('Gmail is not set up: SMTP_USER and SMTP_PASS are missing.');
-        try {
-          const batch = [...row.messageIds];
-          const { trashed } = await trasher.trash(batch);
-          return json(200, { ...store.settleTrash(id, batch), trashed });
-        } catch (error) {
-          return failed(`Gmail did not delete the email: ${error.message}.`);
-        }
+        passTrash.enqueue(id);
+        return json(200, { ...pending, trashQueued: true });
       }
       if (req.method === 'POST' && url.pathname === '/api/import') {
         const input = await body(req);
