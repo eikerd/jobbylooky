@@ -1,25 +1,27 @@
 .pitch-count { color: var(--accent-ink); font-size: 13px; font-weight: 700; }
-.recruiter-pitches { margin: 16px 0 0; padding: 14px 0; border-block: 1px solid var(--line); }
-.match-evidence, .pitch-scope { color: var(--soft); font-size: 14px; line-height: 1.5; margin: 7px 0; }
-.pitch-list { display: grid; gap: 6px; }
-.pitch { width: 100%; padding: 10px 12px; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--card); color: var(--ink); font-size: 14px; cursor: pointer; }
-.pitch:hover { background: var(--hover); }
-.pitch[aria-pressed='true'] { border-color: var(--select-edge); background: var(--select); }
-.pitch-sender { display: block; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
-.pitch-terms { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 5px; color: var(--soft); font-size: 13px; }
+/* Every email for the job as one sortable grid: one line per row, long text clipped. */
+.related { margin-top: 12px; padding: 10px 0; border-block: 1px solid var(--line); }
+.related-head { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; min-width: 0; }
+.related-head h3 { margin: 0; font-size: 15px; }
+.related-head .link-action { margin-left: auto; }
+.related-scroll { overflow-x: auto; margin-top: 6px; }
+.related-grid { width: 100%; min-width: 540px; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.c-received { width: 132px; } .c-pay { width: 144px; } .c-fit { width: 112px; } .c-status { width: 72px; }
+.related-grid th, .related-grid td { padding: 4px 8px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line); }
+.related-grid th button { all: unset; cursor: pointer; font-weight: 700; color: var(--soft); }
+.sort-mark { margin-left: 4px; font-size: 10px; }
+.related-grid tbody tr { cursor: pointer; }
+.related-grid tbody tr:hover { background: var(--hover); }
+.related-grid tr.selected { background: var(--select); box-shadow: inset 3px 0 var(--select-edge); }
+.related-sender { all: unset; display: flex; align-items: center; gap: 6px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-weight: 700; cursor: pointer; }
+.related-sender span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.related-sender app-source-icon { zoom: 0.75; }
+.related-grid button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.related-grid .full-time .related-sender { color: var(--full-time); }
+.related-grid .fit { padding: 0 8px; font-size: 12px; }
 .group-actions { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 14px; }
-.group-actions button { border: 0; background: none; padding: 3px 0; font-size: 14px; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.related-head .link-action, .group-actions button { border: 0; background: none; padding: 3px 0; font-size: 14px; color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .group-form { display: grid; gap: 8px; padding: 12px 0; }
 .group-form .button { justify-self: start; }
 
 .recurrence { font-size:13px; line-height:1.5; color:var(--soft); margin:5px 0 0; }
-.posting-summary { padding:12px 0; border-block:1px solid var(--line); margin-top:12px; }
-.posting-summary p { margin:4px 0; font-size:14px; color:var(--soft); line-height:1.5; }
-.posting-summary strong { color:var(--ink-strong); font-weight:700; }
-.posting-summary .repeat-insight { color:var(--warn); }
-.posting-history { margin-top:8px; font-size:14px; }
-.posting-history summary { color:var(--accent-ink); font-weight:700; cursor:pointer; }
-.posting-history ol { padding-left:18px; margin:10px 0 0; }
-.posting-history li { margin:8px 0; }
-.posting-history button { background:none; border:0; color:var(--ink); text-align:left; padding:0; font-size:14px; cursor:pointer; overflow-wrap:anywhere; }
-.posting-history li > span { display:block; margin-top:3px; color:var(--soft); }
