@@ -4,7 +4,8 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageInDays } from './age';
 import { formatEmailBody, urlRows } from './email-body';
-import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail } from './models';
+import { daysUp, jobState } from './link-state';
+import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -32,7 +33,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
   selector: 'app-root',
   imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
   templateUrl: './app.html',
-  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css'],
+  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
   host: { '[style]': 'phraseStyle()' },
 })
@@ -163,18 +164,22 @@ export class App implements OnDestroy {
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  readonly emailBlocks = computed(() => this.blocks(this.selected()?.body || ''));
+  readonly emailBlocks = computed(() => this.blocks(this.selected()));
   /** The pitch an answer row replies to, and whether its email is shown under the answer. */
   readonly original = computed(() => {
     const id = this.selected()?.respondsTo;
     return id ? this.opportunities().find((row) => row.id === id) : undefined;
   });
   readonly showOriginal = signal(false);
-  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()?.body || '') : []));
-  private blocks(body: string) {
-    return formatEmailBody(body).map((block) => ({
+  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()) : []));
+  /** The email as blocks, each link carrying what the daily link sweep found there. */
+  private blocks(row: Opportunity | undefined) {
+    const checks = new Map((row?.linkChecks ?? []).map((check) => [check.url, check]));
+    return formatEmailBody(row?.body || '').map((block) => ({
       ...block,
-      rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`),
+      rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`).map((line) =>
+        line.kind === 'links' ? { ...line, parts: line.parts.map((part) => ({ ...part, check: part.url ? checks.get(part.text) : undefined })) } : line,
+      ),
     }));
   }
   constructor() {
@@ -763,6 +768,12 @@ export class App implements OnDestroy {
   }
   sourceText(body: string) {
     return body.replace(/\$/g, '');
+  }
+  readonly jobState = jobState;
+  /** "52d": how long a posting has been up, or nothing when its posted date is unknown. */
+  upFor(check: LinkCheck) {
+    const days = daysUp(check);
+    return days === null ? '' : `${days}d`;
   }
   ageLabel(receivedAt: string) {
     const days = ageInDays(receivedAt);
