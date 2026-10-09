@@ -248,6 +248,9 @@ export class App implements OnDestroy {
     const chosen = this.decisionChosen;
     if (!plan) return;
     const ticked = alone ? [] : plan.others.filter((row) => this.decisionTicks().has(row.id));
+    const passing = plan.status === 'Passed' ? (alone ? chosen : [...plan.decide, ...ticked]) : ticked;
+    // Passing the open pitch closes its reply composer; an edited reply is the owner's to discard.
+    if (passing.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
     this.closeDecision();
     if (plan.status === 'Passed') return this.passRows(alone ? [...chosen] : [...plan.decide, ...ticked]);
     const kept = alone ? chosen[0] : plan.decide[0];
@@ -680,16 +683,17 @@ export class App implements OnDestroy {
    */
   async pass() {
     const row = this.selected();
-    if (!row || this.busy() || !this.canDropReply()) return;
-    if (this.ask([row], 'Passed')) return;
+    if (!row || this.busy()) return;
+    // With duplicates the dialog asks about an edited reply on confirm, so it is asked only once.
+    if (this.ask([row], 'Passed') || !this.canDropReply()) return;
     await this.passRows([row]);
   }
   /** Passes every ticked row the same way, with one toast for all their Gmail deletes. */
   async passChecked() {
     const rows = this.checkedRows();
     if (!rows.length || this.busy()) return;
-    if (rows.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
     if (this.ask(rows, 'Passed')) return;
+    if (rows.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
     await this.passRows(rows);
   }
   private canDropReply() {

@@ -82,6 +82,8 @@ export class Rules {
     effect(() => {
       const job = { rows: this.rows(), pattern: this.pattern(), field: this.field(), pasted: this.pasted(), valid: this.compiled().regex !== null, key: this.draftKey() };
       clearTimeout(this.debounce);
+      // Any new input makes an in-flight run stale at once, before the debounce fires its replacement.
+      this.seq++;
       untracked(() => this.testing.set(true));
       this.debounce = setTimeout(() => this.test(job), TESTER_DEBOUNCE_MS);
     });
