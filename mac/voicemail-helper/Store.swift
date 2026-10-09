@@ -33,6 +33,8 @@ enum VoicemailStore {
       throw HelperError("Cannot open the voicemail store (\(message)). Is Full Disk Access on for JobbyVoicemail?")
     }
     defer { sqlite3_close(db) }
+    // facetimemessagestored writes to this store; wait out its locks rather than read half a list.
+    sqlite3_busy_timeout(db, 5000)
 
     let sql = """
       SELECT ZRECORDUUID, ZMESSAGEFILE, ZFROM, ZDATECREATED, ZDURATION, ZFILETYPE, ZISREAD, ZTRANSCRIPTDATA
@@ -49,7 +51,9 @@ enum VoicemailStore {
     sqlite3_bind_double(stmt, 2, since.timeIntervalSinceReferenceDate)
 
     var result: [Voicemail] = []
-    while sqlite3_step(stmt) == SQLITE_ROW {
+    var step = sqlite3_step(stmt)
+    while step == SQLITE_ROW {
+      defer { step = sqlite3_step(stmt) }
       guard let record = blob(stmt, 0), record.count == 16 else { continue }
       let fileType = text(stmt, 5) ?? ""
       let id = uuidString(record)
@@ -65,6 +69,9 @@ enum VoicemailStore {
           appleTranscript: blob(stmt, 7).flatMap(transcriptText),
           audio: assetFile(names: [id] + (blob(stmt, 1).flatMap(embeddedUUID).map { [$0] } ?? []), fileType: fileType)
         ))
+    }
+    guard step == SQLITE_DONE else {
+      throw HelperError("Reading the voicemail store stopped early: \(String(cString: sqlite3_errmsg(db)))")
     }
     return result
   }
@@ -138,7 +145,8 @@ func forEachField(_ bytes: [UInt8], _ visit: (Int, [UInt8]?) -> Void) {
     case 0: guard varint() != nil else { return }; visit(field, nil)
     case 1: index += 8; visit(field, nil)
     case 2:
-      guard let length = varint(), length >= 0, index + length <= bytes.count else { return }
+      // Compared by subtraction: a corrupt length near Int.max would trap on index + length.
+      guard let length = varint(), length >= 0, length <= bytes.count - index else { return }
       visit(field, Array(bytes[index..<index + length]))
       index += length
     case 5: index += 4; visit(field, nil)

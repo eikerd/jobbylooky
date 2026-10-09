@@ -61,6 +61,9 @@ export function createVoicemails(directory) {
   const path = join(directory, 'voicemails.json');
   const audioDir = join(directory, 'voicemail-audio');
   let voicemails = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')).voicemails : [];
+  // Seen is per pitch: one caller often matches several pitches of the same job, and opening
+  // one of them must neither clear the others nor be undone when a new pitch matches later.
+  const seenBy = (row) => row.seenBy ?? [];
   function commit(next) {
     writeFileSync(`${path}.tmp`, JSON.stringify({ voicemails: next }, null, 2), { mode: 0o600 });
     renameSync(`${path}.tmp`, path);
@@ -69,15 +72,12 @@ export function createVoicemails(directory) {
   const audioPath = (id) => join(audioDir, `${id}.m4a`);
   return {
     list: () => structuredClone(voicemails),
-    /**
-     * Adds a voicemail, or adds pitches to one already known. A new pitch match pins it again;
-     * matches already seen stay seen. Never removes a match.
-     */
+    /** Adds a voicemail, or adds pitches to one already known; a new pitch starts unseen. Never removes a match. */
     upsert(input, pitchExists) {
       const incoming = validVoicemail(input, pitchExists);
       const existing = voicemails.find((row) => row.id === incoming.id);
       if (!existing) {
-        commit([...voicemails, { ...incoming, seen: false, audio: false, addedAt: new Date().toISOString() }]);
+        commit([...voicemails, { ...incoming, seenBy: [], audio: false, addedAt: new Date().toISOString() }]);
         return structuredClone(voicemails.at(-1));
       }
       const known = new Set(existing.matches.map((match) => match.pitchId));
@@ -87,7 +87,6 @@ export function createVoicemails(directory) {
         transcript: existing.transcript ?? incoming.transcript,
         transcriptSource: existing.transcript ? existing.transcriptSource : incoming.transcriptSource,
         matches: [...existing.matches, ...added],
-        seen: added.length ? false : existing.seen,
       };
       commit(voicemails.map((row) => (row.id === updated.id ? updated : row)));
       return structuredClone(updated);
@@ -107,11 +106,11 @@ export function createVoicemails(directory) {
       if (!ID.test(id) || !voicemails.some((row) => row.id === id && row.audio) || !existsSync(audioPath(id))) return null;
       return { path: audioPath(id), size: statSync(audioPath(id)).size };
     },
-    /** Opening a pitch unpins it: its voicemails count as seen. */
+    /** Opening a pitch unpins it: its voicemails count as seen on that pitch. */
     markSeen(pitchId) {
-      const touched = voicemails.some((row) => !row.seen && row.matches.some((match) => match.pitchId === pitchId));
-      if (touched)
-        commit(voicemails.map((row) => (row.matches.some((match) => match.pitchId === pitchId) ? { ...row, seen: true } : row)));
+      const unseen = (row) => row.matches.some((match) => match.pitchId === pitchId) && !seenBy(row).includes(pitchId);
+      const touched = voicemails.some(unseen);
+      if (touched) commit(voicemails.map((row) => (unseen(row) ? { ...row, seenBy: [...seenBy(row), pitchId] } : row)));
       return touched;
     },
     /** Each pitch with its voicemails (newest first) and whether any is unseen. */
@@ -120,8 +119,9 @@ export function createVoicemails(directory) {
         const own = voicemails
           .filter((voicemail) => voicemail.matches.some((match) => match.pitchId === row.id))
           .sort((a, b) => b.receivedAt.localeCompare(a.receivedAt))
-          .map(({ matches, addedAt, ...voicemail }) => ({
+          .map(({ matches, addedAt, seenBy: seenPitches = [], ...voicemail }) => ({
             ...voicemail,
+            seen: seenPitches.includes(row.id),
             matchedBy: matches.find((match) => match.pitchId === row.id).by,
             note: matches.find((match) => match.pitchId === row.id).note,
           }));

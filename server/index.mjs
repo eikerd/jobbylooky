@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { pipeline } from 'node:stream';
 import { readFileSync, existsSync, createReadStream } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -103,13 +104,20 @@ async function rawBody(req, limit) {
   }
   return Buffer.concat(chunks);
 }
-/** Safari plays audio only from a server that answers Range requests. */
+/**
+ * Safari plays audio only from a server that answers Range requests. Browsers abort these
+ * requests on every seek; pipeline() closes the file then, and turns a read error into a
+ * closed response rather than an uncaught exception.
+ */
+function stream(res, path, range) {
+  pipeline(createReadStream(path, range), res, () => {});
+}
 function sendAudio(req, res, { path, size }) {
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
   const headers = { 'Content-Type': 'audio/mp4', 'Accept-Ranges': 'bytes' };
   if (!range || (!range[1] && !range[2])) {
     res.writeHead(200, { ...headers, 'Content-Length': size });
-    return req.method === 'HEAD' ? res.end() : createReadStream(path).pipe(res);
+    return req.method === 'HEAD' ? res.end() : stream(res, path);
   }
   const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
   const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
@@ -118,7 +126,7 @@ function sendAudio(req, res, { path, size }) {
     return res.end();
   }
   res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 });
-  return req.method === 'HEAD' ? res.end() : createReadStream(path, { start, end }).pipe(res);
+  return req.method === 'HEAD' ? res.end() : stream(res, path, { start, end });
 }
 
 export const server = createServer(async (req, res) => {
@@ -221,7 +229,7 @@ export const server = createServer(async (req, res) => {
       if (req.method === 'PATCH' && url.pathname === '/api/phrase-colors')
         return json(200, store.setPhraseColor(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')
-        return json(200, store.group(await body(req)));
+        return json(200, store.group(await body(req)).map((group) => ({ ...group, pitches: voicemails.attach(group.pitches) })));
       if (req.method === 'POST' && url.pathname === '/api/voicemails')
         return json(200, voicemails.upsert(await body(req), pitchExists));
       const seenPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/voicemails-seen$/);

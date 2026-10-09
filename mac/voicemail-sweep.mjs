@@ -46,27 +46,47 @@ async function api(path, init = {}) {
 }
 
 function exportVoicemails(days) {
+  const startedAt = Date.now();
   helper('export', '--days', String(days));
-  return readJson(join(OUT, 'voicemails.json'), { voicemails: [] });
+  const result = readJson(join(OUT, 'voicemails.json'), { voicemails: [] });
+  // A helper that crashed writes nothing; the file left over from an earlier run is not this one.
+  if (!(Date.parse(result.exportedAt) >= startedAt - 5000)) throw new Error('The helper did not finish an export; voicemails.json is from an earlier run.');
+  return result;
 }
 
-/** Pushes voicemails with their matches, then their audio. Returns how many were pushed. */
+// The server takes at most 20 pitches per push; a number in more pitch bodies than that
+// (a recruiting firm's switchboard) is pushed in several pushes, which the server merges.
+const MATCHES_PER_PUSH = 20;
+
+/**
+ * Pushes voicemails with their matches, then their audio. One voicemail the server refuses is
+ * reported and skipped, so it cannot stop every later one on this and every following sweep.
+ */
 async function push(entries, known) {
   const needAudio = entries.filter(({ voicemail }) => voicemail.hasAudio && !known.get(voicemail.id)?.audio);
   if (needAudio.length) helper('audio', ...needAudio.map(({ voicemail }) => voicemail.id));
   const audio = readJson(join(OUT, 'audio.json'), { files: {} }).files;
+  let pushed = 0;
+  const failures = [];
   for (const { voicemail, matches } of entries) {
     const { id, from, receivedAt, durationSeconds, kind, transcript, transcriptSource } = voicemail;
-    await api('voicemails', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, from, receivedAt, durationSeconds, kind, transcript, transcriptSource, matches }),
-    });
-    if (audio[id]) {
-      await api(`voicemails/${id}/audio`, { method: 'PUT', headers: { 'Content-Type': 'audio/mp4' }, body: readFileSync(audio[id]) });
+    try {
+      for (let start = 0; start < matches.length; start += MATCHES_PER_PUSH) {
+        await api('voicemails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, from, receivedAt, durationSeconds, kind, transcript, transcriptSource, matches: matches.slice(start, start + MATCHES_PER_PUSH) }),
+        });
+      }
+      if (audio[id]) {
+        await api(`voicemails/${id}/audio`, { method: 'PUT', headers: { 'Content-Type': 'audio/mp4' }, body: readFileSync(audio[id]) });
+      }
+      pushed++;
+    } catch (error) {
+      failures.push({ id, error: error.message });
     }
   }
-  return entries.length;
+  return { pushed, failures };
 }
 
 async function sweep(days) {
@@ -92,7 +112,7 @@ async function sweep(days) {
     else if (!pitchIds.length && !known.has(voicemail.id) && !state.reviewed[voicemail.id] && JOB_WORDS.test(voicemail.transcript ?? '') && !SPAM_WORDS.test(voicemail.transcript ?? ''))
       candidates.push(voicemail);
   }
-  const pushed = await push(toPush, known);
+  const { pushed, failures } = await push(toPush, known);
   writeFileSync(
     join(OUT, 'candidates.json'),
     JSON.stringify({
@@ -103,7 +123,7 @@ async function sweep(days) {
   );
   state.lastSweepAt = new Date().toISOString();
   saveState();
-  return { voicemails: voicemails.length, pushedByNumber: pushed, candidates: candidates.length, candidatesFile: join(OUT, 'candidates.json') };
+  return { voicemails: voicemails.length, pushedByNumber: pushed, failures, candidates: candidates.length, candidatesFile: join(OUT, 'candidates.json') };
 }
 
 async function link(voicemailId, pitchId, note) {
@@ -113,7 +133,8 @@ async function link(voicemailId, pitchId, note) {
   if (!voicemail) throw new Error(`Voicemail ${voicemailId} is not in the last export; run sweep first.`);
   const index = await api('voicemails/index');
   const known = new Map(index.voicemails.map((row) => [row.id, row]));
-  await push([{ voicemail, matches: [{ pitchId, by: 'name', note: note.slice(0, 300) }] }], known);
+  const { failures } = await push([{ voicemail, matches: [{ pitchId, by: 'name', note: note.slice(0, 300) }] }], known);
+  if (failures.length) throw new Error(`Not linked: ${failures[0].error}`);
   state.reviewed[voicemailId] = 'linked';
   saveState();
   return { linked: voicemailId, pitchId };

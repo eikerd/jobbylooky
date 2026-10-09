@@ -52,15 +52,28 @@ test('a pushed voicemail pins its pitch until the pitch is opened, and survives 
     assert.equal(reopened.attach([{ id: 'gmail:a' }])[0].voicemailUnseen, false);
   }));
 
-test('pushing the same voicemail again keeps it seen; a new pitch match pins it again', () =>
+test('pushing the same voicemail again keeps it seen; a new pitch match starts unseen on that pitch only', () =>
   withVoicemails((store) => {
     store.upsert(voicemail, exists);
     store.markSeen('gmail:a');
-    assert.equal(store.upsert(voicemail, exists).seen, true);
+    store.upsert(voicemail, exists);
+    assert.equal(store.attach([{ id: 'gmail:a' }])[0].voicemailUnseen, false);
     const linked = store.upsert({ ...voicemail, matches: [{ pitchId: 'gmail:b', by: 'name', note: 'Names Resoft' }] }, exists);
-    assert.equal(linked.seen, false);
     assert.deepEqual(linked.matches.map((match) => match.pitchId), ['gmail:a', 'gmail:b']);
-    assert.equal(store.attach([{ id: 'gmail:b' }])[0].voicemails[0].note, 'Names Resoft');
+    const [a, b] = store.attach([{ id: 'gmail:a' }, { id: 'gmail:b' }]);
+    assert.equal(a.voicemailUnseen, false, 'a new match must not re-pin a pitch already opened');
+    assert.equal(b.voicemailUnseen, true);
+    assert.equal(b.voicemails[0].note, 'Names Resoft');
+  }));
+
+test('one voicemail on two pitches: opening one leaves the other pinned', () =>
+  withVoicemails((store) => {
+    store.upsert({ ...voicemail, matches: [{ pitchId: 'gmail:a', by: 'number' }, { pitchId: 'gmail:b', by: 'number' }] }, exists);
+    store.markSeen('gmail:a');
+    const [a, b] = store.attach([{ id: 'gmail:a' }, { id: 'gmail:b' }]);
+    assert.equal(a.voicemails[0].seen, true);
+    assert.equal(b.voicemails[0].seen, false);
+    assert.equal(b.voicemailUnseen, true);
   }));
 
 test('a later push fills in a missing transcript but never replaces one', () =>
