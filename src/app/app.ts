@@ -158,7 +158,7 @@ export class App implements OnDestroy {
   private shortcut = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== 'p' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target;
-    if ((target instanceof Element && target.closest('input, textarea, select, [contenteditable]')) || this.directoryMode()) return;
+    if ((target instanceof Element && target.closest('input:not([type=checkbox]), textarea, select, [contenteditable]')) || this.directoryMode()) return;
     event.preventDefault();
     void this.pass();
   };
