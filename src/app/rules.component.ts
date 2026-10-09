@@ -187,6 +187,8 @@ export class Rules {
     this.field.set('any');
   }
   edit(rule: RejectRule) {
+    // Loading another rule replaces the draft; unsaved work there is the owner's to discard.
+    if (this.editingId() !== rule.id && hasRuleDraft() && !window.confirm('Discard the unsaved rule you were editing?')) return;
     this.editingId.set(rule.id);
     draft.loaded.set({ name: rule.name, pattern: rule.pattern, field: rule.field });
     this.name.set(rule.name);
