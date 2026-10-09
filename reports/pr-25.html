@@ -257,14 +257,14 @@
   "verdict": "MERGED"
  },
  "score": {
-  "found": 4,
-  "fixed": 4,
+  "found": 9,
+  "fixed": 9,
   "rebutted": 0,
   "grade": "B"
  },
  "rounds": [
   {
-   "label": "Round 1 (review agent + Codex on c3c1532; Copilot out of quota; CodeRabbit rate-limited)",
+   "label": "Round 1 (local review agent: 8 findings, 3 Major / 5 Minor; Codex on c3c1532: 1 P2; Copilot out of quota; CodeRabbit rate-limited)",
    "findings": [
     {
      "reviewer": "codex",
@@ -280,9 +280,9 @@
      "reviewer": "review agent",
      "severity": "M",
      "status": "fixed",
-     "title": "The held selection outlived the modal",
-     "detail": "Opening or closing the modal kept the old selection, so a later Track offered stale text.",
-     "response": "Fixed in c31ac8f: the held selection is dropped on open and close.",
+     "title": "3 Major findings from the local review agent",
+     "detail": "Per the PR's own session: 3 Major findings in round 1, including the held selection outliving the modal (stale text offered by a later Track).",
+     "response": "All fixed in c31ac8f.",
      "confidence": "medium",
      "wouldHaveMissed": false
     },
@@ -290,19 +290,9 @@
      "reviewer": "review agent",
      "severity": "S",
      "status": "fixed",
-     "title": "Block breaks were lost from a multi-paragraph selection",
-     "detail": "Text across block elements ran together.",
-     "response": "Fixed in c31ac8f: block breaks are kept.",
-     "confidence": "medium",
-     "wouldHaveMissed": false
-    },
-    {
-     "reviewer": "review agent",
-     "severity": "S",
-     "status": "fixed",
-     "title": "The P shortcut fired while a modal was open",
-     "detail": "Typing P inside the modal triggered the page shortcut.",
-     "response": "Fixed in c31ac8f: P is guarded while a modal is open.",
+     "title": "5 Minor findings from the local review agent",
+     "detail": "Per the PR's own session: 5 Minor findings in round 1, including lost block breaks in a multi-paragraph selection and the P shortcut firing inside an open modal.",
+     "response": "All fixed in c31ac8f.",
      "confidence": "medium",
      "wouldHaveMissed": false
     }
