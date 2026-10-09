@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { compileRule, keptMatches, matchSnippet, nextTesterSort, sortTester, testerRows } from '../src/app/reject-rules.ts';
+import { compileRule, keptMatches, matchSnippet, nextTesterSort, runTester, sortTester, testerRows } from '../src/app/reject-rules.ts';
 import type { Opportunity } from '../src/app/models.ts';
 
 const pitch = (id: string, subject: string, body: string, status = 'New', receivedAt = '2026-10-01T12:00:00Z') =>
@@ -39,4 +39,13 @@ test('grid sorts by any column; a second click reverses; received opens newest f
   assert.deepEqual(sortTester(rows, { key: 'title', dir: 'asc' }).map((row) => row.pitch.id), ['b', 'a']);
   assert.deepEqual(nextTesterSort({ key: 'title', dir: 'asc' }, 'title'), { key: 'title', dir: 'desc' });
   assert.deepEqual(nextTesterSort({ key: 'title', dir: 'asc' }, 'received'), { key: 'received', dir: 'desc' });
+});
+test('a tester run matches stored pitches and pasted text, and is null for no pattern', () => {
+  const rows = [pitch('a', 'Java Engineer', 'Spring'), pitch('b', 'Angular', 'React')];
+  const result = runTester(rows, 'java', 'any', 'Senior Java role')!;
+  assert.deepEqual(result.hits.map((hit) => hit.id), ['a']);
+  assert.equal(result.pasted?.hit, 'Java');
+  assert.equal(runTester(rows, 'java', 'any', '   ')!.pasted, null);
+  assert.equal(runTester(rows, '', 'any', 'x'), null);
+  assert.equal(runTester(rows, '(', 'any', 'x'), null);
 });

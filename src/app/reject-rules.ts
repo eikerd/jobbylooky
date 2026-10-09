@@ -80,3 +80,18 @@ export function sortTester(rows: readonly TesterRow[], sort: TesterSort): Tester
 export function nextTesterSort(sort: TesterSort, key: TesterKey): TesterSort {
   return sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'received' ? 'desc' : 'asc' };
 }
+
+/** What the tester needs from a pitch; the worker is sent only this. */
+export type TesterPitch = Pick<Opportunity, 'id' | 'subject' | 'body'>;
+export interface TesterResult { hits: { id: string; snippet: MatchSnippet }[]; pasted: MatchSnippet | null }
+
+/** One tester run, as the worker performs it: every stored pitch, plus any pasted text. */
+export function runTester(rows: readonly TesterPitch[], pattern: string, field: RuleField, pasted: string): TesterResult | null {
+  const { regex } = compileRule(pattern);
+  if (!regex) return null;
+  const hits = rows.flatMap((row) => {
+    const snippet = matchSnippet(regex, ruleText(field, row));
+    return snippet ? [{ id: row.id, snippet }] : [];
+  });
+  return { hits, pasted: pasted.trim() ? matchSnippet(regex, pasted) : null };
+}

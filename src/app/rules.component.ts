@@ -1,12 +1,25 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, output, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { Opportunity, RejectRule, RuleField, RuleMode } from './models';
 import { ageHeat, ageInDays } from './age';
-import { compileRule, DEFAULT_TESTER_SORT, keptMatches, matchSnippet, nextTesterSort, sortTester, testerRows, type TesterKey } from './reject-rules';
+import { compileRule, DEFAULT_TESTER_SORT, keptMatches, nextTesterSort, runTester, sortTester, type TesterKey, type TesterResult, type TesterRow } from './reject-rules';
 
 export interface RuleDraft { id: string | null; name: string; pattern: string; field: RuleField }
 type RuleKey = 'name' | 'pattern' | 'field' | 'mode';
+
+/** A tester run longer than this is a runaway regex: the worker is killed and the page stays live. */
+const TESTER_DEADLINE_MS = 1500;
+const TESTER_DEBOUNCE_MS = 150;
+
+// The draft outlives the view: leaving Rules for a folder and coming back keeps what was typed.
+const draft = {
+  editingId: signal<string | null>(null),
+  name: signal(''),
+  pattern: signal(''),
+  field: signal<RuleField>('any'),
+  pasted: signal(''),
+};
 
 /** Auto-reject rules and their tester. The tester only reads: it never changes or deletes mail. */
 @Component({
@@ -27,19 +40,82 @@ export class Rules {
   readonly fieldLabels: Record<RuleField, string> = { any: 'Subject + body', subject: 'Subject', body: 'Body' };
   readonly fields: RuleField[] = ['any', 'subject', 'body'];
 
-  readonly editingId = signal<string | null>(null);
-  readonly name = signal('');
-  readonly pattern = signal('');
-  readonly field = signal<RuleField>('any');
-  readonly pasted = signal('');
+  readonly editingId = draft.editingId;
+  readonly name = draft.name;
+  readonly pattern = draft.pattern;
+  readonly field = draft.field;
+  readonly pasted = draft.pasted;
 
   readonly compiled = computed(() => compileRule(this.pattern()));
-  readonly matches = computed(() => testerRows(this.rows(), this.compiled().regex, this.field()));
-  readonly kept = computed(() => keptMatches(this.matches()));
-  readonly pastedMatch = computed(() => {
-    const regex = this.compiled().regex;
-    return regex && this.pasted().trim() ? matchSnippet(regex, this.pasted()) : null;
+  /** The latest finished tester run; null while there is no valid pattern or after a runaway. */
+  readonly result = signal<TesterResult | null>(null);
+  readonly tooSlow = signal(false);
+  readonly matches = computed<TesterRow[]>(() => {
+    const byId = new Map(this.rows().map((row) => [row.id, row]));
+    return (this.result()?.hits ?? []).flatMap(({ id, snippet }) => {
+      const pitch = byId.get(id);
+      return pitch ? [{ pitch, snippet }] : [];
+    });
   });
+  readonly kept = computed(() => keptMatches(this.matches()));
+  readonly pastedMatch = computed(() => this.result()?.pasted ?? null);
+
+  private worker: Worker | null = null;
+  private sentRows: Opportunity[] | null = null;
+  private seq = 0;
+  private running = false;
+  private deadline: ReturnType<typeof setTimeout> | undefined;
+  private debounce: ReturnType<typeof setTimeout> | undefined;
+
+  constructor() {
+    effect(() => {
+      const job = { rows: this.rows(), pattern: this.pattern(), field: this.field(), pasted: this.pasted(), valid: this.compiled().regex !== null };
+      clearTimeout(this.debounce);
+      this.debounce = setTimeout(() => this.test(job), TESTER_DEBOUNCE_MS);
+    });
+    inject(DestroyRef).onDestroy(() => {
+      clearTimeout(this.debounce);
+      clearTimeout(this.deadline);
+      this.worker?.terminate();
+    });
+  }
+
+  /** Runs the tester in a worker with a deadline; a regex that backtracks forever cannot hang the page. */
+  private test(job: { rows: Opportunity[]; pattern: string; field: RuleField; pasted: string; valid: boolean }) {
+    const seq = ++this.seq;
+    clearTimeout(this.deadline);
+    this.tooSlow.set(false);
+    if (!job.valid) return this.result.set(null);
+    if (typeof Worker === 'undefined') return this.result.set(runTester(job.rows, job.pattern, job.field, job.pasted));
+    // A run still going is the old pattern's runaway, or soon stale: replace the worker.
+    if (this.running) this.stopWorker();
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./tester.worker', import.meta.url), { type: 'module' });
+      this.worker.onmessage = ({ data }) => {
+        if (data.seq !== this.seq) return;
+        this.running = false;
+        clearTimeout(this.deadline);
+        this.result.set(data.result);
+      };
+    }
+    if (this.sentRows !== job.rows) {
+      this.worker.postMessage({ type: 'rows', rows: job.rows.map(({ id, subject, body }) => ({ id, subject, body })) });
+      this.sentRows = job.rows;
+    }
+    this.running = true;
+    this.worker.postMessage({ type: 'run', seq, pattern: job.pattern, field: job.field, pasted: job.pasted });
+    this.deadline = setTimeout(() => {
+      this.stopWorker();
+      this.result.set(null);
+      this.tooSlow.set(true);
+    }, TESTER_DEADLINE_MS);
+  }
+  private stopWorker() {
+    this.worker?.terminate();
+    this.worker = null;
+    this.sentRows = null;
+    this.running = false;
+  }
 
   readonly testerColumns: { key: TesterKey; label: string }[] = [
     { key: 'received', label: 'Received' },
@@ -87,7 +163,7 @@ export class Rules {
     return ageHeat(ageInDays(receivedAt));
   }
   canSave() {
-    return !this.busy() && this.name().trim().length > 0 && this.compiled().regex !== null;
+    return !this.busy() && !this.tooSlow() && this.name().trim().length > 0 && this.compiled().regex !== null;
   }
   submit() {
     if (!this.canSave()) return;

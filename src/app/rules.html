@@ -17,6 +17,8 @@
     </div>
     @if (compiled().error) {
       <p class="rule-error" role="alert">Not a valid regex: {{ compiled().error }}</p>
+    } @else if (tooSlow()) {
+      <p class="rule-error" role="alert">That pattern is too slow: it backtracks without end on some of your mail. Avoid nested repeats like (a+)+.</p>
     }
   </form>
 
@@ -54,7 +56,7 @@
   }
 
   <label class="paste">Test against pasted text<textarea name="pasted" rows="3" [ngModel]="pasted()" (ngModelChange)="pasted.set($event)" placeholder="Paste any email to see if the regex hits"></textarea></label>
-  @if (compiled().regex && pasted().trim()) {
+  @if (result() && pasted().trim()) {
     <p class="paste-result">
       @if (pastedMatch(); as hit) {
         Matches: {{ hit.before }}<mark>{{ hit.hit }}</mark>{{ hit.after }}
@@ -64,7 +66,7 @@
     </p>
   }
 
-  @if (compiled().regex) {
+  @if (result()) {
     <h3 class="tester-title">Matches in stored mail ({{ matches().length }})</h3>
     @if (kept()) {
       <p class="kept-warning" role="status">{{ kept() }} {{ kept() === 1 ? 'match is' : 'matches are' }} in Pursuing or Maybe. A live rule would have passed {{ kept() === 1 ? 'it' : 'them' }}.</p>
@@ -99,7 +101,7 @@
     } @else {
       <p class="rules-empty">No stored email matches.</p>
     }
-  } @else if (!rules().length) {
+  } @else if (!rules().length && !tooSlow()) {
     <p class="rules-empty">Write a regex to see which stored emails it would reject. Nothing is changed or deleted while you test.</p>
   }
 </section>
