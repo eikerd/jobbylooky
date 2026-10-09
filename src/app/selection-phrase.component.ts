@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnDestroy, computed, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { PhraseKind, TrackedPhrase } from './models';
+import { widenEnd, widenStart } from './phrase-edges';
 
 /** The server's limits on a tracked phrase (server/store.mjs addPhrase). */
 const MIN_PHRASE = 2;
@@ -8,30 +9,19 @@ const MAX_PHRASE = 100;
 /** How far above the hovered line the Track button sits, in px. */
 const OFFER_LIFT = 30;
 const clean = (text: string) => text.replace(/\s+/g, ' ').trim();
-const isWord = (char: string | undefined) => !!char && /\w/.test(char);
 
 /**
- * Phrases match whole words only (server/screen.mjs phrasePattern), so a selection that starts or ends
- * mid-word is widened to the whole word; a fragment like "me permanent role for a S" could never match.
- * The middle comes from the Selection, not the Range: only the Selection puts a line break between
- * blocks, so a title and the line under it do not run together as "TitleCompany".
+ * The selection widened at both edges (./phrase-edges). The middle comes from the Selection, not the
+ * Range: only the Selection puts a line break between blocks, so a title and the line under it do not
+ * run together as "TitleCompany".
  */
 function wholeWords(selection: Selection, range: Range) {
   const { startContainer: start, startOffset, endContainer: end, endOffset } = range;
-  let before = '';
-  if (start.nodeType === Node.TEXT_NODE) {
-    const text = start.textContent ?? '';
-    let at = startOffset;
-    while (at > 0 && isWord(text[at - 1]) && isWord(text[at])) at--;
-    before = text.slice(at, startOffset);
-  }
-  let after = '';
-  if (end.nodeType === Node.TEXT_NODE) {
-    const text = end.textContent ?? '';
-    let at = endOffset;
-    while (at < text.length && isWord(text[at - 1]) && isWord(text[at])) at++;
-    after = text.slice(endOffset, at);
-  }
+  const startText = start.nodeType === Node.TEXT_NODE ? start.textContent ?? '' : '';
+  const endText = end.nodeType === Node.TEXT_NODE ? end.textContent ?? '' : '';
+  // An element edge has no text of its own, so it slices to nothing and is left as selected.
+  const before = startText.slice(widenStart(startText, startOffset), startOffset);
+  const after = endText.slice(endOffset, widenEnd(endText, endOffset));
   return before + selection.toString() + after;
 }
 
