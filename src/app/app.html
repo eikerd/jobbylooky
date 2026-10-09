@@ -194,13 +194,6 @@
               <span class="row-bottom">
                 <span class="company">{{ row.company !== 'Not stated' ? row.company : sender(row.from) }}</span>
                 <span class="row-location">{{ row.location }}</span>
-                <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
-                @if (row.reasons.length) {
-                  <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
-                    @if (reasonCount(row, 'pass'); as count) {<span class="count-pill pass" aria-hidden="true">{{ count }}</span>}
-                    @if (reasonCount(row, 'fail'); as count) {<span class="count-pill fail" aria-hidden="true">{{ count }}</span>}
-                  </span>
-                }
                 @if (group.pitches.length > 1) {
                   <span class="pitch-count">{{ group.pitches.length }} pitches</span>
                 }
@@ -209,6 +202,13 @@
                 }
                 @if (row.replyReceivedAt) {
                   <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
+                }
+                <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
+                @if (row.reasons.length) {
+                  <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
+                    @if (reasonCount(row, 'pass'); as count) {<span class="count-pill pass" aria-hidden="true">{{ count }}</span>}
+                    @if (reasonCount(row, 'fail'); as count) {<span class="count-pill fail" aria-hidden="true">{{ count }}</span>}
+                  </span>
                 }
               </span>
               @if (group.history.occurrences > 1) {
