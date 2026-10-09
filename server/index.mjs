@@ -12,6 +12,7 @@ import { createMailer, replyRecipient } from './mailer.mjs';
 import { createTrasher, gmailIds } from './gmail-trash.mjs';
 import { createPassTrash } from './pass-trash.mjs';
 import { createVoicemails, phoneNumbers, MAX_AUDIO_BYTES } from './voicemails.mjs';
+import { createLinkChecks } from './link-checks.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const port = Number(process.env.PORT || 4317);
@@ -21,6 +22,9 @@ const trasher = createTrasher();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const passTrash = createPassTrash({ store, trasher });
 const voicemails = createVoicemails(resolve(root, process.env.DATA_DIR || 'data'));
+const linkChecks = createLinkChecks(resolve(root, process.env.DATA_DIR || 'data'));
+/** Rows as the page sees them: with their voicemails and what the link sweep found. */
+const decorate = (rows) => linkChecks.attach(voicemails.attach(rows));
 const pitchExists = (id) => store.snapshot().opportunities.some((row) => row.id === id);
 const seed = resolve(root, process.env.DATA_DIR || 'data', 'import.json');
 // An agent drops each new resume here; the newest file is what gets attached.
@@ -48,6 +52,31 @@ async function sync() {
   } finally {
     syncing = false;
   }
+}
+/**
+ * Passes every New pitch whose postings have all closed, the way a Pass from the page does:
+ * its emails go to Gmail Trash. An automatic pass begun but not finished (a crash between its
+ * steps) is completed, and one whose Gmail delete failed is retried.
+ */
+function passEndedJobs() {
+  const passed = [];
+  const finish = (id) => {
+    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    // Begun while New: the status change may not have happened. Anything else is the owner's.
+    if (row?.status === 'New') store.update(id, { status: 'Passed' });
+    if (row && ['New', 'Passed'].includes(row.status) && gmailIds(row.messageIds).length) store.setTrashPending(id, true);
+    linkChecks.finishPass(id);
+  };
+  for (const id of linkChecks.unfinishedPasses()) finish(id);
+  // With their voicemails: a pitch with one is the owner's to decide on.
+  for (const { id, reason } of linkChecks.dueToPass(voicemails.attach(store.snapshot().opportunities))) {
+    linkChecks.markPassed(id, reason);
+    finish(id);
+    passed.push(id);
+  }
+  for (const row of store.snapshot().opportunities)
+    if (row.status === 'Passed' && row.trashPending && linkChecks.wasAutoPassed(row.id)) passTrash.enqueue(row.id);
+  return passed;
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -156,9 +185,9 @@ export const server = createServer(async (req, res) => {
     if (!url.pathname.startsWith(`${BASE}/`)) return json(404, { error: 'Page not found.' });
     url.pathname = url.pathname.slice(BASE.length);
     if (req.method === 'GET' && url.pathname === '/api/groups')
-      return json(200, store.groups().map((group) => ({ ...group, pitches: voicemails.attach(group.pitches) })));
+      return json(200, store.groups().map((group) => ({ ...group, pitches: decorate(group.pitches) })));
     if (req.method === 'GET' && url.pathname === '/api/opportunities')
-      return json(200, voicemails.attach(store.snapshot().opportunities));
+      return json(200, decorate(store.snapshot().opportunities));
     // What the Mac's voicemail sweep matches against: each pitch's phone numbers, and the
     // voicemails already here, so it uploads each one once.
     if (req.method === 'GET' && url.pathname === '/api/voicemails/index') {
@@ -171,6 +200,9 @@ export const server = createServer(async (req, res) => {
         })),
       });
     }
+    // What the Mac's daily link sweep visits.
+    if (req.method === 'GET' && url.pathname === '/api/links/index')
+      return json(200, { pitches: linkChecks.index(store.snapshot().opportunities) });
     const audioPath = url.pathname.match(/^\/api\/voicemails\/([^/]+)\/audio$/);
     if (['GET', 'HEAD'].includes(req.method) && audioPath) {
       const file = voicemails.audioFile(decodeURIComponent(audioPath[1]));
@@ -229,7 +261,13 @@ export const server = createServer(async (req, res) => {
       if (req.method === 'PATCH' && url.pathname === '/api/phrase-colors')
         return json(200, store.setPhraseColor(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/grouping')
-        return json(200, store.group(await body(req)).map((group) => ({ ...group, pitches: voicemails.attach(group.pitches) })));
+        return json(200, store.group(await body(req)).map((group) => ({ ...group, pitches: decorate(group.pitches) })));
+      if (req.method === 'POST' && url.pathname === '/api/links/results') {
+        const input = await body(req);
+        const recorded = linkChecks.record(input, store.snapshot().opportunities);
+        // A sweep sends several batches; only after its last are a pitch's links all from today.
+        return json(200, { recorded, autoPassed: input.final === true ? passEndedJobs() : [] });
+      }
       if (req.method === 'POST' && url.pathname === '/api/voicemails')
         return json(200, voicemails.upsert(await body(req), pitchExists));
       const seenPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/voicemails-seen$/);
@@ -258,22 +296,23 @@ export const server = createServer(async (req, res) => {
         if (wanted && resume?.name !== wanted)
           return json(409, { error: 'The resume folder changed since you opened this reply. Reopen it to attach the newest resume.' });
         // The recipient always comes from the stored pitch, never from the request.
-        return json(200, voicemails.attach([store.recordReply(id, await mailer.reply(row, input.body.trim(), resume))])[0]);
+        return json(200, decorate([store.recordReply(id, await mailer.reply(row, input.body.trim(), resume))])[0]);
       }
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/opportunities/')) {
         const id = decodeURIComponent(url.pathname.slice('/api/opportunities/'.length));
         const before = store.snapshot().opportunities.find((item) => item.id === id)?.status;
         const row = store.update(id, await body(req));
+        if (before === 'Passed' && row.status !== 'Passed') linkChecks.keep(id);
         // A pasted email has no Gmail message to delete, so it never needs Gmail.
         if (row.status !== 'Passed' || !gmailIds(row.messageIds).length || (before === 'Passed' && !row.trashPending))
-          return json(200, voicemails.attach([row])[0]);
+          return json(200, decorate([row])[0]);
         // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved now and
         // the delete is queued; the page collects its outcome from GET …/trash. A Gmail failure
         // is reported, never hidden, and the next Pass retries it. Pending is written before
         // IMAP starts, so a crash mid-delete still leaves a retry.
         const pending = store.setTrashPending(id, true);
         passTrash.enqueue(id);
-        return json(200, { ...voicemails.attach([pending])[0], trashQueued: true });
+        return json(200, { ...decorate([pending])[0], trashQueued: true });
       }
       if (req.method === 'POST' && url.pathname === '/api/import') {
         const input = await body(req);
