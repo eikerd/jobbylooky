@@ -525,6 +525,50 @@
 <app-selection-phrase [within]="detailPane()?.nativeElement" [phrases]="phrases()" [kinds]="phraseKinds" [labels]="phraseKindLabels"
   [marks]="phraseKindMarks" [save]="trackSelection" [busy]="busy()" />
 
+<dialog #decisionDialog class="decision" aria-labelledby="decision-title" (close)="decision.set(null)">
+  @if (decision(); as plan) {
+    <h2 id="decision-title">{{ plan.decide.length + plan.others.length }} emails for {{ plan.decide.length === 1 ? 'this job' : 'these ' + plan.decide.length + ' jobs' }}</h2>
+    <div class="related-scroll">
+      <table class="related-grid">
+        <colgroup><col class="c-tick" /><col class="c-received" /><col /><col class="c-pay" /><col class="c-fit" /><col class="c-change" /></colgroup>
+        <thead>
+          <tr>
+            <th scope="col"><span class="visually-hidden">Include</span></th>
+            @for (column of relatedColumns; track column.key) {
+              <th scope="col" [attr.aria-sort]="decisionAriaSort(column.key)">
+                <button type="button" (click)="sortDecisionBy(column.key)">{{ column.label }}<span class="sort-mark" aria-hidden="true">{{ decisionSort().key === column.key ? (decisionSort().dir === 'asc' ? '▲' : '▼') : '' }}</span></button>
+              </th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of decisionRows(); track item.id) {
+            <tr [class.selected]="isDecided(item.pitch)" (click)="isDecided(item.pitch) || toggleDecisionTick(item.pitch.id)">
+              <td><input type="checkbox" [checked]="isDecided(item.pitch) || decisionTicks().has(item.pitch.id)" [disabled]="isDecided(item.pitch)" (click)="$event.stopPropagation()" (change)="toggleDecisionTick(item.pitch.id)" [attr.aria-label]="'Include ' + item.from" /></td>
+              <td><app-age [at]="item.receivedAt" />@if (isDate(item.receivedAt)) { · <time [attr.datetime]="item.receivedAt">{{ item.receivedAt | date: 'MMM d' }}</time>}</td>
+              <td><span class="related-sender"><app-source-icon [from]="item.from" /><span>{{ item.from }}</span></span></td>
+              <td>
+                @if (item.pitch.pay; as pay) {
+                  <strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}
+                }
+              </td>
+              <td><span [class]="'fit ' + fitClass(item.pitch.fit)">{{ item.pitch.fit }}</span></td>
+              <td>@if (decisionStatus(item.pitch) !== item.pitch.status) {{{ item.pitch.status }} → <strong>{{ decisionStatus(item.pitch) }}</strong>} @else {{{ item.pitch.status }}}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="decision-actions">
+      <button type="button" class="button primary" autofocus (click)="confirmDecision(false)">
+        {{ plan.status === 'Passed' ? 'Pass ' + decisionPassing() : (plan.keptStatus === plan.status ? plan.status : 'Keep ' + plan.keptStatus) + (decisionPassing() ? ' and pass ' + decisionPassing() : '') }}
+      </button>
+      <button type="button" class="button secondary" (click)="confirmDecision(true)">{{ decisionChosenCount() === 1 ? 'Just this one' : 'Just the ' + decisionChosenCount() + ' selected' }}</button>
+      <button type="button" class="button secondary" (click)="closeDecision()">Cancel</button>
+    </div>
+  }
+</dialog>
+
 <div class="toasts" role="status" aria-live="polite">
   @for (item of toasts(); track item.id) {
     <div class="toast">{{ item.text }}</div>
