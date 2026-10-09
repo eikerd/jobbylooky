@@ -739,7 +739,8 @@ export class App implements OnDestroy {
   gmailUrl(row: Opportunity) {
     return row.source === 'gmail'
       ? `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(row.account || '')}#all/${encodeURIComponent(row.threadId)}`
-      : `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('rfc822msgid:' + row.messageIds[0])}`;
+      : // The server finds the Gmail thread by Message-ID; a Gmail search breaks on '=' and '+' in the ID.
+        new URL(`api/opportunities/${encodeURIComponent(row.id)}/gmail`, document.baseURI).href;
   }
   sender(from: string) {
     return (

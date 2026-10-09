@@ -8,36 +8,41 @@ export const gmailIds = (messageIds) =>
   [...new Set(messageIds.map((id) => String(id).replace(/[<>]/g, '')).filter(searchable))];
 
 /**
+ * Opens an IMAP session to the owner's Gmail with the reply app password (SMTP_USER/SMTP_PASS),
+ * or null when that is not set up.
+ */
+export function imapOpener(env = process.env, Imap = ImapFlow) {
+  const user = env.SMTP_USER || '';
+  if (!(user && env.SMTP_PASS)) return null;
+  return async () => {
+    const client = new Imap({
+      host: env.IMAP_HOST || 'imap.gmail.com',
+      port: Number(env.IMAP_PORT || 993),
+      secure: true,
+      auth: { user, pass: env.SMTP_PASS },
+      logger: false,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 30000,
+    });
+    // ImapFlow also emits failures (a refused login, a dropped socket) as 'error' events;
+    // with no listener Node treats that as uncaught and the whole server exits. The same
+    // failure still rejects connect() or the command in flight, which is where it is reported.
+    client.on('error', () => {});
+    await client.connect();
+    return client;
+  };
+}
+
+/**
  * Moves a passed pitch's emails out of the Gmail inbox into Trash, where Gmail keeps
  * them for 30 days. Same app password as replies (SMTP_USER/SMTP_PASS). Returns null
  * when it is not set up; MAIL_SEND_MODE=preview counts matches without touching Gmail.
  */
 export function createTrasher(env = process.env, connect = null, Imap = ImapFlow) {
-  const user = env.SMTP_USER || '';
   const preview = env.MAIL_SEND_MODE === 'preview';
-  if (!connect && !preview && !(user && env.SMTP_PASS)) return null;
-  const open =
-    connect ||
-    (preview
-      ? null
-      : async () => {
-          const client = new Imap({
-            host: env.IMAP_HOST || 'imap.gmail.com',
-            port: Number(env.IMAP_PORT || 993),
-            secure: true,
-            auth: { user, pass: env.SMTP_PASS },
-            logger: false,
-            connectionTimeout: 15000,
-            greetingTimeout: 15000,
-            socketTimeout: 30000,
-          });
-          // ImapFlow also emits failures (a refused login, a dropped socket) as 'error' events;
-          // with no listener Node treats that as uncaught and the whole server exits. The same
-          // failure still rejects connect() or the command in flight, which is where it is reported.
-          client.on('error', () => {});
-          await client.connect();
-          return client;
-        });
+  const open = connect || (preview ? null : imapOpener(env, Imap));
+  if (!connect && !preview && !open) return null;
   return {
     preview,
     async trash(messageIds) {

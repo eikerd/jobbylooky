@@ -598,10 +598,14 @@ textarea {
 
 /* 2026-10 canvas pass: one-row cards, unlabeled facts, fit tags, one action row. */
 .row-bottom { flex-wrap: nowrap; overflow: hidden; }
-.row-bottom > span { flex: none; }
+.row-bottom > span, .row-facts > span { flex: none; }
+/* Company, location and the optional facts clip inside their own box, so the fit group after it is never cut off. */
+.row-bottom > .row-facts { display: flex; align-items: center; flex: 1; min-width: 0; gap: inherit; overflow: hidden; }
 .opportunity .row-bottom .company { display: inline; flex: 0 1 auto; max-width: 45%; margin: 0; }
-.row-bottom > .row-location { flex: 0 1000 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-facts > .row-location { flex: 0 1000 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-reasons { gap: 4px; }
+/* Fit badge and its tallies close the row, flush right under the date. */
+.row-bottom > .fit { margin-left: auto; }
 .count-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .count-pill.pass { background: var(--accent-soft); color: var(--accent-ink); }
 .count-pill.fail { background: var(--bad-soft); color: var(--bad); }

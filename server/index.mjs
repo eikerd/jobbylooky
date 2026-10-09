@@ -10,6 +10,7 @@ import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 import { createTrasher, gmailIds } from './gmail-trash.mjs';
+import { createGmailLinker, threadUrl, searchUrl } from './gmail-link.mjs';
 import { createPassTrash } from './pass-trash.mjs';
 import { createVoicemails, phoneNumbers, MAX_AUDIO_BYTES } from './voicemails.mjs';
 import { createLinkChecks } from './link-checks.mjs';
@@ -19,6 +20,7 @@ const port = Number(process.env.PORT || 4317);
 const workerUrl = process.env.MAIL_DATABASE_URL || '';
 const mailer = createMailer();
 const trasher = createTrasher();
+const gmailLinker = createGmailLinker();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const passTrash = createPassTrash({ store, trasher });
 const voicemails = createVoicemails(resolve(root, process.env.DATA_DIR || 'data'));
@@ -240,6 +242,23 @@ export const server = createServer(async (req, res) => {
       const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(recipientPath[1]));
       if (!row) return json(404, { error: 'Opportunity not found.' });
       return json(200, { to: replyRecipient(row, mailer?.from ?? '') });
+    }
+    // "Open in Gmail": straight to the pitch's Gmail thread, found by its Message-ID over IMAP.
+    const gmailPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/gmail$/);
+    if (req.method === 'GET' && gmailPath) {
+      const row = store.snapshot().opportunities.find((item) => item.id === decodeURIComponent(gmailPath[1]));
+      if (!row) return json(404, { error: 'Opportunity not found.' });
+      const [first] = gmailIds(row.messageIds);
+      if (!first) return json(404, { error: 'This pitch was pasted in; it has no Gmail email.' });
+      const account = gmailLinker?.account || '';
+      let thread = null;
+      try {
+        thread = await gmailLinker?.thread(row.messageIds);
+      } catch (error) {
+        console.error(`Gmail thread lookup for ${row.id} failed: ${error.message}`);
+      }
+      res.writeHead(302, { Location: thread ? threadUrl(account, thread) : searchUrl(account, first) });
+      return res.end();
     }
     const trashPath = url.pathname.match(/^\/api\/opportunities\/([^/]+)\/trash$/);
     if (req.method === 'GET' && trashPath) {
