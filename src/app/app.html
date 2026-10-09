@@ -192,17 +192,19 @@
                 </span>
               </span>
               <span class="row-bottom">
-                <span class="company">{{ row.company !== 'Not stated' ? row.company : sender(row.from) }}</span>
-                <span class="row-location">{{ row.location }}</span>
-                @if (group.pitches.length > 1) {
-                  <span class="pitch-count">{{ group.pitches.length }} pitches</span>
-                }
-                @if (row.status !== 'New') {
-                  <span class="decision">{{ row.status }}</span>
-                }
-                @if (row.replyReceivedAt) {
-                  <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
-                }
+                <span class="row-facts">
+                  <span class="company">{{ row.company !== 'Not stated' ? row.company : sender(row.from) }}</span>
+                  <span class="row-location">{{ row.location }}</span>
+                  @if (group.pitches.length > 1) {
+                    <span class="pitch-count">{{ group.pitches.length }} pitches</span>
+                  }
+                  @if (row.status !== 'New') {
+                    <span class="decision">{{ row.status }}</span>
+                  }
+                  @if (row.replyReceivedAt) {
+                    <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
+                  }
+                </span>
                 <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
                 @if (row.reasons.length) {
                   <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
