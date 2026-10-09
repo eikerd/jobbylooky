@@ -28,8 +28,15 @@ function validMessages(messages) {
   });
 }
 
+/** Statuses the Pursuing folder holds; a resume reply never moves a pitch that is already in one. */
+const PURSUING = ['Pursue', 'Applied', 'Interviewing', 'Offer'];
+
+/** A resume that actually went out; a preview was never sent. */
+const sentResume = (row) => (row.replies ?? []).some((reply) => reply.attachment && !reply.preview);
+
 // Once a reply has gone out, a later message in the thread from someone else is their answer.
-// The owner chose: move New/Pursue to Maybe and badge the row; other decisions stay.
+// The owner chose: move New/Pursue to Maybe and badge the row; other decisions stay. A pitch I
+// sent my resume on keeps Pursue (the owner, 2026-10-09).
 function noteReplyBack(row, message) {
   // A preview reply was never sent, so nothing that follows can be an answer to it.
   const lastReply = row.replies?.filter((reply) => !reply.preview).at(-1);
@@ -37,7 +44,7 @@ function noteReplyBack(row, message) {
   const sender = emailAddress(message.from);
   if (!sender || row.replies.some((reply) => reply.from === sender)) return;
   row.replyReceivedAt = message.receivedAt;
-  if (['New', 'Pursue'].includes(row.status)) row.status = 'Maybe';
+  if (row.status === 'New' || (row.status === 'Pursue' && !sentResume(row))) row.status = 'Maybe';
 }
 
 // The pitch a message answers: one the owner wrote to this sender from before it arrived.
@@ -220,6 +227,11 @@ export function createStore(directory) {
       const row = next.opportunities.find((item) => item.id === id);
       if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
       row.replies = [...(row.replies ?? []), reply];
+      // Sending my resume is pursuing the job. Leaving Passed also drops any pending Gmail trash.
+      if (reply.attachment && !reply.preview && !PURSUING.includes(row.status)) {
+        row.status = 'Pursue';
+        delete row.trashPending;
+      }
       commit(next);
       return structuredClone(row);
     },
