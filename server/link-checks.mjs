@@ -128,11 +128,14 @@ export function createLinkChecks(directory) {
     /** Each row with what the sweep knows about its links, for the page. */
     attach(rows) {
       return rows.map((row) => {
-        const checks = linksOf(row).map(({ url, kind }) => {
+        const checks = linksOf(row).map(({ url, target, kind }) => {
           const record = state.links[url];
           return {
             url,
             kind,
+            // Where the link really leads (a safelink's target), for the page to name it.
+            host: new URL(target ?? url).hostname.replace(/^www\./, ''),
+            jobKey: record?.jobKey ?? null,
             status: record?.status ?? 'unchecked',
             postedAt: record?.postedAt ?? null,
             closedAt: record?.closedAt ?? null,

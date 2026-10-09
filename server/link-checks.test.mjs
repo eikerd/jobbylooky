@@ -48,7 +48,7 @@ test('a closed posting passes a New pitch once, with its posted and closed dates
     assert.deepEqual(a.autoPassed, { at: '2026-10-09T09:01:00Z', reason: 'closed' });
     assert.equal(kept.autoPassed, undefined);
     assert.deepEqual(kept.linkChecks[0], {
-      url: VIEW, kind: 'posting', status: 'closed', postedAt: '2026-08-18T16:14:51.000Z',
+      url: VIEW, kind: 'posting', host: 'cts.indeed.com', jobKey: null, status: 'closed', postedAt: '2026-08-18T16:14:51.000Z',
       closedAt: '2026-10-09T09:00:00.000Z', checkedAt: '2026-10-09T09:00:00.000Z', httpStatus: null,
     });
     assert.equal(kept.linkChecks[1].status, 'unchecked');

@@ -5,3 +5,4 @@
 /* The link itself is gone from the page; this sits where it was. */
 .link-ended { flex: none; color: var(--bad); font-weight: 700; white-space: nowrap; }
 .link-open { flex: none; margin-left: 8px; color: var(--accent-ink); font-weight: 700; white-space: nowrap; }
+.auto-passed { margin: 4px 0 0; color: var(--bad); font-weight: 700; font-size: 14px; }

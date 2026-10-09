@@ -38,6 +38,10 @@ export interface LinkCheck {
   url: string;
   /** 'posting' is the job itself; 'other' links are only checked for being dead. */
   kind: 'posting' | 'other';
+  /** The link's real destination host, without www. */
+  host: string;
+  /** Indeed's job key, once the sweep has resolved the tracker; one job, several emails. */
+  jobKey: string | null;
   status: 'live' | 'closed' | 'dead' | 'unchecked';
   postedAt: string | null;
   closedAt: string | null;

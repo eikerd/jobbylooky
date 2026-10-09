@@ -12,6 +12,7 @@ import { SourceIcon } from './source-icon.component';
 import { CrayonPicker } from './crayon-picker.component';
 import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { LocationMaps } from './location-maps.component';
+import { Postings } from './postings.component';
 
 interface Connection {
   configured: boolean;
@@ -31,7 +32,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker, Postings],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -47,7 +48,7 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | null>(null);
   readonly profileMode = computed(() => {
     const mode = this.directoryMode();
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
@@ -330,7 +331,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies' | 'phrases', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -770,6 +771,12 @@ export class App implements OnDestroy {
     return body.replace(/\$/g, '');
   }
   readonly jobState = jobState;
+  /** Why the sweep passed a pitch, for the line under its title. */
+  autoPassedReason(row: Opportunity) {
+    if (row.autoPassed?.reason === 'dead') return 'its job link is dead';
+    const indeed = row.linkChecks?.some((check) => check.kind === 'posting' && check.status === 'closed' && /(^|\.)indeed\.com$/.test(check.host));
+    return indeed ? 'the job closed on Indeed' : 'the job posting closed';
+  }
   /** "52d": how long a posting has been up, or nothing when its posted date is unknown. */
   upFor(check: LinkCheck) {
     const days = daysUp(check);
