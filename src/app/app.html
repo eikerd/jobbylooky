@@ -185,6 +185,8 @@
               type="button"
               class="opportunity"
               [class.full-time]="row.employmentType === 'Full-time'"
+              [class.convo-waiting]="conversation(group.pitches) === 'waiting'"
+              [class.convo-live]="conversation(group.pitches) === 'answered'"
               [class.selected]="selectedGroup()?.id === group.id"
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
               (click)="open(row, true)"
@@ -406,7 +408,7 @@
               </section>
             }
             @if (original(); as first) {
-              <section class="answer-of" aria-label="Original pitch">
+              <section class="answer-of convo-live" aria-label="Original pitch">
                 <p>↩ Answer to <button type="button" class="link-button" (click)="openProfilePitch(first.id)">{{ first.title }}</button></p>
                 <button class="button secondary" type="button" [attr.aria-expanded]="showOriginal()" (click)="showOriginal.set(!showOriginal())">
                   {{ showOriginal() ? 'Hide original email' : 'View original email' }}
@@ -417,7 +419,7 @@
               </section>
             }
             @if (row.replyReceivedAt || row.replies?.length || replying() || !connection()?.canReply) {
-            <section class="reply" aria-label="Reply">
+            <section class="reply" aria-label="Reply" [class.convo-waiting]="conversation([row]) === 'waiting'" [class.convo-live]="conversation([row]) === 'answered'">
               @if (row.replyReceivedAt) {
                 <p class="reply-back">↩ They replied {{ row.replyReceivedAt | date: 'MMM d, h:mm a' }}</p>
               }

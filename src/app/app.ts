@@ -3,6 +3,7 @@ import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageHeat, ageInDays } from './age';
+import { conversationState } from './conversation';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import { daysUp, jobState } from './link-state';
@@ -813,6 +814,10 @@ export class App implements OnDestroy {
   /** The date pipe throws on a string it cannot parse; a fallback row can carry one. */
   isDate(value: string) {
     return Number.isFinite(Date.parse(value));
+  }
+  /** Orange while the owner waits on an answer, bright pink once they have written back. */
+  conversation(pitches: readonly Opportunity[]) {
+    return conversationState(pitches);
   }
   ageColor(receivedAt: string) {
     return ageHeat(ageInDays(receivedAt));
