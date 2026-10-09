@@ -13,6 +13,7 @@ import { SourceIcon } from './source-icon.component';
 import { CrayonPicker } from './crayon-picker.component';
 import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { PlaceLinks } from './place-links.component';
+import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
 
 interface Connection {
@@ -33,7 +34,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, Postings],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -210,7 +211,8 @@ export class App implements OnDestroy {
   private shortcut = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== 'p' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target;
-    if ((target instanceof Element && target.closest('input:not([type=checkbox]), textarea, select, [contenteditable]')) || this.directoryMode()) return;
+    // An open modal owns the keyboard even when focus has dropped to the page behind it.
+    if ((target instanceof Element && target.closest('input:not([type=checkbox]), textarea, select, [contenteditable]')) || this.directoryMode() || document.querySelector('dialog[open]')) return;
     event.preventDefault();
     void this.pass();
   };
@@ -435,6 +437,14 @@ export class App implements OnDestroy {
     if (await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind })))
       this.phraseDraft = '';
   }
+  /** Text selected in a pitch and tracked from the selection modal: null once saved, else why not. */
+  readonly trackSelection = async (phrase: string, kind: PhraseKind) => {
+    if (this.busy()) return 'Still saving the last change; try again in a moment.';
+    if (!(await this.changePhrases(() => this.request<TrackedPhrase[]>('phrases', 'POST', { phrase, kind }))))
+      return this.error() || 'The phrase was not saved.';
+    this.toast(`Tracking “${phrase}” as ${this.phraseKindLabels[kind]}`);
+    return null;
+  };
   // Optimistic: the crayon shows at once and is put back if the server refuses it. Each answer touches
   // only its own kind, and only while it is still that kind's latest pick, so a slow or failed earlier
   // request never undoes a newer crayon.
@@ -731,7 +741,8 @@ export class App implements OnDestroy {
   gmailUrl(row: Opportunity) {
     return row.source === 'gmail'
       ? `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(row.account || '')}#all/${encodeURIComponent(row.threadId)}`
-      : `https://mail.google.com/mail/u/0/#search/${encodeURIComponent('rfc822msgid:' + row.messageIds[0])}`;
+      : // The server finds the Gmail thread by Message-ID; a Gmail search breaks on '=' and '+' in the ID.
+        new URL(`api/opportunities/${encodeURIComponent(row.id)}/gmail`, document.baseURI).href;
   }
   sender(from: string) {
     return (

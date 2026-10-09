@@ -197,26 +197,28 @@
                 </span>
               </span>
               <span class="row-bottom">
-                <span class="company">{{ row.company !== 'Not stated' ? row.company : sender(row.from) }}</span>
-                <span class="row-location">{{ row.location }}</span>
+                <span class="row-facts">
+                  <span class="company">{{ row.company !== 'Not stated' ? row.company : sender(row.from) }}</span>
+                  <span class="row-location">{{ row.location }}</span>
+                  @if (jobState(row.linkChecks); as job) {
+                    <span [class]="'job-state ' + job.kind">{{ job.kind === 'open' ? 'open' : job.kind === 'closed' ? '✕ closed' : '✕ dead link' }}{{ job.days !== null ? ' ' + job.days + 'd' : '' }}</span>
+                  }
+                  @if (group.pitches.length > 1) {
+                    <span class="pitch-count">{{ group.pitches.length }} pitches</span>
+                  }
+                  @if (row.status !== 'New') {
+                    <span class="decision">{{ row.status }}</span>
+                  }
+                  @if (row.replyReceivedAt) {
+                    <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
+                  }
+                </span>
                 <span [class]="'fit ' + fitClass(row.fit)">{{ row.fit }}</span>
                 @if (row.reasons.length) {
                   <span class="row-reasons" role="img" [attr.aria-label]="reasonSummary(row)">
                     @if (reasonCount(row, 'pass'); as count) {<span class="count-pill pass" aria-hidden="true">{{ count }}</span>}
                     @if (reasonCount(row, 'fail'); as count) {<span class="count-pill fail" aria-hidden="true">{{ count }}</span>}
                   </span>
-                }
-                @if (jobState(row.linkChecks); as job) {
-                  <span [class]="'job-state ' + job.kind">{{ job.kind === 'open' ? 'open' : job.kind === 'closed' ? '✕ closed' : '✕ dead link' }}{{ job.days !== null ? ' ' + job.days + 'd' : '' }}</span>
-                }
-                @if (group.pitches.length > 1) {
-                  <span class="pitch-count">{{ group.pitches.length }} pitches</span>
-                }
-                @if (row.status !== 'New') {
-                  <span class="decision">{{ row.status }}</span>
-                }
-                @if (row.replyReceivedAt) {
-                  <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
                 }
               </span>
               @if (group.history.occurrences > 1) {
@@ -509,6 +511,9 @@
     }
   </main>
 </div>
+
+<app-selection-phrase [within]="detailPane()?.nativeElement" [phrases]="phrases()" [kinds]="phraseKinds" [labels]="phraseKindLabels"
+  [marks]="phraseKindMarks" [save]="trackSelection" [busy]="busy()" />
 
 <div class="toasts" role="status" aria-live="polite">
   @for (item of toasts(); track item.id) {
