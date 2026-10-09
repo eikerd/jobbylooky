@@ -415,7 +415,9 @@ export class App implements OnDestroy {
       });
       this.replaceRow(updated);
       // A resume reply can move the pitch to Pursue; a later save must not send the old status back.
-      if (updated.status !== row.status && updated.id === this.selectedId()) this.editStatus = updated.status;
+      // A status picked but not yet saved is the owner's newer choice and stays.
+      if (updated.status !== row.status && this.editStatus === row.status && updated.id === this.selectedId())
+        this.editStatus = updated.status;
       this.replying.set(false);
       this.replyDraft = '';
       this.notice.set(`Reply sent to ${this.sender(updated.replies?.at(-1)?.to ?? row.from)}.`);

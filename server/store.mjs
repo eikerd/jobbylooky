@@ -35,8 +35,8 @@ const PURSUING = ['Pursue', 'Applied', 'Interviewing', 'Offer'];
 const sentResume = (row) => (row.replies ?? []).some((reply) => reply.attachment && !reply.preview);
 
 // Once a reply has gone out, a later message in the thread from someone else is their answer.
-// The owner chose: move New/Pursue to Maybe and badge the row; other decisions stay. A pitch I
-// sent my resume on keeps Pursue (the owner, 2026-10-09).
+// The owner chose: badge the row and move New to Maybe; Pursue moves to Maybe too unless I sent
+// my resume (the owner, 2026-10-09); other decisions stay.
 function noteReplyBack(row, message) {
   // A preview reply was never sent, so nothing that follows can be an answer to it.
   const lastReply = row.replies?.filter((reply) => !reply.preview).at(-1);
