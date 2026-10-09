@@ -298,56 +298,48 @@
               <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y, h:mm a' }}</time>
             </p>
             @if (selectedGroup(); as group) {
-              @if (group.history.occurrences > 1) {
-                <section class="posting-summary" aria-label="Posting history">
-                  <p>First seen <strong>{{ group.history.firstSeen | date:'MMM d, y' }}</strong> · latest <strong>{{ group.history.lastSeen | date:'MMM d, y' }}</strong></p>
-                  <p>{{ group.history.occurrences }} emails over {{ group.history.spanDays }} days · longest gap {{ group.history.longestGapDays }} days</p>
-                  @if (group.history.spanDays >= 30) {
-                    <p class="repeat-insight">Related outreach spans {{ group.history.spanDays }} days. This may be an ongoing or renewed search.</p>
-                  }
-                  <details class="posting-history">
-                    <summary>Posting timeline</summary>
-                    <ol>
-                      @for (event of group.history.timeline; track event.id) {
-                        <li><button type="button" (click)="selectPitchId(event.pitchId)"><time [attr.datetime]="event.receivedAt">{{ event.receivedAt | date:'MMM d, y' }}</time> · {{ sender(event.from) }}</button>
-                        @if (event.gapDays !== null) { <span>{{ event.gapDays }} days after previous email</span> }</li>
-                      }
-                    </ol>
-                  </details>
-                </section>
-              }
-
-              @if (group.pitches.length > 1) {
-                <section class="recruiter-pitches" aria-labelledby="pitches-title">
-                  <h3 id="pitches-title">{{ group.kind === 'likely' ? 'Likely same job' : 'Same job' }} · {{ group.pitches.length }} pitches</h3>
-                  <p class="match-evidence">{{ group.evidence }}</p>
-                  <div class="pitch-list">
-                    @for (pitch of group.pitches; track pitch.id) {
-                      <button type="button" class="pitch" [class.full-time]="pitch.employmentType === 'Full-time'" [attr.aria-pressed]="pitch.id === selectedId()" (click)="open(pitch)" [disabled]="busy()">
-                        <span class="pitch-sender source-title"><app-source-icon [from]="pitch.from" />{{ pitch.from }}</span>
-                        <span class="pitch-terms">
-                          <span>{{ ageLabel(pitch.receivedAt) }} · {{ pitch.receivedAt | date: 'MMM d' }}</span>
-                          @if (pitch.pay; as pay) {
-                            <span><strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}</span>
-                          } @else {
-                            <span>Pay not stated</span>
-                          }
-                          <span [class]="'fit ' + fitClass(pitch.fit)">{{ pitch.fit }}</span>
-                          <span>{{ pitch.status }}</span>
-                        </span>
-                      </button>
+              @if (group.pitches.length > 1 || group.history.occurrences > 1) {
+                <section class="related" aria-labelledby="related-title">
+                  <div class="related-head">
+                    <h3 id="related-title">{{ group.pitches.length === 1 ? 'Emails' : group.kind === 'likely' ? 'Likely same job' : 'Same job' }}</h3>
+                    @if (group.pitches.length > 1) {
+                      <button type="button" class="link-action" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
                     }
                   </div>
-                  <p class="pitch-scope">Status and notes below apply to the selected pitch.</p>
+                  <div class="related-scroll">
+                    <table class="related-grid">
+                      <colgroup><col class="c-received" /><col /><col class="c-pay" /><col class="c-fit" /><col class="c-status" /></colgroup>
+                      <thead>
+                        <tr>
+                          @for (column of relatedColumns; track column.key) {
+                            <th scope="col" [attr.aria-sort]="ariaSort(column.key)">
+                              <button type="button" (click)="sortRelatedBy(column.key)">{{ column.label }}<span class="sort-mark" aria-hidden="true">{{ relatedSort().key === column.key ? (relatedSort().dir === 'asc' ? '▲' : '▼') : '' }}</span></button>
+                            </th>
+                          }
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (item of related(); track item.id) {
+                          <tr [class.selected]="item.pitch.id === selectedId()" [class.full-time]="item.pitch.employmentType === 'Full-time'" (click)="busy() || open(item.pitch)">
+                            <td><strong [style.color]="ageColor(item.receivedAt)">{{ ageLabel(item.receivedAt) }}</strong>@if (isDate(item.receivedAt)) { · <time [attr.datetime]="item.receivedAt">{{ item.receivedAt | date: 'MMM d' }}</time>}</td>
+                            <td><button type="button" class="related-sender" [attr.aria-current]="item.pitch.id === selectedId() || null" (click)="$event.stopPropagation(); open(item.pitch)" [disabled]="busy()"><app-source-icon [from]="item.from" /><span>{{ item.from }}</span></button></td>
+                            <td>
+                              @if (item.pitch.pay; as pay) {
+                                <strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}
+                              }
+                            </td>
+                            <td><span [class]="'fit ' + fitClass(item.pitch.fit)">{{ item.pitch.fit }}</span></td>
+                            <td>{{ item.pitch.status }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
                 </section>
               }
-              @if (group.pitches.length > 1 || group.kind === 'manual') {
+              @if (group.kind === 'manual' && group.pitches.length === 1) {
                 <div class="group-actions">
-                  @if (group.pitches.length > 1) {
-                    <button type="button" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
-                  } @else {
-                    <button type="button" (click)="groupCurrent('auto')" [disabled]="busy()">Allow automatic matching</button>
-                  }
+                  <button type="button" (click)="groupCurrent('auto')" [disabled]="busy()">Allow automatic matching</button>
                 </div>
               }
               @if (linking()) {

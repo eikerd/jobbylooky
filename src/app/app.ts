@@ -2,7 +2,8 @@ import { Component, computed, signal, OnDestroy, ElementRef, viewChild } from '@
 import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ageInDays } from './age';
+import { ageHeat, ageInDays } from './age';
+import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail } from './models';
 import { Highlight } from './highlight.component';
@@ -158,6 +159,20 @@ export class App implements OnDestroy {
   readonly selectedGroup = computed(() =>
     this.jobGroups().find(group => group.pitches.some(row => row.id === this.selectedId())),
   );
+  readonly relatedColumns = RELATED_COLUMNS;
+  readonly relatedSort = signal(DEFAULT_RELATED_SORT);
+  /** Every email for the open job, as grid rows in the chosen order. */
+  readonly related = computed(() => {
+    const group = this.selectedGroup();
+    return group ? sortRelated(relatedRows(group), this.relatedSort()) : [];
+  });
+  sortRelatedBy(key: RelatedKey) {
+    this.relatedSort.update((sort) => nextRelatedSort(sort, key));
+  }
+  ariaSort(key: RelatedKey) {
+    const sort = this.relatedSort();
+    return sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
+  }
   readonly linkOptions = computed(() => this.jobGroups().filter(group => group.id !== this.selectedGroup()?.id));
 
   readonly selected = computed(() =>
@@ -763,6 +778,13 @@ export class App implements OnDestroy {
   }
   sourceText(body: string) {
     return body.replace(/\$/g, '');
+  }
+  /** The date pipe throws on a string it cannot parse; a fallback row can carry one. */
+  isDate(value: string) {
+    return Number.isFinite(Date.parse(value));
+  }
+  ageColor(receivedAt: string) {
+    return ageHeat(ageInDays(receivedAt));
   }
   ageLabel(receivedAt: string) {
     const days = ageInDays(receivedAt);
