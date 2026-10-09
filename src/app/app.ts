@@ -567,14 +567,18 @@ export class App implements OnDestroy {
   // Tags compress "How it fits": a tag repeating an earlier one with the same verdict (tracked "java" ×
   // beside screened "Java" ×) is not shown twice. Tracked phrases come first, so their crayon-coloured tag
   // is the one kept. Conflicting verdicts both stay, so a positive tracked phrase never hides a mismatch.
+  // × tags lead, so the two-line strip never scrolls a mismatch out of sight; the sort is stable, so
+  // every other tag keeps its screening order.
   fitTags(row: Opportunity) {
     const seen = new Set<string>();
-    return row.reasons.filter((reason) => {
-      const key = this.tagKey(reason.kind, reason.label || reason.text);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return row.reasons
+      .filter((reason) => {
+        const key = this.tagKey(reason.kind, reason.label || reason.text);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => Number(b.kind === 'fail') - Number(a.kind === 'fail'));
   }
   hasFitTag(row: Opportunity, kind: string, label: string) {
     const key = this.tagKey(kind, label);
