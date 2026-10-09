@@ -83,7 +83,12 @@ async function sweep(days) {
     const pitchIds = byNumber.get(normalizeNumber(voicemail.from)) ?? [];
     const pushed = new Set(known.get(voicemail.id)?.pitchIds ?? []);
     const fresh = pitchIds.filter((id) => !pushed.has(id));
+    const server = known.get(voicemail.id);
+    // A transcript made on a later sweep (40 per run), or audio whose upload failed, is sent again.
+    // The server only adds matches it lacks, so resending known pitch IDs changes nothing else.
+    const incomplete = server && ((!server.transcript && voicemail.transcript) || (!server.audio && voicemail.hasAudio));
     if (fresh.length) toPush.push({ voicemail, matches: fresh.map((pitchId) => ({ pitchId, by: 'number' })) });
+    else if (incomplete) toPush.push({ voicemail, matches: server.pitchIds.map((pitchId) => ({ pitchId, by: 'number' })) });
     else if (!pitchIds.length && !known.has(voicemail.id) && !state.reviewed[voicemail.id] && JOB_WORDS.test(voicemail.transcript ?? '') && !SPAM_WORDS.test(voicemail.transcript ?? ''))
       candidates.push(voicemail);
   }

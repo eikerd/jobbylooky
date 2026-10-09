@@ -158,7 +158,9 @@ export const server = createServer(async (req, res) => {
         pitches: store.snapshot().opportunities.map(({ id, title, company, from, status, receivedAt, body }) => ({
           id, title, company, from, status, receivedAt, phones: phoneNumbers(body),
         })),
-        voicemails: voicemails.list().map(({ id, matches, audio }) => ({ id, pitchIds: matches.map((match) => match.pitchId), audio })),
+        voicemails: voicemails.list().map(({ id, matches, audio, transcript }) => ({
+          id, pitchIds: matches.map((match) => match.pitchId), audio, transcript: Boolean(transcript),
+        })),
       });
     }
     const audioPath = url.pathname.match(/^\/api\/voicemails\/([^/]+)\/audio$/);

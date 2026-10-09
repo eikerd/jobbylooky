@@ -176,7 +176,7 @@
               [class.full-time]="row.employmentType === 'Full-time'"
               [class.selected]="selectedGroup()?.id === group.id"
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
-              (click)="open(row)"
+              (click)="open(row, true)"
             >
               <span class="row-title">
                 <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>

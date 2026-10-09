@@ -226,26 +226,25 @@ export class App implements OnDestroy {
     return !this.hasUnsavedWork() || window.confirm('Discard your unsaved changes?');
   }
   /**
-   * A click or a pick from the group list. Opening a job unpins it: its voicemails count as seen.
+   * A click or a pick from the group list. Opening a pitch unpins it: the voicemails it shows count
+   * as seen. A queue row opens the job's pitch that has an unseen voicemail, so what is marked seen
+   * is what is on screen; another pitch's voicemail keeps the job pinned until it is opened too.
    * Load, folder changes and moving on after a Pass call select() and leave the pin alone.
    */
-  open(row: Opportunity) {
-    if (this.busy() || !this.canLeave()) return;
+  open(row: Opportunity, fromQueue = false) {
     const group = this.jobGroups().find((item) => item.pitches.some((pitch) => pitch.id === row.id));
-    this.select(row);
-    const unseen = group?.pitches.filter((pitch) => pitch.voicemailUnseen) ?? [];
-    if (!group || !unseen.length) return;
+    const target = (fromQueue && !row.voicemailUnseen && group?.pitches.find((pitch) => pitch.voicemailUnseen)) || row;
+    if (!this.select(target) || !target.voicemailUnseen || !group) return;
     this.pinnedWhileOpen.set(group.id);
-    void this.markVoicemailsSeen(unseen);
+    void this.markVoicemailsSeen(target);
   }
-  private async markVoicemailsSeen(rows: Opportunity[]) {
-    const ids = new Set(rows.map((row) => row.id));
+  private async markVoicemailsSeen({ id }: Opportunity) {
     const seen = (row: Opportunity): Opportunity =>
-      ids.has(row.id) ? { ...row, voicemailUnseen: false, voicemails: row.voicemails?.map((item) => ({ ...item, seen: true })) } : row;
+      row.id === id ? { ...row, voicemailUnseen: false, voicemails: row.voicemails?.map((item) => ({ ...item, seen: true })) } : row;
     this.revision++;
     this.jobGroups.update((groups) => groups.map((group) => ({ ...group, pitches: group.pitches.map(seen) })));
     try {
-      await Promise.all(rows.map((row) => this.request(`opportunities/${encodeURIComponent(row.id)}/voicemails-seen`, 'POST', {})));
+      await this.request(`opportunities/${encodeURIComponent(id)}/voicemails-seen`, 'POST', {});
     } catch (error) {
       // The next poll pins it again; say why rather than letting it reappear unexplained.
       this.error.set(`Could not mark the voicemail seen: ${this.message(error)}`);
@@ -263,8 +262,9 @@ export class App implements OnDestroy {
     const whole = Math.round(seconds);
     return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
   }
+  /** False when nothing changed: busy, or the user kept their unsaved work. */
   select(row: Opportunity) {
-    if (this.busy() || !this.canLeave()) return;
+    if (this.busy() || !this.canLeave()) return false;
     if (this.pinnedWhileOpen() && !this.jobGroups().find((group) => group.id === this.pinnedWhileOpen())?.pitches.some((pitch) => pitch.id === row.id))
       this.pinnedWhileOpen.set('');
     this.selectedId.set(row.id);
@@ -280,6 +280,7 @@ export class App implements OnDestroy {
     this.replying.set(false);
     this.showOriginal.set(false);
     this.replyDraft = '';
+    return true;
   }
   changeFolder(folder: Folder) {
     if (this.busy() || !this.canLeave()) return;
