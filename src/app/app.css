@@ -600,7 +600,7 @@ textarea {
 .row-bottom { flex-wrap: nowrap; overflow: hidden; }
 .row-bottom > span, .row-facts > span { flex: none; }
 /* Company, location and the optional facts clip inside their own box, so the fit group after it is never cut off. */
-.row-bottom > .row-facts { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: inherit; overflow: hidden; }
+.row-bottom > .row-facts { display: flex; align-items: center; flex: 1; min-width: 0; gap: inherit; overflow: hidden; }
 .opportunity .row-bottom .company { display: inline; flex: 0 1 auto; max-width: 45%; margin: 0; }
 .row-facts > .row-location { flex: 0 1000 auto; min-width: 4ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-reasons { gap: 4px; }
