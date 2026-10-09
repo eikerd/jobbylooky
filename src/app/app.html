@@ -36,6 +36,9 @@
       <button type="button" [class.active]="directoryMode() === 'phrases'" [attr.aria-current]="directoryMode() === 'phrases' ? 'page' : null" (click)="openDirectory('phrases')">
         <span class="nav-icon" aria-hidden="true">×</span>Phrases
       </button>
+      <button type="button" [class.active]="directoryMode() === 'postings'" [attr.aria-current]="directoryMode() === 'postings' ? 'page' : null" (click)="openDirectory('postings')">
+        <span class="nav-icon" aria-hidden="true">◷</span>Postings
+      </button>
     </nav>
     <div class="connection">
       <div class="connection-heading">
@@ -57,7 +60,7 @@
   </aside>
   <main>
     <header class="page-header">
-      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'postings' ? 'Job postings' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
       <div class="header-actions">
         <button
           class="button secondary"
@@ -163,6 +166,8 @@
           </ul>
         }
       </section>
+    } @else if (directoryMode() === 'postings') {
+      <app-postings [rows]="opportunities()" (openPitch)="openProfilePitch($event)" />
     } @else if (profileMode(); as mode) {
       <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
     } @else {
@@ -200,6 +205,9 @@
                     @if (reasonCount(row, 'pass'); as count) {<span class="count-pill pass" aria-hidden="true">{{ count }}</span>}
                     @if (reasonCount(row, 'fail'); as count) {<span class="count-pill fail" aria-hidden="true">{{ count }}</span>}
                   </span>
+                }
+                @if (jobState(row.linkChecks); as job) {
+                  <span [class]="'job-state ' + job.kind">{{ job.kind === 'open' ? 'open' : job.kind === 'closed' ? '✕ closed' : '✕ dead link' }}{{ job.days !== null ? ' ' + job.days + 'd' : '' }}</span>
                 }
                 @if (group.pitches.length > 1) {
                   <span class="pitch-count">{{ group.pitches.length }} pitches</span>
@@ -292,6 +300,9 @@
               </span>
             </div>
             <h2 class="role-title" [class.full-time]="row.employmentType === 'Full-time'"><app-hl [text]="row.title" [phrases]="phrases()" /></h2>
+            @if (row.autoPassed && row.status === 'Passed') {
+              <p class="auto-passed">Passed automatically {{ row.autoPassed.at | date: 'MMM d' }}: {{ autoPassedReason(row) }}.</p>
+            }
             <p class="received-detail">
               <strong>{{ ageLabel(row.receivedAt) }}</strong>
               <span>{{ row.from }}</span>
@@ -509,7 +520,7 @@
 <ng-template #bodyBlocks let-blocks>
   <div class="email-reading">
     @for (block of blocks; track $index) {
-      <pre [class.email-field]="block.kind === 'field'">@for (row of block.rows; track $index) {@if (row.kind === 'links') {<span class="url-line">@for (part of row.parts; track $index) {@if (part.url) {<a class="email-url" [href]="part.text" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>} @else {<span class="url-label"><app-hl [text]="part.text" [phrases]="phrases()" /></span>}}</span>} @else {<app-hl [text]="row.text" [phrases]="phrases()" />}}</pre>
+      <pre [class.email-field]="block.kind === 'field'">@for (row of block.rows; track $index) {@if (row.kind === 'links') {<span class="url-line">@for (part of row.parts; track $index) {@if (part.url && (part.check?.status === 'dead' || part.check?.status === 'closed')) {<span class="link-ended">{{ part.check.status === 'dead' ? '✕ dead link (' + part.check.host + ')' : '✕ job closed' }}@if (upFor(part.check); as days) { · was up {{ days }}}</span>} @else if (part.url) {<a class="email-url" [href]="part.text" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>@if (part.check?.status === 'live' && part.check.kind === 'posting') {<span class="link-open">open{{ upFor(part.check) ? ' ' + upFor(part.check) : '' }}</span>}} @else {<span class="url-label"><app-hl [text]="part.text" [phrases]="phrases()" /></span>}}</span>} @else {<app-hl [text]="row.text" [phrases]="phrases()" />}}</pre>
     }
   </div>
 </ng-template>
