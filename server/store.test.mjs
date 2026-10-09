@@ -269,6 +269,37 @@ test('an answer after my reply moves New/Pursue to Maybe and badges the row; oth
     assert.equal(row.status, 'Applied');
     assert.equal(row.replyReceivedAt, '2026-09-19T12:00:00.000Z');
   }));
+test('a sent resume reply marks the pitch Pursue unless it is already being pursued', () =>
+  withStore((store) => {
+    const resume = { from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z', attachment: 'resume.pdf' };
+    store.import(['New', 'Maybe', 'Passed', 'Applied', 'Pursue'].map((_, index) => ({ ...message, id: `r${index}@r`, threadId: `r${index}@r`, subject: `Angular Developer ${index}` })));
+    const rows = store.snapshot().opportunities;
+    const statuses = ['New', 'Maybe', 'Passed', 'Applied', 'Interviewing'];
+    rows.forEach((row, index) => store.update(row.id, { status: statuses[index] }));
+    store.setTrashPending(rows[2].id, true);
+    const after = rows.map((row, index) => store.recordReply(row.id, { ...resume, id: `mine${index}@me` }));
+    assert.deepEqual(after.map((row) => row.status), ['Pursue', 'Pursue', 'Pursue', 'Applied', 'Interviewing']);
+    // Leaving Passed cancels the Gmail trash that was still pending.
+    assert.equal('trashPending' in after[2], false);
+  }));
+test('a plain reply or an unsent preview with a resume leaves the status alone', () =>
+  withStore((store) => {
+    store.import([message]);
+    const id = store.snapshot().opportunities[0].id;
+    const reply = { from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' };
+    assert.equal(store.recordReply(id, { ...reply, id: 'plain@me' }).status, 'New');
+    assert.equal(store.recordReply(id, { ...reply, id: 'p@x', from: '', preview: true, attachment: 'resume.pdf' }).status, 'New');
+  }));
+test('an answer to a resume reply keeps Pursue and still badges the row', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@c', threadId: 'root@c', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z', attachment: 'resume.pdf' });
+    store.import([{ ...message, id: 'answer@c', threadId: 'root@c', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Pursue');
+    assert.equal(row.replyReceivedAt, '2026-09-18T12:00:00.000Z');
+  }));
 test('a preview (unsent) reply never turns a later message into a reply-back', () =>
   withStore((store) => {
     store.import([{ ...message, id: 'root@p', threadId: 'root@p', source: 'mail-worker' }]);

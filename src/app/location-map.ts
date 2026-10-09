@@ -120,6 +120,35 @@ export function mapLocations(location: string): MapPlace[] {
   return [];
 }
 
+export type WorkMode = 'Remote' | 'Hybrid' | 'Onsite';
+
+const notRemote = /\b(?:no|not|non)[\s-]+remote\b|\bremote\s+not\s+(?:allowed|available|possible)\b/gi;
+const officeDays = /\bon[\s-]?site\b|\bin[\s-]?(?:the\s+)?(?:client\s+)?office\b|\b\d\s*days?\s*(?:a|per|\/)\s*week\b|\boffice\s+\d\s*days?\b/i;
+
+/**
+ * How the job is worked, when the location says so: "Hybrid" for hybrid or a remote/office
+ * mix ("Onsite 4 days, 1 day remote"), "Onsite" for office days or "no remote", "Remote" for
+ * remote with nothing on site. Null when the location does not say.
+ */
+export function workMode(location: string): WorkMode | null {
+  const text = location.replace(notRemote, ' onsite ');
+  const remote = /\bremote\b/i.test(text);
+  const onsite = officeDays.test(text) || text !== location;
+  if (/\bhybrid\b/i.test(text) || (remote && onsite && text === location)) return 'Hybrid';
+  if (onsite) return 'Onsite';
+  return remote ? 'Remote' : null;
+}
+
+/**
+ * What the received line shows for a location none of which maps: "Remote" for a remote or
+ * unknown one (the owner, 2026-10-09), otherwise the text as written ("Austin", "Hybrid").
+ * Template placeholders and links are unknown, never text to show.
+ */
+export function unmappedLocation(location: string) {
+  const text = location.trim();
+  return !text || text === 'Not stated' || unsafe.test(text) || workMode(text) === 'Remote' ? 'Remote' : text;
+}
+
 /** Lines that state where the job is; an address on one belongs to the job, not the sender. */
 const jobLocationLine = /^\s*(?:\*\*)?(?:Locations?|Work (?:location|setting)|Job location|Client location|Onsite location)\b/i;
 

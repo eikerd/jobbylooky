@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapLocations, officeLocations, signatureAddresses, isNorthTexas, zoomFor, STATE_ZOOM } from '../src/app/location-map.ts';
+import { mapLocations, unmappedLocation, workMode, officeLocations, signatureAddresses, isNorthTexas, zoomFor, STATE_ZOOM } from '../src/app/location-map.ts';
 
 test('remote, unstated and templated locations create no maps', () => {
   for (const location of ['Remote', 'Remote (US)', 'Not stated', '', 'Remote – (East coast Only, Preferred Miami, FL due to client visits)', '{JobPosting : city}, Texas', 'Dallas, TX 75214 - https://cts.indeed.com/v3/abc', 'Hybrid', 'Fully Remote', 'Multiple locations']) {
@@ -107,4 +107,27 @@ test('a company’s offices merge spellings of one address and rank by how often
   assert.equal(officeLocations(['100 West Virginia Avenue, Austin, TX 78701', '100 West Virginia Avenue, Phoenix, AZ 85001']).length, 2);
   assert.equal(officeLocations(['500 Main St, Washington, DC 20001', '500 Main St, Seattle, Washington']).length, 2);
   assert.equal(officeLocations(['1 A St\n2 B St\n3 C St\n4 D St\n5 E St\n6 F St'].map((s) => s.replace(/St/g, 'Street'))).length, 5);
+});
+test('a location that does not map reads Remote only when it is remote or unknown', () => {
+  for (const location of ['', 'Not stated', 'Remote', 'Remote (US)', '100% remote', '{JobPosting : city}, Texas', 'See https://cts.indeed.com/v3/abc'])
+    assert.equal(unmappedLocation(location), 'Remote', location);
+  for (const location of ['Austin', 'Hybrid', 'Onsite', 'Multiple locations', 'New York (no remote)', 'Onsite, not remote', 'Hybrid/Remote', 'Hybrid, 2 days remote'])
+    assert.equal(unmappedLocation(location), location, location);
+});
+test('the work mode a location states, if any', () => {
+  const cases: [string, string | null][] = [
+    ['Dallas, TX', null],
+    ['Dallas, TX / Remote', 'Remote'],
+    ['Remote (US)', 'Remote'],
+    ['Dallas, TX (Hybrid)', 'Hybrid'],
+    ['Dallas, TX - Onsite-Hybrid', 'Hybrid'],
+    ['Hybrid, 2 days remote', 'Hybrid'],
+    ['Onsite 4 days, 1 day remote', 'Hybrid'],
+    ['Dallas, TX (Onsite)', 'Onsite'],
+    ['Columbus, OH — 5 Days Onsite', 'Onsite'],
+    ['Denver, CO and work in the client Office 5 days per week.', 'Onsite'],
+    ['New York (no remote)', 'Onsite'],
+    ['Remote not allowed', 'Onsite'],
+  ];
+  for (const [location, mode] of cases) assert.equal(workMode(location), mode, location);
 });
