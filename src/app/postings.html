@@ -1,0 +1,35 @@
+<section class="postings" aria-label="Job postings">
+  @if (sorted().length) {
+    <div class="postings-scroll">
+      <table>
+        <colgroup>
+          <col class="c-job" /><col class="c-company" /><col class="c-site" /><col class="c-posted" /><col class="c-days" /><col class="c-status" /><col class="c-checked" />
+        </colgroup>
+        <thead>
+          <tr>
+            @for (column of columns; track column.key) {
+              <th scope="col" [attr.aria-sort]="ariaSort(column.key)" [class.numeric]="column.key === 'daysOpen'">
+                <button type="button" (click)="sortBy(column.key)">{{ column.label }}<span class="arrow" aria-hidden="true">{{ ariaSort(column.key) === 'ascending' ? '▲' : ariaSort(column.key) === 'descending' ? '▼' : '' }}</span></button>
+              </th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of sorted(); track row.key) {
+            <tr (click)="openPitch.emit(row.pitchId)">
+              <td><button type="button" class="job" (click)="openPitch.emit(row.pitchId); $event.stopPropagation()">{{ row.title }}</button></td>
+              <td>{{ row.company }}</td>
+              <td>{{ row.site }}</td>
+              <td>@if (row.postedAt) {<time [attr.datetime]="row.postedAt">{{ row.postedAt | date: 'MMM d, y' }}</time>}</td>
+              <td class="numeric">{{ row.daysOpen }}</td>
+              <td><span [class]="'state ' + row.status.toLowerCase()">{{ row.status }}</span></td>
+              <td>@if (row.checkedAt) {<time [attr.datetime]="row.checkedAt">{{ row.checkedAt | date: 'MMM d' }}</time>}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="postings-empty">No postings checked yet. The link sweep runs at 4am.</p>
+  }
+</section>
