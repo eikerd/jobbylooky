@@ -301,7 +301,7 @@
               @if (group.pitches.length > 1 || group.history.occurrences > 1) {
                 <section class="related" aria-labelledby="related-title">
                   <div class="related-head">
-                    <h3 id="related-title">{{ group.kind === 'likely' ? 'Likely same job' : 'Same job' }}</h3>
+                    <h3 id="related-title">{{ group.pitches.length === 1 ? 'Emails' : group.kind === 'likely' ? 'Likely same job' : 'Same job' }}</h3>
                     @if (group.pitches.length > 1) {
                       <button type="button" class="link-action" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
                     }
@@ -321,7 +321,7 @@
                       <tbody>
                         @for (item of related(); track item.id) {
                           <tr [class.selected]="item.pitch.id === selectedId()" [class.full-time]="item.pitch.employmentType === 'Full-time'" (click)="busy() || open(item.pitch)">
-                            <td><time [attr.datetime]="item.receivedAt"><strong [style.color]="ageColor(item.receivedAt)">{{ ageLabel(item.receivedAt) }}</strong> · {{ item.receivedAt | date: 'MMM d' }}</time></td>
+                            <td><strong [style.color]="ageColor(item.receivedAt)">{{ ageLabel(item.receivedAt) }}</strong> · <time [attr.datetime]="item.receivedAt">{{ item.receivedAt | date: 'MMM d' }}</time></td>
                             <td><button type="button" class="related-sender" [attr.aria-current]="item.pitch.id === selectedId() || null" (click)="$event.stopPropagation(); open(item.pitch)" [disabled]="busy()"><app-source-icon [from]="item.from" /><span>{{ item.from }}</span></button></td>
                             <td>
                               @if (item.pitch.pay; as pay) {

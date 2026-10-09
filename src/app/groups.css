@@ -1,7 +1,7 @@
 .pitch-count { color: var(--accent-ink); font-size: 13px; font-weight: 700; }
 /* Every email for the job as one sortable grid: one line per row, long text clipped. */
 .related { margin-top: 12px; padding: 10px 0; border-block: 1px solid var(--line); }
-.related-head { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; min-width: 0; }
+.related-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .related-head h3 { margin: 0; font-size: 15px; }
 .related-head .link-action { margin-left: auto; }
 .related-scroll { overflow-x: auto; margin-top: 6px; }

@@ -49,3 +49,10 @@ test('an unreadable date and an unknown fit sort last', () => {
   assert.equal(sortRelated(rows, { key: 'received', dir: 'asc' }).at(-1)?.id, 'e1');
   assert.equal(sortRelated(rows, { key: 'fit', dir: 'desc' }).at(-1)?.id, 'e1');
 });
+test('a pitch the timeline left out still gets a row', () => {
+  const partial = { ...group, history: { ...group.history, timeline: group.history.timeline.slice(0, 1) } } as JobGroup;
+  assert.deepEqual(relatedRows(partial).map((row) => row.id), ['e1', 'pitch:b', 'pitch:c']);
+});
+test('ties break newest first', () => {
+  assert.deepEqual(sortRelated(relatedRows(group), { key: 'status', dir: 'asc' }).map((row) => row.id), ['e3', 'e2', 'e1']);
+});
