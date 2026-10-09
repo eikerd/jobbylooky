@@ -525,7 +525,7 @@
 <app-selection-phrase [within]="detailPane()?.nativeElement" [phrases]="phrases()" [kinds]="phraseKinds" [labels]="phraseKindLabels"
   [marks]="phraseKindMarks" [save]="trackSelection" [busy]="busy()" />
 
-<dialog #decisionDialog class="decision" aria-labelledby="decision-title" (close)="decision.set(null)">
+<dialog #decisionDialog class="decision-dialog" aria-labelledby="decision-title" (close)="decision.set(null)">
   @if (decision(); as plan) {
     <h2 id="decision-title">{{ plan.decide.length + plan.others.length }} emails for {{ plan.decide.length === 1 ? 'this job' : 'these ' + plan.decide.length + ' jobs' }}</h2>
     <div class="related-scroll">

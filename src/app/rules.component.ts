@@ -1,4 +1,4 @@
-import { Component, DestroyRef, computed, effect, inject, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { Opportunity, RejectRule, RuleField, RuleMode } from './models';
@@ -57,6 +57,8 @@ export class Rules {
   readonly tooSlow = signal(false);
   /** The pattern and field the last finished tester run covered; Save waits for the current pair. */
   private readonly testedFor = signal('');
+  /** A tester run is scheduled or running; any input (pattern, field, pasted text, mail) can start one. */
+  private readonly testing = signal(false);
   private pendingKey = '';
   private readonly draftKey = computed(() => `${this.field()}\n${this.pattern()}`);
   readonly matches = computed<TesterRow[]>(() => {
@@ -80,6 +82,7 @@ export class Rules {
     effect(() => {
       const job = { rows: this.rows(), pattern: this.pattern(), field: this.field(), pasted: this.pasted(), valid: this.compiled().regex !== null, key: this.draftKey() };
       clearTimeout(this.debounce);
+      untracked(() => this.testing.set(true));
       this.debounce = setTimeout(() => this.test(job), TESTER_DEBOUNCE_MS);
     });
     inject(DestroyRef).onDestroy(() => {
@@ -98,10 +101,12 @@ export class Rules {
     if (!job.valid) {
       // A runaway from the previous pattern would otherwise keep a CPU core busy until the tab closes.
       if (this.running) this.stopWorker();
+      this.testing.set(false);
       return this.result.set(null);
     }
     if (typeof Worker === 'undefined') {
       this.result.set(runTester(job.rows, job.pattern, job.field, job.pasted));
+      this.testing.set(false);
       return this.testedFor.set(job.key);
     }
     // A run still going is the old pattern's runaway, or soon stale: replace the worker.
@@ -114,6 +119,7 @@ export class Rules {
         clearTimeout(this.deadline);
         this.result.set(data.result);
         this.testedFor.set(this.pendingKey);
+        this.testing.set(false);
       };
     }
     if (this.sentRows !== job.rows) {
@@ -126,6 +132,7 @@ export class Rules {
       this.stopWorker();
       this.result.set(null);
       this.tooSlow.set(true);
+      this.testing.set(false);
     }, TESTER_DEADLINE_MS);
   }
   private stopWorker() {
@@ -176,7 +183,7 @@ export class Rules {
   canSave() {
     // A pattern saves only once the tester has run it over stored mail without timing out:
     // pressing Enter during the debounce or the run must not save a runaway the server probes miss.
-    return !this.busy() && !this.tooSlow() && this.testedFor() === this.draftKey() && this.name().trim().length > 0 && this.compiled().regex !== null;
+    return !this.busy() && !this.tooSlow() && !this.testing() && this.testedFor() === this.draftKey() && this.name().trim().length > 0 && this.compiled().regex !== null;
   }
   submit() {
     if (!this.canSave()) return;
