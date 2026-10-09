@@ -49,6 +49,17 @@ test('a link alone on its line takes the line above as its label', () => {
   assert.deepEqual(jobLinks('View job:\nhttps://cts.indeed.com/v3/H4sIAAAAAAAA_x').map((link) => link.label), ['View job']);
 });
 
+test('an ATS "all jobs" board is not a posting; a requisition page is', () => {
+  for (const url of ['https://jobs.lever.co/acme', 'https://boards.greenhouse.io/acme', 'https://acme.wd5.myworkdayjobs.com/en-US/Careers'])
+    assert.equal(classify(url), null, url);
+  for (const url of [
+    'https://jobs.lever.co/acme/4f1e2d3c-1111-2222-3333-444455556666',
+    'https://boards.greenhouse.io/acme/jobs/4012345',
+    'https://acme.wd5.myworkdayjobs.com/en-US/Careers/job/Dallas-TX/Engineer_R12345',
+  ])
+    assert.equal(classify(url)?.kind, 'posting', url);
+});
+
 test('a careers path that says "manage" is still a posting', () => {
   assert.deepEqual(classify('https://acme.com/careers/project-manager-12345'), { kind: 'posting', board: 'web' });
 });

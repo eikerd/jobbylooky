@@ -32,8 +32,12 @@ const IMAGE = /\.(png|jpe?g|gif|svg|webp|ico)$/i;
 // An email must not steer the Mac at its own network: IP literals, localhost, .local, bare names.
 const PRIVATE_HOST = /^(\d+\.\d+\.\d+\.\d+|\[.*\]|localhost|[^.]+|.*\.(local|localhost|internal|lan|home|ts\.net))$/i;
 const POSTING_LABEL = /view (the )?job\b|job details|job description|job link|job posting|apply (now|here|online|to this|for this)\b/i;
+// An applicant-tracking host is a posting only on a requisition's own page (a later path
+// segment with an id), never its "all jobs" board, which stays up after the job closes.
+const ATS_HOST = /(^|\.)(greenhouse\.io|lever\.co|myworkdayjobs\.com|icims\.com|smartrecruiters\.com|ashbyhq\.com|jobvite\.com|workable\.com)$/i;
+const REQUISITION_PATH = /^\/[^/]+\/(?:.*\/)?[^/]*\d[^/]*\/?$/;
 const POSTING_URL =
-  /greenhouse\.io|lever\.co|myworkdayjobs\.com|icims\.com|smartrecruiters\.com|ashbyhq\.com|jobvite\.com|workable\.com|ziprecruiter\.com\/(c|jobs?)\/|dice\.com\/job-detail|linkedin\.com\/(comm\/)?jobs\/view\/\d|\/(job|jobs|careers?|positions?|openings?|requisitions?)\/[^/?#]*\d|\/job-?details?\b|[?&](jk|jobid|job_id|gh_jid|reqid)=/i;
+  /ziprecruiter\.com\/(c|jobs?)\/.*\d|dice\.com\/job-detail\/|\/(job|jobs|careers?|positions?|openings?|requisitions?)\/[^/?#]*\d|\/job-?details?\/[^/?#]*\d|[?&](jk|jobid|job_id|gh_jid|reqid)=/i;
 
 /**
  * Outlook's safelinks carry the real address in `url=`, Proofpoint's urldefense between `__`
@@ -86,6 +90,7 @@ export function classify(url, label = '') {
     return /\/jobs\/view\/\d/.test(parsed.pathname) ? { kind: 'posting', board: 'browser' } : null;
   if (TRACKER.test(host) || TRACKER.test(parsed.pathname))
     return POSTING_LABEL.test(text) ? { kind: 'posting', board: 'web' } : null;
+  if (ATS_HOST.test(host)) return REQUISITION_PATH.test(parsed.pathname) || POSTING_URL.test(url) ? { kind: 'posting', board: 'web' } : null;
   if (POSTING_URL.test(url) || POSTING_LABEL.test(text)) return { kind: 'posting', board: 'web' };
   // Default deny: only a site's home page is safe to open without knowing what it does.
   return /^\/?$/.test(parsed.pathname) && !parsed.search ? { kind: 'other', board: 'web' } : null;
