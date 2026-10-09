@@ -34,3 +34,18 @@ test('a header click reverses the sorted column and starts a new one ascending',
   assert.deepEqual(nextRelatedSort({ key: 'fit', dir: 'asc' }, 'fit'), { key: 'fit', dir: 'desc' });
   assert.deepEqual(nextRelatedSort({ key: 'fit', dir: 'desc' }, 'pay'), { key: 'pay', dir: 'asc' });
 });
+test('sender and status sort as text, with blanks last both ways', () => {
+  const rows = relatedRows(group);
+  rows[1] = { ...rows[1], from: '', pitch: { ...rows[1].pitch, status: '' } };
+  for (const key of ['sender', 'status'] as const) {
+    assert.equal(sortRelated(rows, { key, dir: 'asc' }).at(-1)?.id, 'e2');
+    assert.equal(sortRelated(rows, { key, dir: 'desc' }).at(-1)?.id, 'e2');
+  }
+  assert.deepEqual(sortRelated(rows, { key: 'status', dir: 'asc' }).map((row) => row.pitch.status), ['New', 'Pursue', '']);
+});
+test('an unreadable date and an unknown fit sort last', () => {
+  const rows = relatedRows(group);
+  rows[0] = { ...rows[0], receivedAt: 'not a date', pitch: { ...rows[0].pitch, fit: 'Something new' } };
+  assert.equal(sortRelated(rows, { key: 'received', dir: 'asc' }).at(-1)?.id, 'e1');
+  assert.equal(sortRelated(rows, { key: 'fit', dir: 'desc' }).at(-1)?.id, 'e1');
+});
