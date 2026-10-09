@@ -171,8 +171,8 @@
           @for (group of visible(); track group.id) {
             @let row = group.representative;
             <div class="queue-item">
-            <label class="pick" [attr.aria-label]="'Select ' + row.title">
-              <input type="checkbox" [checked]="checked().has(row.id)" (change)="toggleChecked(row.id)" [disabled]="busy()" />
+            <label class="pick">
+              <input type="checkbox" [attr.aria-label]="'Select ' + row.title + ', ' + sender(row.from)" [checked]="checked().has(row.id)" (change)="toggleChecked(row.id)" [disabled]="busy()" />
             </label>
             <button
               type="button"

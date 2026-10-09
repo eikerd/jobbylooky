@@ -119,10 +119,10 @@ export class App implements OnDestroy {
       .map(group => ({ ...group, representative: group.pitches.find(matchesFolder)! }))
       .sort((a, b) => Date.parse(b.representative.receivedAt) - Date.parse(a.representative.receivedAt));
   });
-  /** Ticks on rows that left the folder since are ignored, not counted. */
+  /** Ticks on rows that left the folder since, or were passed already, are ignored, not counted. */
   readonly checkedRows = computed(() => {
     const ids = this.checked();
-    return this.visible().map((group) => group.representative).filter((row) => ids.has(row.id));
+    return this.visible().map((group) => group.representative).filter((row) => ids.has(row.id) && row.status !== 'Passed');
   });
   readonly selectedGroup = computed(() =>
     this.jobGroups().find(group => group.pitches.some(row => row.id === this.selectedId())),
@@ -403,7 +403,7 @@ export class App implements OnDestroy {
       this.editStatus = updated.status;
       this.dirty.set(false);
       this.notice.set('Saved.');
-      if (trashQueued) void this.collectTrash(updated).then((outcome) => this.toastTrash([outcome], updated.title));
+      if (trashQueued) void this.collectTrash(updated).then((outcome) => this.toastTrash([{ outcome, title: updated.title }]));
     } catch (error) {
       this.error.set(this.message(error));
     } finally {
@@ -424,7 +424,6 @@ export class App implements OnDestroy {
     const rows = this.checkedRows();
     if (!rows.length || this.busy()) return;
     if (rows.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
-    this.checked.set(this.emptyChecked);
     await this.passRows(rows);
   }
   private canDropReply() {
@@ -445,6 +444,9 @@ export class App implements OnDestroy {
     // The error banner is left alone: it may hold an earlier pitch's Gmail failure.
     this.notice.set('');
     for (const { row, fields } of passes) this.replaceRow({ ...row, ...fields });
+    // A passed row stays listed in All opportunities; its tick must not offer a second Pass.
+    const passed = new Set(rows.map((row) => row.id));
+    this.checked.update((ids) => new Set([...ids].filter((id) => !passed.has(id))));
     if (passes.some(({ row }) => row.id === openId)) {
       this.dirty.set(false);
       this.replying.set(false);
@@ -458,13 +460,16 @@ export class App implements OnDestroy {
       if (next) this.select(next.representative);
       else this.selectedId.set('');
     }
-    const saved = await Promise.all(passes.map(({ row, fields }) => this.savePass(row, fields)));
-    const queued = saved.filter((row): row is Opportunity => row !== null);
+    const results = await Promise.all(passes.map(({ row, fields }) => this.savePass(row, fields)));
+    // Every pitch whose Pass failed is back in the list, so the banner names every one of them.
+    const failures = results.flatMap((result) => (result.failure ? [result.failure] : []));
+    if (failures.length) this.error.set(failures.length === 1 ? failures[0] : `${failures.length} Passes did not save. ${failures.join(' ')}`);
+    const queued = results.flatMap((result) => (result.queued ? [result.queued] : []));
     if (!queued.length) return;
-    const outcomes = await Promise.all(queued.map((row) => this.collectTrash(row)));
-    this.toastTrash(outcomes, queued.length === 1 ? queued[0].title : `${queued.length} pitches`);
+    const outcomes = await Promise.all(queued.map(async (row) => ({ outcome: await this.collectTrash(row), title: row.title })));
+    this.toastTrash(outcomes);
   }
-  /** Saves one Pass; returns the pitch when the server queued its Gmail delete. */
+  /** Saves one Pass; returns the pitch when the server queued its Gmail delete, or why it failed. */
   private async savePass(row: Opportunity, fields: Pick<Opportunity, 'status' | 'notes' | 'nextAction' | 'followUp'>) {
     this.passesSaving++;
     try {
@@ -475,7 +480,7 @@ export class App implements OnDestroy {
       );
       this.revision++;
       this.replaceRow(updated);
-      return trashQueued ? updated : null;
+      return { queued: trashQueued ? updated : null };
     } catch (error) {
       this.revision++;
       this.replaceRow(row);
@@ -491,8 +496,7 @@ export class App implements OnDestroy {
         this.dirty.set(edited);
       }
       const lost = edited && this.selectedId() !== row.id ? ' Its note edits were not saved either.' : '';
-      this.error.set(`${row.title}: Pass did not save: ${this.message(error)}${lost}`);
-      return null;
+      return { queued: null, failure: `${row.title}: Pass did not save: ${this.message(error)}${lost}` };
     } finally {
       this.passesSaving--;
     }
@@ -527,16 +531,21 @@ export class App implements OnDestroy {
     this.trashWait = outcome.then(() => undefined);
     return outcome;
   }
-  /** One toast per Pass action, naming the pitch, or the count when several were passed together. */
-  private toastTrash(outcomes: TrashOutcome[], subject: string) {
-    const counts = new Map<string, number>();
-    for (const outcome of outcomes) {
+  /**
+   * One toast per Pass action, naming the pitch, or counting the pitches when several share an
+   * outcome. Failed deletes are left out: the banner names those.
+   */
+  private toastTrash(results: { outcome: TrashOutcome; title: string }[]) {
+    const titles = new Map<string, string[]>();
+    for (const { outcome, title } of results) {
       const text = TRASH_TOASTS[outcome];
-      if (text) counts.set(text, (counts.get(text) ?? 0) + 1);
+      if (text) titles.set(text, [...(titles.get(text) ?? []), title]);
     }
-    if (!counts.size) return;
-    const parts = [...counts];
-    this.toast(parts.length === 1 ? `${parts[0][0]} · ${subject}` : parts.map(([text, count]) => `${text}: ${count}`).join(' · '));
+    const parts = [...titles];
+    if (!parts.length) return;
+    if (parts.length > 1) return this.toast(parts.map(([text, names]) => `${text}: ${names.length}`).join(' · '));
+    const [text, names] = parts[0];
+    this.toast(`${text} · ${names.length === 1 ? names[0] : `${names.length} pitches`}`);
   }
   /** A run of Passes can fail together (Gmail down, no credentials); every failed pitch stays named. */
   private reportTrashFailure(title: string, reason: string) {
