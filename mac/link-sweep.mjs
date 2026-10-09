@@ -12,6 +12,7 @@
 import { lookup } from 'node:dns/promises';
 import { chromium } from 'playwright-core';
 import { indeedJobKey, indeedVerdict, webVerdict } from '../server/link-verdicts.mjs';
+import { safeGet } from '../server/safe-get.mjs';
 
 const BASE = (process.env.JOBBY_URL || 'https://chungus.tail1d505c.ts.net/jobby').replace(/\/$/, '');
 const DRY_RUN = process.argv.includes('--dry-run');
@@ -32,22 +33,6 @@ async function api(path, init = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-/** Up to MAX_HTML_BYTES of a response body; a posting's closed notice is near the top. */
-async function readSome(response) {
-  const reader = response.body?.getReader();
-  if (!reader) return '';
-  const chunks = [];
-  let size = 0;
-  while (size < MAX_HTML_BYTES) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    size += value.length;
-  }
-  await reader.cancel().catch(() => {});
-  return Buffer.concat(chunks).toString('utf8');
-}
-
 /** A missing domain proves a link dead only while DNS answers for names that surely exist. */
 async function dnsAnswers() {
   try {
@@ -58,18 +43,19 @@ async function dnsAnswers() {
   }
 }
 
+/** A link from an email, fetched only from the public internet (server/safe-get.mjs). */
 async function checkWeb(link, dnsWorks) {
   try {
-    const response = await fetch(link.target ?? link.url, {
+    const response = await safeGet(link.target ?? link.url, {
       headers: { 'User-Agent': UA, Accept: 'text/html,*/*' },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxBytes: MAX_HTML_BYTES,
+      // A posting's closed notice is near the top of its page; other links need only a status.
+      wantBody: (headers) => link.kind === 'posting' && /html/i.test(headers['content-type'] ?? ''),
     });
-    const html = link.kind === 'posting' && /html/i.test(response.headers.get('content-type') ?? '') ? await readSome(response) : '';
-    if (!html) await response.body?.cancel().catch(() => {});
-    return webVerdict({ kind: link.kind, status: response.status, html });
+    return webVerdict({ kind: link.kind, status: response.status, html: response.body });
   } catch (error) {
-    const code = error.cause?.code ?? error.name ?? 'fetch failed';
+    const code = error.code ?? error.name ?? 'fetch failed';
     return webVerdict({ kind: link.kind, error: code === 'ENOTFOUND' && !dnsWorks ? 'DNS not answering' : code });
   }
 }

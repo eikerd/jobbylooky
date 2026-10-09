@@ -1,7 +1,7 @@
 #!/bin/bash
-# Installs the daily 4am link sweep as a launchd agent, from a copy of its two files, so that
+# Installs the daily 4am link sweep as a launchd agent, from a copy of its files, so that
 # whatever branch the repo checkout is on later (or an `npm ci` there) cannot break it.
-# Re-run after merging a change to mac/link-sweep.mjs or server/link-verdicts.mjs.
+# Re-run after merging a change to mac/link-sweep.mjs, server/link-verdicts.mjs or server/safe-get.mjs.
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 dest="$HOME/Library/Application Support/JobbyLinkSweep"
@@ -14,7 +14,7 @@ version="$("$node" -p "require('$repo/package.json').devDependencies['playwright
 
 mkdir -p "$dest/mac" "$dest/server"
 cp "$repo/mac/link-sweep.mjs" "$dest/mac/"
-cp "$repo/server/link-verdicts.mjs" "$dest/server/"
+cp "$repo/server/link-verdicts.mjs" "$repo/server/safe-get.mjs" "$dest/server/"
 printf '{ "private": true }\n' > "$dest/package.json"
 (cd "$dest" && PATH="$(dirname "$node"):$PATH" npm install --silent --no-audit --no-fund "playwright-core@$version")
 

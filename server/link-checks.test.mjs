@@ -58,6 +58,18 @@ test('a posting closed on two different days passes a New pitch once, with its d
     assert.equal(kept.linkChecks[1].status, 'unchecked');
   }));
 
+test('an automatic pass begun and not finished is offered again until it is finished', () =>
+  withChecks((open) => {
+    const checks = open();
+    checks.markPassed('a', 'closed', '2026-10-10T09:00:00Z');
+    assert.deepEqual(open().unfinishedPasses(), ['a'], 'survives a restart');
+    assert.deepEqual(open().dueToPass([pitch('a')]), [], 'never passed twice');
+    const reopened = open();
+    reopened.finishPass('a');
+    assert.deepEqual(open().unfinishedPasses(), []);
+    assert.deepEqual(open().attach([pitch('a')])[0].autoPassed, { at: '2026-10-10T09:00:00Z', reason: 'closed' });
+  }));
+
 test('a pitch the owner engaged with, or brought back from Passed, is never passed by the sweep', () =>
   withChecks((open) => {
     const checks = open();

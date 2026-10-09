@@ -99,6 +99,10 @@ tail ~/Library/Logs/jobbylooky-link-sweep.log
   `jk`. The server keeps the key, and later sweeps go straight to `viewjob?jk=`.
 - **Dead** means 404/410 or a domain that no longer exists, on two sweeps in a row. Refusals
   (403, 429, LinkedIn's 999), timeouts and certificate errors prove nothing and change nothing.
+- Links come from unsolicited email, so web checks go through `server/safe-get.mjs`: it
+  refuses private, loopback, link-local and Tailscale (100.64/10) addresses at connect time,
+  and it checks every redirect hop again. A public name that resolves into the LAN gets
+  nothing.
 - The installer copies the sweep into `~/Library/Application Support/JobbyLinkSweep/` with
   its own `playwright-core`, so the repo checkout's branch does not matter at 4am. If the Mac
   is asleep at 4am, launchd runs the sweep when it wakes. It needs the owner logged in (the

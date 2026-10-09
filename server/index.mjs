@@ -55,16 +55,23 @@ async function sync() {
 }
 /**
  * Passes every New pitch whose postings have all closed, the way a Pass from the page does:
- * its emails go to Gmail Trash. An earlier automatic pass whose Gmail delete failed is retried.
+ * its emails go to Gmail Trash. An automatic pass begun but not finished (a crash between its
+ * steps) is completed, and one whose Gmail delete failed is retried.
  */
 function passEndedJobs() {
   const passed = [];
+  const finish = (id) => {
+    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    // Begun while New: the status change may not have happened. Anything else is the owner's.
+    if (row?.status === 'New') store.update(id, { status: 'Passed' });
+    if (row && ['New', 'Passed'].includes(row.status) && gmailIds(row.messageIds).length) store.setTrashPending(id, true);
+    linkChecks.finishPass(id);
+  };
+  for (const id of linkChecks.unfinishedPasses()) finish(id);
   // With their voicemails: a pitch with one is the owner's to decide on.
   for (const { id, reason } of linkChecks.dueToPass(voicemails.attach(store.snapshot().opportunities))) {
-    // Recorded first: a crash after it leaves a reason and a retry, never a silent Pass.
     linkChecks.markPassed(id, reason);
-    const row = store.update(id, { status: 'Passed' });
-    if (gmailIds(row.messageIds).length) store.setTrashPending(id, true);
+    finish(id);
     passed.push(id);
   }
   for (const row of store.snapshot().opportunities)

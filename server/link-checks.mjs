@@ -131,9 +131,19 @@ export function createLinkChecks(directory) {
     keep(id) {
       if (!state.kept[id]) commit({ ...state, kept: { ...state.kept, [id]: new Date().toISOString() } });
     },
+    /**
+     * An automatic pass is recorded in two steps around the status change: begun (`done: false`)
+     * before it, finished after it. One begun and never finished (a crash, a failed write) is
+     * completed by the next sweep.
+     */
     markPassed(id, reason, at = new Date().toISOString()) {
-      commit({ ...state, autoPassed: { ...state.autoPassed, [id]: { at, reason } } });
+      commit({ ...state, autoPassed: { ...state.autoPassed, [id]: { at, reason, done: false } } });
     },
+    finishPass(id) {
+      const record = state.autoPassed[id];
+      if (record && record.done === false) commit({ ...state, autoPassed: { ...state.autoPassed, [id]: { at: record.at, reason: record.reason } } });
+    },
+    unfinishedPasses: () => Object.keys(state.autoPassed).filter((id) => state.autoPassed[id].done === false),
     /** Each row with what the sweep knows about its links, for the page. */
     attach(rows) {
       return rows.map((row) => {
@@ -153,7 +163,7 @@ export function createLinkChecks(directory) {
           };
         });
         const autoPassed = state.autoPassed[row.id];
-        return { ...row, linkChecks: checks, ...(autoPassed ? { autoPassed } : {}) };
+        return { ...row, linkChecks: checks, ...(autoPassed ? { autoPassed: { at: autoPassed.at, reason: autoPassed.reason } } : {}) };
       });
     },
   };
