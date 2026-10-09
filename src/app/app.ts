@@ -21,12 +21,18 @@ interface Connection {
   replyPreview?: boolean;
 }
 type Folder = 'Inbox' | 'Pursuing' | 'Maybe' | 'Passed' | 'All opportunities';
+type TrashOutcome = 'deleted' | 'gone' | 'preview' | 'skipped' | 'failed';
+const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
+  deleted: 'Deleted from Gmail',
+  gone: 'Already gone from Gmail',
+  preview: 'Preview: Gmail not touched',
+};
 
 @Component({
   selector: 'app-root',
   imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, LocationMaps, CrayonPicker],
   templateUrl: './app.html',
-  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css'],
+  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
   host: { '[style]': 'phraseStyle()' },
 })
@@ -72,6 +78,9 @@ export class App implements OnDestroy {
   phraseKind: PhraseKind = 'negative';
   readonly profileFocus = signal('');
   readonly selectedId = signal('');
+  /** Pitches ticked in the queue for a bulk Pass, apart from the one open in the detail pane. */
+  readonly emptyChecked: ReadonlySet<string> = new Set();
+  readonly checked = signal<ReadonlySet<string>>(this.emptyChecked);
   readonly connection = signal<Connection | null>(null);
   readonly loading = signal(true);
   readonly busy = signal(false);
@@ -110,6 +119,11 @@ export class App implements OnDestroy {
       .map(group => ({ ...group, representative: group.pitches.find(matchesFolder)! }))
       .sort((a, b) => Date.parse(b.representative.receivedAt) - Date.parse(a.representative.receivedAt));
   });
+  /** Ticks on rows that left the folder since, or were passed already, are ignored, not counted. */
+  readonly checkedRows = computed(() => {
+    const ids = this.checked();
+    return this.visible().map((group) => group.representative).filter((row) => ids.has(row.id) && row.status !== 'Passed');
+  });
   readonly selectedGroup = computed(() =>
     this.jobGroups().find(group => group.pitches.some(row => row.id === this.selectedId())),
   );
@@ -144,7 +158,7 @@ export class App implements OnDestroy {
   private shortcut = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== 'p' || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target;
-    if ((target instanceof Element && target.closest('input, textarea, select, [contenteditable]')) || this.directoryMode()) return;
+    if ((target instanceof Element && target.closest('input:not([type=checkbox]), textarea, select, [contenteditable]')) || this.directoryMode()) return;
     event.preventDefault();
     void this.pass();
   };
@@ -232,6 +246,7 @@ export class App implements OnDestroy {
     this.dirty.set(false);
     this.directoryMode.set(null);
     this.folder.set(folder);
+    this.checked.set(this.emptyChecked);
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
@@ -241,6 +256,13 @@ export class App implements OnDestroy {
     this.directoryMode.set(mode);
     this.profileFocus.set(id);
     this.notice.set('');
+  }
+  toggleChecked(id: string) {
+    this.checked.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   }
   selectPitchId(id: string) {
     const row = this.opportunities().find(item=>item.id===id);
@@ -381,7 +403,7 @@ export class App implements OnDestroy {
       this.editStatus = updated.status;
       this.dirty.set(false);
       this.notice.set('Saved.');
-      if (trashQueued) this.collectTrash(updated);
+      if (trashQueued) void this.collectTrash(updated).then((outcome) => this.toastTrash([{ outcome, title: updated.title }]));
     } catch (error) {
       this.error.set(this.message(error));
     } finally {
@@ -394,23 +416,62 @@ export class App implements OnDestroy {
    */
   async pass() {
     const row = this.selected();
-    if (!row || this.busy()) return;
-    if (this.replying() && this.replyDraft !== this.replyTemplate && !window.confirm('Discard this reply?')) return;
-    const fields = { status: 'Passed', notes: this.notes, nextAction: this.nextAction, followUp: this.followUp };
-    const position = this.visible().findIndex((group) => group.pitches.some((item) => item.id === row.id));
+    if (!row || this.busy() || !this.canDropReply()) return;
+    await this.passRows([row]);
+  }
+  /** Passes every ticked row the same way, with one toast for all their Gmail deletes. */
+  async passChecked() {
+    const rows = this.checkedRows();
+    if (!rows.length || this.busy()) return;
+    if (rows.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
+    await this.passRows(rows);
+  }
+  private canDropReply() {
+    return !this.replying() || this.replyDraft === this.replyTemplate || window.confirm('Discard this reply?');
+  }
+  private async passRows(rows: Opportunity[]) {
+    const openId = this.selectedId();
+    const before = this.visible();
+    const position = before.findIndex((group) => group.pitches.some((item) => item.id === openId));
+    // The open pitch passes with the notes being edited; the others keep what they have.
+    const passes = rows.map((row) => ({
+      row,
+      fields: row.id === openId
+        ? { status: 'Passed', notes: this.notes, nextAction: this.nextAction, followUp: this.followUp }
+        : { status: 'Passed', notes: row.notes, nextAction: row.nextAction, followUp: row.followUp },
+    }));
     this.revision++;
     // The error banner is left alone: it may hold an earlier pitch's Gmail failure.
     this.notice.set('');
-    this.replaceRow({ ...row, ...fields });
-    this.dirty.set(false);
-    this.replying.set(false);
-    this.editStatus = 'Passed';
-    const rows = this.visible();
-    if (position >= 0 && !rows.some((group) => group.representative.id === row.id)) {
-      const next = rows[Math.min(position, rows.length - 1)];
+    for (const { row, fields } of passes) this.replaceRow({ ...row, ...fields });
+    // A passed row stays listed in All opportunities; its tick must not offer a second Pass.
+    const passed = new Set(rows.map((row) => row.id));
+    this.checked.update((ids) => new Set([...ids].filter((id) => !passed.has(id))));
+    if (passed.has(openId)) {
+      this.dirty.set(false);
+      this.replying.set(false);
+      this.editStatus = 'Passed';
+    }
+    const after = this.visible();
+    // Only a passed open pitch moves the pane; an open pitch deeper in a group is not a representative.
+    if (position >= 0 && passed.has(openId) && !after.some((group) => group.representative.id === openId)) {
+      // The open job's group if it is still listed, else the nearest one below it, else above it.
+      const order = [...before.slice(position), ...before.slice(0, position).reverse()];
+      const next = order.map((group) => after.find((item) => item.id === group.id)).find(Boolean);
       if (next) this.select(next.representative);
       else this.selectedId.set('');
     }
+    const results = await Promise.all(passes.map(({ row, fields }) => this.savePass(row, fields)));
+    // Every pitch whose Pass failed is back in the list, so the banner names every one of them.
+    const failures = results.flatMap((result) => (result.failure ? [result.failure] : []));
+    if (failures.length) this.error.set(failures.length === 1 ? failures[0] : `${failures.length} Passes did not save. ${failures.join(' ')}`);
+    const queued = results.flatMap((result) => (result.queued ? [result.queued] : []));
+    if (!queued.length) return;
+    const outcomes = await Promise.all(queued.map(async (row) => ({ outcome: await this.collectTrash(row), title: row.title })));
+    this.toastTrash(outcomes);
+  }
+  /** Saves one Pass; returns the pitch when the server queued its Gmail delete, or why it failed. */
+  private async savePass(row: Opportunity, fields: Pick<Opportunity, 'status' | 'notes' | 'nextAction' | 'followUp'>) {
     this.passesSaving++;
     try {
       const { trashQueued, ...updated } = await this.request<Opportunity & { trashQueued?: boolean }>(
@@ -420,7 +481,7 @@ export class App implements OnDestroy {
       );
       this.revision++;
       this.replaceRow(updated);
-      if (trashQueued) this.collectTrash(updated);
+      return { queued: trashQueued ? updated : null };
     } catch (error) {
       this.revision++;
       this.replaceRow(row);
@@ -436,7 +497,7 @@ export class App implements OnDestroy {
         this.dirty.set(edited);
       }
       const lost = edited && this.selectedId() !== row.id ? ' Its note edits were not saved either.' : '';
-      this.error.set(`${row.title}: Pass did not save: ${this.message(error)}${lost}`);
+      return { queued: null, failure: `${row.title}: Pass did not save: ${this.message(error)}${lost}` };
     } finally {
       this.passesSaving--;
     }
@@ -452,18 +513,40 @@ export class App implements OnDestroy {
    * Only the outcome is used: the row it carries was read when the delete ran and may be older
    * than a change made since, so the next poll brings the row up to date instead.
    */
-  private collectTrash({ id, title }: Opportunity) {
-    this.trashWait = this.trashWait.then(async () => {
+  private collectTrash({ id, title }: Opportunity): Promise<TrashOutcome> {
+    const outcome = this.trashWait.then(async (): Promise<TrashOutcome> => {
       try {
         const { trashed, trashError, skipped, preview } = await this.request<{ trashed?: number; trashError?: string; skipped?: boolean; preview?: boolean }>(
           `opportunities/${encodeURIComponent(id)}/trash`,
         );
-        if (trashError) this.reportTrashFailure(title, trashError);
-        else if (!skipped) this.toast(`${preview ? 'Preview: Gmail not touched' : trashed ? 'Deleted from Gmail' : 'Already gone from Gmail'} · ${title}`);
+        if (trashError) {
+          this.reportTrashFailure(title, trashError);
+          return 'failed';
+        }
+        return skipped ? 'skipped' : preview ? 'preview' : trashed ? 'deleted' : 'gone';
       } catch (error) {
         this.reportTrashFailure(title, `Could not confirm the delete: ${this.message(error)}`);
+        return 'failed';
       }
     });
+    this.trashWait = outcome.then(() => undefined);
+    return outcome;
+  }
+  /**
+   * One toast per Pass action, naming the pitch, or counting the pitches when several share an
+   * outcome. Failed deletes are left out: the banner names those.
+   */
+  private toastTrash(results: { outcome: TrashOutcome; title: string }[]) {
+    const titles = new Map<string, string[]>();
+    for (const { outcome, title } of results) {
+      const text = TRASH_TOASTS[outcome];
+      if (text) titles.set(text, [...(titles.get(text) ?? []), title]);
+    }
+    const parts = [...titles];
+    if (!parts.length) return;
+    if (parts.length > 1) return this.toast(parts.map(([text, names]) => `${text}: ${names.length}`).join(' · '));
+    const [text, names] = parts[0];
+    this.toast(`${text} · ${names.length === 1 ? names[0] : `${names.length} pitches`}`);
   }
   /** A run of Passes can fail together (Gmail down, no credentials); every failed pitch stays named. */
   private reportTrashFailure(title: string, reason: string) {

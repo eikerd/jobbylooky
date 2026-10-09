@@ -1,0 +1,50 @@
+/* Triage buttons pinned to the top of the detail pane, so Pursue / Maybe / Pass never move between pitches. */
+.detail { --pad-x: 30px; --pad-y: 24px; }
+@media (max-width: 1000px) { .detail { --pad-x: 20px; --pad-y: 18px; } }
+.detail > .decisions {
+  position: sticky;
+  /* Sticky offsets count from inside the pane's padding; this pins the bar flush with the pane's top edge. */
+  top: calc(-1 * var(--pad-y));
+  z-index: 2;
+  margin: calc(-1 * var(--pad-y)) calc(-1 * var(--pad-x)) 16px;
+  padding: 12px var(--pad-x);
+  background: var(--card);
+}
+/* The page scrolls at phone width; clip (not hidden) keeps the workspace from capturing the sticky bar. */
+@media (max-width: 620px) {
+  .workspace { overflow: clip; }
+  .detail { --pad-x: 16px; --pad-y: 18px; }
+  .detail > .decisions { top: 0; }
+}
+
+/* A tick box over each queue row's left padding; ticking never opens the row. */
+.queue-item { position: relative; }
+.queue-item .opportunity { padding-left: 40px; }
+.pick {
+  position: absolute;
+  top: 0;
+  bottom: 10px;
+  left: 4px;
+  width: 34px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.pick input { width: 17px; height: 17px; margin: 0; cursor: pointer; accent-color: var(--accent); }
+
+/* Bulk actions float at the foot of the queue, so ticking a row never shifts the list. */
+.bulk-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: 0 4px 12px rgb(40 60 70 / 0.15);
+}
