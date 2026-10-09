@@ -346,10 +346,13 @@ export class App implements OnDestroy {
   openProfilePitch(id: string) {
     const row = this.opportunities().find(item => item.id === id);
     if (!row || this.busy() || !this.canLeave()) return;
+    // Discarding was just confirmed; open() must not ask a second time.
     this.dirty.set(false);
+    this.replying.set(false);
     this.directoryMode.set(null);
     this.folder.set('All opportunities');
-    this.select(row);
+    // Opened from a profile or the "Original pitch" link: its voicemail is on screen, so it is seen.
+    this.open(row);
   }
   async startReply(row: Opportunity, kind: 'plain' | 'resume' | 'client' = 'plain') {
     // Ask the server: it picks the recipient with the same rule it sends with.

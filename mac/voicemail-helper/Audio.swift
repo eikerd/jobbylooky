@@ -30,6 +30,21 @@ enum Audio {
     try? String(contentsOf: transcriptDir.appendingPathComponent("\(id).txt"), encoding: .utf8)
   }
 
+  /// A failed transcription is retried a week later, not every sweep: newest-first order would
+  /// otherwise spend each run's quota on the same failures and never reach older voicemails.
+  static let retryFailedAfter: TimeInterval = 7 * 86400
+
+  static func failedRecently(_ id: String) -> Bool {
+    let marker = transcriptDir.appendingPathComponent("\(id).failed")
+    guard let failedAt = (try? fm.attributesOfItem(atPath: marker.path))?[.modificationDate] as? Date else { return false }
+    return Date().timeIntervalSince(failedAt) < retryFailedAfter
+  }
+
+  static func recordFailure(_ id: String, _ error: Error) {
+    try? ensureDirectory(transcriptDir)
+    try? "\(error)".write(to: transcriptDir.appendingPathComponent("\(id).failed"), atomically: true, encoding: .utf8)
+  }
+
   static func transcribe(_ voicemail: Voicemail) async throws -> String {
     let transcript = try await transcribeFile(try await m4a(for: voicemail))
     try ensureDirectory(transcriptDir)

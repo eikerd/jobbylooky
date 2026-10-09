@@ -27,12 +27,13 @@ func export(days: Int) async throws {
     if transcript == nil, let local = Audio.cachedTranscript(voicemail.id) {
       transcript = local
       source = "local"
-    } else if transcript == nil, voicemail.audio != nil, transcribed < maxTranscriptionsPerRun {
+    } else if transcript == nil, voicemail.audio != nil, transcribed < maxTranscriptionsPerRun, !Audio.failedRecently(voicemail.id) {
       transcribed += 1
       do {
         transcript = try await Audio.transcribe(voicemail)
         source = "local"
       } catch {
+        Audio.recordFailure(voicemail.id, error)
         problems.append(["id": voicemail.id, "error": "\(error)"])
       }
     }
