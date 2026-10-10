@@ -1,6 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { ageHeat, ageInDays } from './age';
+import { Age } from './age.component';
 import { interactions } from './interactions';
 import type { Opportunity } from './models';
 
@@ -13,7 +13,7 @@ const plural = (count: number, one: string, many = `${one}s`) => `${count} ${cou
  */
 @Component({
   selector: 'app-interaction-pills',
-  imports: [DatePipe],
+  imports: [DatePipe, Age],
   template: `@let it = summary();
     @if (it.sent.length) {
       <span class="pill sent" [title]="sentTitle()"><span class="glyph" aria-hidden="true">✉</span>Sent {{ it.sent.length }}</span>
@@ -34,7 +34,7 @@ const plural = (count: number, one: string, many = `${one}s`) => `${count} ${cou
       <span class="thread">{{ it.thread }} in thread</span>
     }
     @if (it.lastContact; as at) {
-      <span class="last" [style.color]="heat(at)" [title]="at | date: 'MMM d, h:mm a'">Last contact {{ ago(at) }}</span>
+      <span class="last" [title]="at | date: 'MMM d, h:mm a'">Last contact <app-age [at]="at" /></span>
     }`,
   styles: [`
     :host { --reply-soft:#fbe0f0; --reply-ink:#a3175f; display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:8px; white-space:nowrap; }
@@ -44,6 +44,7 @@ const plural = (count: number, one: string, many = `${one}s`) => `${count} ${cou
     .sent { background:var(--accent-soft); color:var(--accent-ink); }
     .resume { background:var(--warn-soft); color:var(--warn); }
     .reply { background:var(--reply-soft); color:var(--reply-ink); }
+    :host-context(.convo-live) .reply { background: var(--card); }
     .call { background:var(--side); color:var(--ink-strong); border:1px solid var(--line); }
     .thread, .last { font-size:12px; font-weight:700; }
     .thread { color:var(--soft); }
@@ -60,11 +61,4 @@ export class InteractionPills {
       .join('\n'),
   );
   readonly plural = plural;
-  ago(at: string) {
-    const days = ageInDays(at);
-    return days === null ? '' : days === 0 ? 'today' : `${days}d`;
-  }
-  heat(at: string) {
-    return ageHeat(ageInDays(at));
-  }
 }
