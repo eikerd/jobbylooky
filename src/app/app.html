@@ -209,7 +209,7 @@
                   @if (row.status !== 'New') {
                     <span class="decision">{{ row.status }}</span>
                   }
-                  @if (row.replyReceivedAt) {
+                  @if (row.replyReceivedAt && folder() !== 'Pursuing') {
                     <span class="replied">↩ replied {{ row.replyReceivedAt | date: 'MMM d' }}</span>
                   }
                 </span>
@@ -221,6 +221,7 @@
                   </span>
                 }
               </span>
+              @if (folder() === 'Pursuing') {<app-interaction-pills class="row-interactions" [pitches]="group.pitches" [all]="opportunities()" />}
               @if (group.history.occurrences > 1) {
                 <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} · {{ group.history.spanDays }}-day span</span>
               }
