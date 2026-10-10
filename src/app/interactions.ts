@@ -26,6 +26,8 @@ export interface Interactions {
 }
 
 const address = (value: string) => value.match(/[^\s<>]+@[^\s<>]+/)?.[0]?.toLowerCase() ?? '';
+/** Message-IDs compare without their angle brackets: the worker's copy and the mailer's record differ only there. */
+const messageId = (id: string) => id.replace(/[<>]/g, '');
 const sentOf = (row: Pitch) => (row.replies ?? []).filter((reply) => !reply.preview);
 const messagesOf = (row: Pitch): Message[] =>
   row.history?.length ? row.history : row.messageIds.map((id) => ({ id, receivedAt: row.receivedAt, from: row.from }));
@@ -59,7 +61,9 @@ export function interactions(pitches: readonly Pitch[], all: readonly Pitch[]): 
 
   const theirs = new Map<string, Message>();
   for (const row of rows) {
-    if (row.respondsTo) for (const message of messagesOf(row)) theirs.set(message.id, message);
+    // The owner's own copy can be ingested into an answer's thread; it is never theirs.
+    if (row.respondsTo)
+      for (const message of messagesOf(row)) if (!owner.has(address(message.from))) theirs.set(message.id, message);
     // Later mail in a thread counts from this row's own first send; a merged row without history cannot be dated.
     const firstSent = sentOf(row).map((reply) => reply.sentAt).sort()[0];
     if (firstSent && row.history?.length)
@@ -68,7 +72,11 @@ export function interactions(pitches: readonly Pitch[], all: readonly Pitch[]): 
   }
 
   const talked = rows.filter((row) => row.respondsTo || sentOf(row).length);
-  const messages = new Map((talked.length ? talked : pitches).flatMap(messagesOf).map((message) => [message.id, message]));
+  // One count per Message-ID, so a sent email the worker also ingested is not counted twice.
+  const thread = new Set([
+    ...(talked.length ? talked : pitches).flatMap(messagesOf).map((message) => messageId(message.id)),
+    ...sent.map((reply) => messageId(reply.id)),
+  ]);
 
   const voicemails = new Map(rows.flatMap((row) => row.voicemails ?? []).map((item) => [item.id, item]));
   const calls = [...voicemails.values()].filter((item) => item.kind === 'live').length;
@@ -80,7 +88,7 @@ export function interactions(pitches: readonly Pitch[], all: readonly Pitch[]): 
     replies,
     calls,
     voicemails: voicemails.size - calls,
-    thread: messages.size + sent.length,
+    thread: thread.size,
     lastContact: latest([
       ...sent.map((reply) => reply.sentAt),
       ...replies.map((message) => message.receivedAt),

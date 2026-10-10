@@ -98,3 +98,18 @@ test('calls and voicemails are told apart, once each across a grouped job', () =
   assert.equal(result.voicemails, 1);
   assert.equal(result.lastContact, '2026-10-07T10:00:00Z');
 });
+
+test("the owner's own copy, ingested by the mail worker, is neither their reply nor counted twice (Codex, PR #28)", () => {
+  const sentReply = reply('2026-10-02T09:00:00Z', { id: 'mine@gmail.com' });
+  const a = pitch('a', { replies: [sentReply] });
+  const answer = pitch('b', {
+    respondsTo: 'a',
+    history: [
+      { id: 'theirs@m', receivedAt: '2026-10-03T09:00:00Z', from: 'rec@agency.com' },
+      { id: '<mine@gmail.com>', receivedAt: '2026-10-02T09:00:01Z', from: 'Me <me@gmail.com>' },
+    ],
+  });
+  const result = interactions([a], [a, answer]);
+  assert.deepEqual(result.replies.map((m) => m.id), ['theirs@m']);
+  assert.equal(result.thread, 3);
+});
