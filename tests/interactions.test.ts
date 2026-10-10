@@ -44,11 +44,49 @@ test('emails before the owner wrote are the pitch, not replies', () => {
   assert.equal(interactions([a], [a]).replies.length, 0);
 });
 
-test('an answer row is marked as their reply', () => {
+test('an answer row counts as their reply, and brings in what was sent on the pitch it answers', () => {
+  const a = pitch('a', { replies: [reply('2026-09-30T09:00:00Z', { attachment: 'Resume.pdf' })] });
   const answer = pitch('b', { respondsTo: 'a' });
-  const result = interactions([answer], [answer]);
-  assert.equal(result.isAnswer, true);
+  const result = interactions([answer], [a, answer]);
+  assert.equal(result.replies.length, 1);
+  assert.equal(result.resume.length, 1);
   assert.equal(result.lastContact, '2026-10-01T10:00:00Z');
+});
+
+test("a second recruiter's pitch in the same job is not a reply (Codex and review agent, PR #28)", () => {
+  const a = pitch('a', { replies: [reply('2026-10-02T09:00:00Z')] });
+  const b = pitch('b', { from: 'Other <other@firm.com>', receivedAt: '2026-10-08T10:00:00Z' });
+  const result = interactions([a, b], [a, b]);
+  assert.equal(result.replies.length, 0);
+  assert.equal(result.thread, 2);
+  assert.equal(result.lastContact, '2026-10-02T09:00:00Z');
+});
+
+test('a conversation is followed through every answer, both ways (Codex, PR #28)', () => {
+  const a = pitch('a', { replies: [reply('2026-10-02T09:00:00Z')] });
+  const first = pitch('b', { messageIds: ['b@m'], receivedAt: '2026-10-03T09:00:00Z', respondsTo: 'a', replies: [reply('2026-10-04T09:00:00Z', { attachment: 'Resume.pdf' })] });
+  const second = pitch('c', { messageIds: ['c@m'], receivedAt: '2026-10-05T09:00:00Z', respondsTo: 'b' });
+  for (const shown of [[a], [first], [second]]) {
+    const result = interactions(shown, [a, first, second]);
+    assert.equal(result.sent.length, 2);
+    assert.equal(result.resume.length, 1);
+    assert.equal(result.replies.length, 2);
+    assert.equal(result.thread, 5);
+    assert.equal(result.lastContact, '2026-10-05T09:00:00Z');
+  }
+});
+
+test('sent emails are in date order across pitches', () => {
+  const a = pitch('a', { replies: [reply('2026-10-06T09:00:00Z')] });
+  const b = pitch('b', { replies: [reply('2026-10-03T09:00:00Z', { attachment: 'Resume.pdf' })] });
+  assert.deepEqual(interactions([a, b], [a, b]).sent.map((r) => r.sentAt), ['2026-10-03T09:00:00Z', '2026-10-06T09:00:00Z']);
+});
+
+test('a row without history guesses no replies from its merged date', () => {
+  const a = pitch('a', { messageIds: ['a@m', 'later@m'], receivedAt: '2026-10-05T10:00:00Z', replies: [reply('2026-10-02T09:00:00Z')] });
+  const result = interactions([a], [a]);
+  assert.equal(result.replies.length, 0);
+  assert.equal(result.thread, 3);
 });
 
 test('calls and voicemails are told apart, once each across a grouped job', () => {
