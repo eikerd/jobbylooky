@@ -1,0 +1,107 @@
+<section class="rules" aria-labelledby="rules-title">
+  <h2 id="rules-title" class="visually-hidden">Auto-reject rules</h2>
+
+  <form class="rule-form" (ngSubmit)="submit()">
+    <label>Rule name<input name="name" [ngModel]="name()" (ngModelChange)="name.set($event)" [disabled]="busy()" placeholder="e.g. Java only" maxlength="80" autocomplete="off" /></label>
+    <label class="pattern">Regex<input name="pattern" [ngModel]="pattern()" (ngModelChange)="pattern.set($event)" [disabled]="busy()" placeholder="e.g. \bjava\b(?!script)" maxlength="300" autocomplete="off" spellcheck="false" /></label>
+    <label>Looks in<select name="field" [ngModel]="field()" (ngModelChange)="field.set($event)" [disabled]="busy()">
+      @for (option of fields; track option) {
+        <option [value]="option">{{ fieldLabels[option] }}</option>
+      }
+    </select></label>
+    <div class="rule-form-actions">
+      <button class="button primary" type="submit" [disabled]="!canSave()">{{ editingId() ? 'Save changes' : 'Save as test rule' }}</button>
+      @if (editingId()) {
+        <button class="button secondary" type="button" (click)="clear()">Cancel</button>
+      }
+    </div>
+    @if (compiled().error) {
+      <p class="rule-error" role="alert">Not a valid regex: {{ compiled().error }}</p>
+    } @else if (tooSlow()) {
+      <p class="rule-error" role="alert">That pattern is too slow: it backtracks without end on some of your mail. Avoid nested repeats like (a+)+.</p>
+    }
+  </form>
+
+  @if (rules().length) {
+    <div class="grid-scroll">
+      <table class="rule-grid">
+        <colgroup><col class="c-name" /><col class="c-pattern" /><col class="c-field" /><col class="c-mode" /><col class="c-actions" /></colgroup>
+        <thead>
+          <tr>
+            @for (column of ruleColumns; track column.key) {
+              <th scope="col" [attr.aria-sort]="ruleAria(column.key)">
+                <button type="button" (click)="sortRulesBy(column.key)">{{ column.label }}<span class="arrow" aria-hidden="true">{{ ruleAria(column.key) === 'ascending' ? '▲' : ruleAria(column.key) === 'descending' ? '▼' : '' }}</span></button>
+              </th>
+            }
+            <th scope="col"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (rule of sortedRules(); track rule.id) {
+            <tr [class.editing]="editingId() === rule.id">
+              <td class="strong">{{ rule.name }}</td>
+              <td><code>{{ rule.pattern }}</code></td>
+              <td>{{ fieldLabels[rule.field] }}</td>
+              <td><span [class]="'mode ' + rule.mode">{{ rule.mode === 'live' ? 'Live' : 'Test' }}</span></td>
+              <td class="actions">
+                <button class="button secondary small" type="button" [disabled]="busy()" (click)="edit(rule)">Test</button>
+                <button class="button secondary small" type="button" [disabled]="busy()" (click)="toggleMode(rule)">{{ rule.mode === 'live' ? 'Back to test' : 'Go live' }}</button>
+                <button class="button secondary small" type="button" [disabled]="busy()" (click)="confirmRemove(rule)" [attr.aria-label]="'Delete rule ' + rule.name">Delete</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <label class="paste">Test against pasted text<textarea name="pasted" rows="3" [ngModel]="pasted()" (ngModelChange)="pasted.set($event)" placeholder="Paste any email to see if the regex hits"></textarea></label>
+  @if (result() && pasted().trim()) {
+    <p class="paste-result">
+      @if (pastedMatch(); as hit) {
+        Matches: {{ hit.before }}<mark>{{ hit.hit }}</mark>{{ hit.after }}
+      } @else {
+        No match.
+      }
+    </p>
+  }
+
+  @if (result()) {
+    <h3 class="tester-title">Matches in stored mail ({{ matches().length }})</h3>
+    @if (kept()) {
+      <p class="kept-warning" role="status">{{ kept() }} {{ kept() === 1 ? 'match is' : 'matches are' }} in Pursuing or Maybe. A live rule would have passed {{ kept() === 1 ? 'it' : 'them' }}.</p>
+    }
+    @if (matches().length) {
+      <div class="grid-scroll">
+        <table class="tester-grid">
+          <colgroup><col class="c-received" /><col class="c-job" /><col class="c-sender" /><col class="c-status" /><col class="c-fit" /><col class="c-match" /></colgroup>
+          <thead>
+            <tr>
+              @for (column of testerColumns; track column.key) {
+                <th scope="col" [attr.aria-sort]="testerAria(column.key)">
+                  <button type="button" (click)="sortTesterBy(column.key)">{{ column.label }}<span class="arrow" aria-hidden="true">{{ testerAria(column.key) === 'ascending' ? '▲' : testerAria(column.key) === 'descending' ? '▼' : '' }}</span></button>
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of sortedMatches(); track row.pitch.id) {
+              <tr (click)="openPitch.emit(row.pitch.id)">
+                <td><app-age [at]="row.pitch.receivedAt" /> · <time [attr.datetime]="row.pitch.receivedAt">{{ row.pitch.receivedAt | date: 'MMM d' }}</time></td>
+                <td><button type="button" class="job" (click)="openPitch.emit(row.pitch.id); $event.stopPropagation()">{{ row.pitch.title }}</button></td>
+                <td>{{ row.pitch.from }}</td>
+                <td>{{ row.pitch.status }}</td>
+                <td>{{ row.pitch.fit }}</td>
+                <td class="match">{{ row.snippet.before }}<mark>{{ row.snippet.hit }}</mark>{{ row.snippet.after }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <p class="rules-empty">No stored email matches.</p>
+    }
+  } @else if (!rules().length && !tooSlow()) {
+    <p class="rules-empty">Write a regex to see which stored emails it would reject. Nothing is changed or deleted while you test.</p>
+  }
+</section>

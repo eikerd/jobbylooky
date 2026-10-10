@@ -18,6 +18,15 @@
         "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && d=$(mktemp -d) && cp tests/fixtures/sample-inbox.json \"$d/import.json\" && DATA_DIR=\"$d\" MAIL_SEND_MODE=preview PORT=4318 npm start"
       ],
       "port": 4318
+    },
+    {
+      "name": "jobbylooky-copy",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && d=$(mktemp -d) && cp data/opportunities.json \"$d/\" && DATA_DIR=\"$d\" MAIL_SEND_MODE=preview PORT=4319 npm start"
+      ],
+      "port": 4319
     }
   ]
 }

@@ -1,0 +1,53 @@
+/* One shrinkable column: a wide grid scrolls in its own box instead of widening the page. */
+.rules { padding: 0 24px 24px; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* The page's buttons are scoped to the app shell; this view carries its own. */
+.button { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; min-height: 38px; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; border: 1.5px solid transparent; white-space: nowrap; }
+.button.small { min-height: 30px; padding: 4px 12px; font-size: 13px; }
+.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+.primary:hover { background: var(--accent-hover); }
+.secondary { background: var(--card); color: var(--ink); border-color: var(--control-border); }
+.secondary:hover { background: var(--hover); }
+.button:disabled { background: var(--hover); border-color: var(--line-strong); color: var(--muted); cursor: default; }
+
+.rule-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.rule-form > label { flex: 1 1 160px; }
+.rule-form > label.pattern { flex: 2 1 240px; }
+.rule-form label, .paste { display: grid; gap: 4px; font-size: 13px; font-weight: 700; color: var(--soft); }
+.rule-form input, .rule-form select, .paste textarea { font-size: 15px; padding: 8px 10px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--card); color: var(--ink); min-width: 0; }
+.pattern input, code, .paste textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.rule-form-actions { display: flex; gap: 8px; }
+.rule-error { flex-basis: 100%; margin: 0; color: var(--bad); font-weight: 700; font-size: 14px; }
+.paste textarea { resize: vertical; font-size: 14px; font-weight: 400; }
+.paste-result { margin: 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tester-title { margin: 6px 0 0; font-size: 16px; }
+.kept-warning { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-weight: 700; font-size: 14px; }
+.rules-empty { color: var(--soft); margin: 0; }
+mark { background: var(--bad-soft); color: var(--bad); font-weight: 800; border-radius: 3px; padding: 0 2px; }
+
+/* Wider than a phone: each grid scrolls in its own box, never the page. */
+.grid-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
+.rule-grid { min-width: 720px; }
+.tester-grid { min-width: 900px; }
+.c-name { width: 20%; } .c-pattern { width: 32%; } .c-field { width: 14%; } .c-mode { width: 9%; } .c-actions { width: 25%; }
+.c-received { width: 15%; } .c-job { width: 23%; } .c-sender { width: 17%; } .c-status { width: 9%; } .c-fit { width: 10%; } .c-match { width: 26%; }
+th, td { padding: 7px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line); }
+th button { all: unset; cursor: pointer; font-weight: 800; font-size: 13px; color: var(--soft); white-space: nowrap; }
+th button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.arrow { margin-left: 4px; font-size: 10px; }
+tbody tr:last-child td { border-bottom: 0; }
+.tester-grid tbody tr { cursor: pointer; }
+.tester-grid tbody tr:hover, .rule-grid tr.editing { background: var(--hover); }
+.strong { font-weight: 700; }
+.actions { display: flex; gap: 6px; }
+.job { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; font-weight: 700; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job:focus-visible { outline: 2px solid var(--accent-ink); }
+.mode { font-size: 12px; font-weight: 800; padding: 1px 8px; border-radius: 999px; }
+.mode.test { background: var(--hover); color: var(--soft); }
+.mode.live { background: var(--bad-soft); color: var(--bad); }
+
+@media (max-width: 720px) {
+  .rules { padding: 0 16px 16px; }
+}

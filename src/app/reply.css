@@ -13,3 +13,21 @@
 .answer-of .email-reading { justify-self: stretch; border-left: 3px solid var(--line-strong); padding-left: 10px; }
 .link-button { background: none; border: 0; padding: 0; color: var(--accent-ink); font: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
 .answer-mark { color: var(--accent-ink); }
+
+/* Conversation cards: the state colours the whole card, over the full-time edge. */
+.opportunity.convo-waiting { background: var(--convo-waiting-soft); border-color: var(--convo-waiting); border-left-color: var(--convo-waiting); }
+.opportunity.convo-waiting:hover { background: var(--convo-waiting-hover); }
+.opportunity.convo-live { background: var(--convo-live-soft); border-color: var(--convo-live); border-left: 6px solid var(--convo-live); }
+.opportunity.convo-live:hover { background: var(--convo-live-hover); }
+.opportunity.convo-live .row-heading { color: var(--convo-live-ink); }
+.opportunity.convo-waiting.selected, .opportunity.convo-live.selected { border-left-color: var(--select-edge); box-shadow: 0 0 0 2px var(--select-edge); }
+/* The detail pane's thread wears its card's colour. */
+.reply.convo-waiting, .answer-of.convo-live, .reply.convo-live { border: 0; border-radius: 10px; padding: 14px; }
+.reply.convo-waiting { background: var(--convo-waiting-soft); }
+.reply.convo-live, .answer-of.convo-live { background: var(--convo-live-soft); }
+.reply.convo-waiting .sent-reply { border-left-color: var(--convo-waiting); }
+.reply.convo-live .sent-reply, .answer-of.convo-live .email-reading { border-left-color: var(--convo-live); }
+.reply.convo-live .reply-back, .answer-of.convo-live p, .opportunity.convo-live .replied, .opportunity.convo-live .answer-mark { color: var(--convo-live-ink); }
+
+/* A card a live reject rule passed names the rule. */
+.rejected-by { font-size: 12px; font-weight: 800; padding: 1px 8px; border-radius: 999px; background: var(--bad-soft); color: var(--bad); }

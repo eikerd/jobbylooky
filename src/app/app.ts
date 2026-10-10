@@ -2,11 +2,14 @@ import { Component, computed, signal, OnDestroy, ElementRef, viewChild } from '@
 import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ageHeat, ageInDays } from './age';
+import { ageText, daysSince } from './age';
+import { Age } from './age.component';
+import { conversationState, planDecision, type GroupDecision } from './conversation';
+import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import { daysUp, jobState } from './link-state';
-import type { Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
+import type { RejectRule, RuleMode, Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -35,7 +38,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, InteractionPills],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -51,7 +54,9 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | 'rules' | null>(null);
+  readonly rejectRules = signal<RejectRule[]>([]);
+  readonly rulesView = viewChild(Rules);
   readonly profileMode = computed(() => {
     const mode = this.directoryMode();
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
@@ -177,6 +182,106 @@ export class App implements OnDestroy {
     const sort = this.relatedSort();
     return sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
   }
+  /** A decision on a job with duplicate pitches waits here for the owner to confirm its reach. */
+  readonly decision = signal<GroupDecision | null>(null);
+  /** Duplicates ticked for passing alongside the decision. */
+  readonly decisionTicks = signal<ReadonlySet<string>>(new Set());
+  readonly decisionSort = signal(DEFAULT_RELATED_SORT);
+  /** The pitches the open decision was made on, for "Just this one". */
+  private decisionChosen: readonly Opportunity[] = [];
+  readonly decisionChosenCount = signal(0);
+  readonly decisionDialog = viewChild<ElementRef<HTMLDialogElement>>('decisionDialog');
+  readonly decisionRows = computed(() => {
+    const plan = this.decision();
+    if (!plan) return [];
+    const rows = [...plan.decide, ...plan.others].map((pitch) => ({ id: pitch.id, from: pitch.from, receivedAt: pitch.receivedAt, pitch }));
+    return sortRelated(rows, this.decisionSort());
+  });
+  /** How many pitches the confirm button passes. */
+  readonly decisionPassing = computed(() => {
+    const plan = this.decision();
+    if (!plan) return 0;
+    const ticked = plan.others.filter((row) => this.decisionTicks().has(row.id)).length;
+    return plan.status === 'Passed' ? ticked + plan.decide.length : ticked;
+  });
+  /** What a row's status becomes if the decision is confirmed as ticked. */
+  decisionStatus(row: Opportunity) {
+    const plan = this.decision();
+    if (!plan) return row.status;
+    if (plan.decide.some((item) => item.id === row.id)) return plan.keptStatus;
+    return this.decisionTicks().has(row.id) ? 'Passed' : row.status;
+  }
+  isDecided(row: Opportunity) {
+    return !!this.decision()?.decide.some((item) => item.id === row.id);
+  }
+  toggleDecisionTick(id: string) {
+    this.decisionTicks.update((ids) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }
+  sortDecisionBy(key: RelatedKey) {
+    this.decisionSort.update((sort) => nextRelatedSort(sort, key));
+  }
+  decisionAriaSort(key: RelatedKey) {
+    const sort = this.decisionSort();
+    return sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
+  }
+  /** Opens the dialog when the decision reaches other pitches of the same job; false when it does not. */
+  private offerDecision(rows: Opportunity[], status: string) {
+    const plan = planDecision(this.jobGroups(), rows, status);
+    if (!plan) return false;
+    this.decisionTicks.set(new Set(plan.others.map((row) => row.id)));
+    this.decisionSort.set(DEFAULT_RELATED_SORT);
+    this.decision.set(plan);
+    this.decisionDialog()?.nativeElement.showModal();
+    return true;
+  }
+  closeDecision() {
+    this.decision.set(null);
+    const dialog = this.decisionDialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
+  }
+  /** Applies the decision to every ticked pitch, or with `alone`, only to the pitch it was made on. */
+  async confirmDecision(alone: boolean) {
+    const plan = this.decision();
+    const chosen = this.decisionChosen;
+    if (!plan) return;
+    const ticked = alone ? [] : plan.others.filter((row) => this.decisionTicks().has(row.id));
+    const passing = plan.status === 'Passed' ? (alone ? chosen : [...plan.decide, ...ticked]) : ticked;
+    // Passing the open pitch closes its reply composer; an edited reply is the owner's to discard.
+    if (passing.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
+    this.closeDecision();
+    if (plan.status === 'Passed') return this.passRows(alone ? [...chosen] : [...plan.decide, ...ticked]);
+    const kept = alone ? chosen[0] : plan.decide[0];
+    const status = alone ? plan.status : plan.keptStatus;
+    if (kept.id === this.selectedId()) {
+      if (!(await this.saveStatus(status))) return;
+    } else if (kept.status !== status && !(await this.setStatus(kept, status))) return;
+    if (ticked.length) await this.passRows(ticked);
+    // The kept pitch is where the conversation with the recruiter continues.
+    if (kept.id !== this.selectedId()) {
+      const fresh = this.opportunities().find((row) => row.id === kept.id);
+      if (fresh) this.select(fresh);
+    }
+  }
+  /** Saves a status on a pitch that is not open, leaving its notes as they are. */
+  private async setStatus(row: Opportunity, status: string) {
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}`, 'PATCH', { status });
+      this.replaceRow(updated);
+      return true;
+    } catch (error) {
+      this.error.set(`${row.title}: ${this.message(error)}`);
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
+  }
   readonly linkOptions = computed(() => this.jobGroups().filter(group => group.id !== this.selectedGroup()?.id));
 
   readonly selected = computed(() =>
@@ -218,7 +323,8 @@ export class App implements OnDestroy {
     void this.pass();
   };
   private beforeUnload = (event: BeforeUnloadEvent) => {
-    if (this.hasUnsavedWork()) event.preventDefault();
+    // A rule draft survives moving between views, but not a reload or a closed tab.
+    if (this.hasUnsavedWork() || hasRuleDraft()) event.preventDefault();
   };
   // An edited reply counts as unsaved work; the untouched greeting does not.
   private hasUnsavedWork() {
@@ -258,17 +364,19 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection, phrases, colors] = await Promise.all([
+      const [rows, connection, phrases, colors, rules] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
         this.request<TrackedPhrase[]>('phrases'),
         this.request<Record<PhraseKind, string>>('phrase-colors'),
+        this.request<RejectRule[]>('reject-rules'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision || this.passesSaving) return;
       this.jobGroups.set(this.withSeenHere(rows));
       this.phrases.set(phrases);
       this.phraseColors.set(colors);
+      this.rejectRules.set(rules);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -349,7 +457,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings' | 'rules', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -411,6 +519,7 @@ export class App implements OnDestroy {
     this.busy.set(true);
     this.revision++;
     this.error.set('');
+    let pursued: Opportunity | null = null;
     try {
       const updated = await this.request<Opportunity>(`opportunities/${encodeURIComponent(row.id)}/reply`, 'POST', {
         body,
@@ -424,11 +533,14 @@ export class App implements OnDestroy {
       this.replying.set(false);
       this.replyDraft = '';
       this.notice.set(`Reply sent to ${this.sender(updated.replies?.at(-1)?.to ?? row.from)}.`);
+      pursued = updated.status === 'Pursue' && row.status !== 'Pursue' ? updated : null;
     } catch (error) {
       this.error.set(this.message(error));
     } finally {
       this.busy.set(false);
     }
+    // The reply moved the job to Pursue, so its other copies are offered for passing too.
+    if (pursued && pursued.id === this.selectedId()) this.ask([pursued], 'Pursue');
   }
   // Changing a phrase re-screens every pitch on the server, so fits are reloaded too.
   async addPhrase() {
@@ -474,6 +586,36 @@ export class App implements OnDestroy {
   removePhrase(row: TrackedPhrase) {
     void this.changePhrases(() => this.request<TrackedPhrase[]>(`phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
   }
+  async saveRule(draft: RuleDraft) {
+    const { id, ...rule } = draft;
+    const saved = await this.changeRules(() =>
+      id ? this.request<RejectRule[]>(`reject-rules/${encodeURIComponent(id)}`, 'PATCH', rule) : this.request<RejectRule[]>('reject-rules', 'POST', rule),
+    );
+    if (saved) this.rulesView()?.clear();
+  }
+  setRuleMode({ rule, mode }: { rule: RejectRule; mode: RuleMode }) {
+    void this.changeRules(() => this.request<RejectRule[]>(`reject-rules/${encodeURIComponent(rule.id)}`, 'PATCH', { mode }));
+  }
+  removeRule(rule: RejectRule) {
+    void this.changeRules(() => this.request<RejectRule[]>(`reject-rules/${encodeURIComponent(rule.id)}`, 'DELETE'));
+  }
+  /** Rules change no pitch until new mail arrives, so nothing else needs reloading. */
+  private async changeRules(change: () => Promise<RejectRule[]>) {
+    if (this.busy()) return false;
+    this.busy.set(true);
+    // A poll that started before this change must not restore the old rules.
+    this.revision++;
+    this.error.set('');
+    try {
+      this.rejectRules.set(await change());
+      return true;
+    } catch (error) {
+      this.error.set(this.message(error));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
+  }
   private async changePhrases(change: () => Promise<TrackedPhrase[]>) {
     if (this.busy()) return false;
     this.busy.set(true);
@@ -496,9 +638,21 @@ export class App implements OnDestroy {
     }
     return true;
   }
+  /** A status change on a job with duplicates asks first; notes alone save straight away. */
   async save(status = this.editStatus) {
     const row = this.selected();
     if (!row || this.busy()) return;
+    if (status !== row.status && this.ask([row], status)) return;
+    await this.saveStatus(status);
+  }
+  private ask(rows: Opportunity[], status: string) {
+    this.decisionChosen = rows;
+    this.decisionChosenCount.set(rows.length);
+    return this.offerDecision(rows, status);
+  }
+  private async saveStatus(status: string) {
+    const row = this.selected();
+    if (!row || this.busy()) return false;
     this.busy.set(true);
     this.revision++;
     this.error.set('');
@@ -516,8 +670,10 @@ export class App implements OnDestroy {
       this.dirty.set(false);
       this.notice.set('Saved.');
       if (trashQueued) void this.collectTrash(updated).then((outcome) => this.toastTrash([{ outcome, title: updated.title }]));
+      return true;
     } catch (error) {
       this.error.set(this.message(error));
+      return false;
     } finally {
       this.busy.set(false);
     }
@@ -528,13 +684,16 @@ export class App implements OnDestroy {
    */
   async pass() {
     const row = this.selected();
-    if (!row || this.busy() || !this.canDropReply()) return;
+    if (!row || this.busy()) return;
+    // With duplicates the dialog asks about an edited reply on confirm, so it is asked only once.
+    if (this.ask([row], 'Passed') || !this.canDropReply()) return;
     await this.passRows([row]);
   }
   /** Passes every ticked row the same way, with one toast for all their Gmail deletes. */
   async passChecked() {
     const rows = this.checkedRows();
     if (!rows.length || this.busy()) return;
+    if (this.ask(rows, 'Passed')) return;
     if (rows.some((row) => row.id === this.selectedId()) && !this.canDropReply()) return;
     await this.passRows(rows);
   }
@@ -815,12 +974,13 @@ export class App implements OnDestroy {
   isDate(value: string) {
     return Number.isFinite(Date.parse(value));
   }
-  ageColor(receivedAt: string) {
-    return ageHeat(ageInDays(receivedAt));
+  /** Orange while the owner waits on an answer, bright pink once they have written back. */
+  conversation(pitches: readonly Opportunity[]) {
+    return conversationState(pitches);
   }
-  ageLabel(receivedAt: string) {
-    const days = ageInDays(receivedAt);
-    return days === null ? 'Age unknown' : `${days} ${days === 1 ? 'day' : 'days'} old`;
+  /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
+  ageWords(date: string) {
+    return ageText(daysSince(date));
   }
   due(date: string) {
     const today = new Date();

@@ -428,3 +428,67 @@ test('mail synced while Gmail was deleting stays pending; a covering batch clear
     assert.equal('trashPending' in store.settleTrash(id, everything), false);
     assert.throws(() => store.settleTrash('missing', []), /not found/);
   }));
+
+test('a live reject rule passes newly synced mail and names itself; test rules never act', () =>
+  withStore((store) => {
+    store.addRejectRule({ name: 'Java only', pattern: 'java\\b', field: 'subject', mode: 'test' });
+    store.import([{ ...message, id: 'a@x', threadId: 'ta', subject: 'Java Developer' }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta')).status, 'New');
+    const [rule] = store.rejectRules();
+    store.updateRejectRule(rule.id, { mode: 'live' });
+    store.import([{ ...message, id: 'b@x', threadId: 'tb', subject: 'Java Developer II' }], { synced: true });
+    const rejected = store.snapshot().opportunities.find((row) => row.id.endsWith(':tb'));
+    assert.equal(rejected.status, 'Passed');
+    assert.equal(rejected.rejectedBy.name, 'Java only');
+    assert.equal(rejected.trashPending, true);
+    // New mail only: the row that arrived while the rule was a test stays the owner's.
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta')).status, 'New');
+  }));
+test('slow live rules share one regex budget per mail check instead of stalling on every email', () =>
+  withStore((store) => {
+    for (let i = 0; i < 5; i++) store.addRejectRule({ name: `Slow ${i}`, pattern: '^(x+)+$', field: 'subject', mode: 'live' });
+    const batch = Array.from({ length: 10 }, (_, i) => ({ ...message, id: `s${i}@x`, threadId: `ts${i}`, subject: `${'x'.repeat(40)}!` }));
+    const started = Date.now();
+    store.import(batch, { synced: true });
+    assert.ok(Date.now() - started < 1500, `took ${Date.now() - started} ms`);
+    // A rule that never finished never rejects: the mail lands for the owner to judge.
+    assert.equal(store.snapshot().opportunities.filter((row) => row.id.includes(':ts') && row.status === 'New').length, 10);
+  }));
+test('a pasted email is never auto-rejected, and bad rules are refused', () =>
+  withStore((store) => {
+    store.addRejectRule({ name: 'Angular', pattern: 'angular', mode: 'live' });
+    store.import([{ ...message, id: 'c@x', threadId: 'tc' }]);
+    assert.equal(store.snapshot().opportunities[0].status, 'New');
+    assert.throws(() => store.addRejectRule({ name: 'Bad', pattern: '[' }), /not a valid regex/);
+    assert.throws(() => store.updateRejectRule('missing', { mode: 'live' }), /Rule not found/);
+    store.removeRejectRule(store.rejectRules()[0].id);
+    assert.deepEqual(store.rejectRules(), []);
+  }));
+test('editing a live rule\'s pattern or field drops it back to test unless live is asked for again', () =>
+  withStore((store) => {
+    store.addRejectRule({ name: 'Onsite', pattern: 'onsite', mode: 'live' });
+    const id = store.rejectRules()[0].id;
+    store.updateRejectRule(id, { name: 'Onsite only' });
+    assert.equal(store.rejectRules()[0].mode, 'live');
+    store.updateRejectRule(id, { pattern: 'on-?site' });
+    assert.equal(store.rejectRules()[0].mode, 'test');
+    store.updateRejectRule(id, { mode: 'live' });
+    store.updateRejectRule(id, { field: 'body', mode: 'live' });
+    assert.equal(store.rejectRules()[0].mode, 'live');
+  }));
+test('a live rule also passes a new email merged into an existing thread, unless the owner engaged', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'm1@x', threadId: 'tm', subject: 'Angular role' }], { synced: true });
+    store.addRejectRule({ name: 'Onsite', pattern: 'onsite', field: 'any', mode: 'live' });
+    store.import([{ ...message, id: 'm2@x', threadId: 'tm', subject: 'Re: Angular role', body: 'Update: now onsite five days.', receivedAt: '2026-09-18T12:00:00.000Z' }], { synced: true });
+    const row = store.snapshot().opportunities.find((item) => item.id.endsWith(':tm'));
+    assert.equal(row.status, 'Passed');
+    assert.equal(row.rejectedBy.name, 'Onsite');
+    assert.equal(row.trashPending, true);
+    // A decision the owner made is never overridden by a rule.
+    store.import([{ ...message, id: 'k1@x', threadId: 'tk', subject: 'Angular role' }], { synced: true });
+    const kept = store.snapshot().opportunities.find((item) => item.id.endsWith(':tk'));
+    store.update(kept.id, { status: 'Pursue' });
+    store.import([{ ...message, id: 'k2@x', threadId: 'tk', body: 'Now onsite.', receivedAt: '2026-09-18T12:00:00.000Z' }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((item) => item.id === kept.id).status, 'Pursue');
+  }));
