@@ -219,7 +219,7 @@
                   @if (row.status === 'Passed' && row.rejectedBy) {
                     <span class="rejected-by" [attr.title]="'Passed by the rule ' + row.rejectedBy.name">Rule: {{ row.rejectedBy.name }}</span>
                   }
-                  @if (row.replyReceivedAt) {
+                  @if (row.replyReceivedAt && folder() !== 'Pursuing') {
                     <span class="replied" [attr.title]="'Replied ' + (row.replyReceivedAt | date: 'MMM d, h:mm a')">↩ replied <app-age [at]="row.replyReceivedAt" /></span>
                   }
                 </span>
@@ -231,6 +231,7 @@
                   </span>
                 }
               </span>
+              @if (folder() === 'Pursuing') {<app-interaction-pills class="row-interactions" [pitches]="group.pitches" [all]="opportunities()" />}
               @if (group.history.occurrences > 1) {
                 <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} (<app-age [at]="group.history.firstSeen" />) · {{ group.history.spanDays }}-day span</span>
               }

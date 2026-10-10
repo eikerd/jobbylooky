@@ -18,6 +18,7 @@ import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { PlaceLinks } from './place-links.component';
 import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
+import { InteractionPills } from './interaction-pills.component';
 
 interface Connection {
   configured: boolean;
@@ -37,7 +38,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
