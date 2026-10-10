@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type { Opportunity, RejectRule, RuleField, RuleMode } from './models';
 import { Age } from './age.component';
+import { TesterRuns } from './tester-runs';
 import { compileRule, DEFAULT_TESTER_SORT, draftUnsaved, keptMatches, nextTesterSort, runTester, sortTester, type TesterKey, type RuleFields, type TesterResult, type TesterRow } from './reject-rules';
 
 export interface RuleDraft { id: string | null; name: string; pattern: string; field: RuleField }
@@ -73,9 +74,7 @@ export class Rules {
 
   private worker: Worker | null = null;
   private sentRows: Opportunity[] | null = null;
-  private seq = 0;
-  private running = false;
-  private deadline: ReturnType<typeof setTimeout> | undefined;
+  private readonly runs = new TesterRuns(TESTER_DEADLINE_MS);
   private debounce: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
@@ -83,26 +82,24 @@ export class Rules {
       const job = { rows: this.rows(), pattern: this.pattern(), field: this.field(), pasted: this.pasted(), valid: this.compiled().regex !== null, key: this.draftKey() };
       clearTimeout(this.debounce);
       // Any new input makes an in-flight run stale at once, before the debounce fires its replacement.
-      this.seq++;
+      this.runs.invalidate();
       untracked(() => this.testing.set(true));
       this.debounce = setTimeout(() => this.test(job), TESTER_DEBOUNCE_MS);
     });
     inject(DestroyRef).onDestroy(() => {
       clearTimeout(this.debounce);
-      clearTimeout(this.deadline);
+      this.runs.end();
       this.worker?.terminate();
     });
   }
 
   /** Runs the tester in a worker with a deadline; a regex that backtracks forever cannot hang the page. */
   private test(job: { rows: Opportunity[]; pattern: string; field: RuleField; pasted: string; valid: boolean; key: string }) {
-    const seq = ++this.seq;
     this.pendingKey = job.key;
-    clearTimeout(this.deadline);
     this.tooSlow.set(false);
     if (!job.valid) {
       // A runaway from the previous pattern would otherwise keep a CPU core busy until the tab closes.
-      if (this.running) this.stopWorker();
+      if (this.runs.running) this.stopWorker();
       this.testing.set(false);
       return this.result.set(null);
     }
@@ -112,13 +109,12 @@ export class Rules {
       return this.testedFor.set(job.key);
     }
     // A run still going is the old pattern's runaway, or soon stale: replace the worker.
-    if (this.running) this.stopWorker();
+    if (this.runs.running) this.stopWorker();
     if (!this.worker) {
       this.worker = new Worker(new URL('./tester.worker', import.meta.url), { type: 'module' });
       this.worker.onmessage = ({ data }) => {
-        if (data.seq !== this.seq) return;
-        this.running = false;
-        clearTimeout(this.deadline);
+        // A stale reply still ends its run, so its deadline cannot fire; only the current run shows.
+        if (!this.runs.finish(data.seq)) return;
         this.result.set(data.result);
         this.testedFor.set(this.pendingKey);
         this.testing.set(false);
@@ -128,20 +124,21 @@ export class Rules {
       this.worker.postMessage({ type: 'rows', rows: job.rows.map(({ id, subject, body }) => ({ id, subject, body })) });
       this.sentRows = job.rows;
     }
-    this.running = true;
-    this.worker.postMessage({ type: 'run', seq, pattern: job.pattern, field: job.field, pasted: job.pasted });
-    this.deadline = setTimeout(() => {
+    const seq = this.runs.start((current) => {
+      // A run past its deadline is a runaway either way; only the current one reports it.
       this.stopWorker();
+      if (!current) return;
       this.result.set(null);
       this.tooSlow.set(true);
       this.testing.set(false);
-    }, TESTER_DEADLINE_MS);
+    });
+    this.worker.postMessage({ type: 'run', seq, pattern: job.pattern, field: job.field, pasted: job.pasted });
   }
   private stopWorker() {
     this.worker?.terminate();
     this.worker = null;
     this.sentRows = null;
-    this.running = false;
+    this.runs.end();
   }
 
   readonly testerColumns: { key: TesterKey; label: string }[] = [

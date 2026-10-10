@@ -44,7 +44,7 @@
               <td>{{ fieldLabels[rule.field] }}</td>
               <td><span [class]="'mode ' + rule.mode">{{ rule.mode === 'live' ? 'Live' : 'Test' }}</span></td>
               <td class="actions">
-                <button class="button secondary small" type="button" (click)="edit(rule)">Test</button>
+                <button class="button secondary small" type="button" [disabled]="busy()" (click)="edit(rule)">Test</button>
                 <button class="button secondary small" type="button" [disabled]="busy()" (click)="toggleMode(rule)">{{ rule.mode === 'live' ? 'Back to test' : 'Go live' }}</button>
                 <button class="button secondary small" type="button" [disabled]="busy()" (click)="confirmRemove(rule)" [attr.aria-label]="'Delete rule ' + rule.name">Delete</button>
               </td>
