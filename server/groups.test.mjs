@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupOpportunities, postingHistory } from './groups.mjs';
+import { groupOpportunities, postingHistory, passedOriginal } from './groups.mjs';
 const requirements = 'Requirements:\nDesign Angular applications with advanced dependency injection and accessible reusable components. Build complex data visualizations using custom rendering strategies and high volume streaming data. Maintain thorough end to end integration coverage for distributed workflows and complex enterprise permissions. Optimize frontend performance and collaborate with platform teams on release automation and continuous delivery.';
 const pitch = (id, extra = {}) => ({ id, title: 'Angular Developer (REQ12345)', subject: 'Angular developer', company: 'Acme', location: 'Dallas, TX', receivedAt: '2026-09-17T12:00:00Z', body: requirements, from: `${id}@agency.example`, status: 'New', ...extra });
 test('matching recruiter pitches group while preserving each source and decision', () => {
@@ -74,4 +74,45 @@ test('posting gaps use Dallas calendar dates, not complete 24-hour intervals', (
   const result=postingHistory([pitch('a',{receivedAt:'2026-09-14T17:52:06Z'}),pitch('b',{receivedAt:'2026-09-15T12:31:30Z'})]);
   assert.equal(result.spanDays,1);
   assert.equal(result.longestGapDays,1);
+});
+
+const rep = (id, extra = {}) => pitch(id, { from: 'Shobhit <shobhit@agency.example>', ...extra });
+test('a repeat from the same recruiter of a passed posting finds the pitch passed', () => {
+  const passed = rep('a', { status: 'Passed', receivedAt: '2026-10-08T12:00:00Z' });
+  const older = rep('b', { status: 'Passed', receivedAt: '2026-10-05T12:00:00Z' });
+  assert.equal(passedOriginal([older, passed], rep('c', { subject: 'RE: Angular developer' })).id, 'a');
+  // Same title and location stand in for a reworded subject.
+  assert.equal(passedOriginal([passed], rep('c', { subject: 'Immediate hiring: Angular developer' })).id, 'a');
+});
+test('a repeat is only sure from the same sender, with the same posting and nearly all the same text', () => {
+  const passed = rep('a', { status: 'Passed' });
+  const half = requirements.split('. ').slice(0, 2).join('. ') + '. Lead the migration of legacy Java services to Kotlin microservices on Kubernetes with Kafka event streaming and Terraform managed infrastructure across three regions.';
+  for (const extra of [
+    { from: 'someone.else@agency.example' },
+    { subject: 'Python developer', title: 'Python Developer', location: 'Dallas, TX' },
+    { body: half },
+    { body: 'Angular developer needed.' },
+    { title: 'Angular Developer (REQ99999)', subject: 'Angular developer' },
+  ]) assert.equal(passedOriginal([passed], rep('c', extra)), null, JSON.stringify(extra).slice(0, 60));
+});
+test('a repeat is left alone once the owner took that job further or wrote about it', () => {
+  const passed = rep('a', { status: 'Passed' });
+  assert.equal(passedOriginal([passed, rep('b', { status: 'Pursue' })], rep('c')), null);
+  assert.equal(passedOriginal([passed, rep('b', { replies: [{ to: 'x', sentAt: '2026-09-17T13:00:00Z' }] })], rep('c')), null);
+  assert.equal(passedOriginal([passed], rep('c', { replies: [{ to: 'x', sentAt: '2026-09-17T13:00:00Z' }] })), null);
+  // An unsent preview is not engagement.
+  assert.equal(passedOriginal([passed], rep('c', { replies: [{ to: 'x', preview: true }] })).id, 'a');
+});
+test('only a pass the owner or a rule made counts, so repeats cannot chain', () => {
+  const repeat = rep('b', { status: 'Passed', repeatOf: { id: 'gone', receivedAt: '2026-09-01T00:00:00Z', at: '2026-09-02T00:00:00Z' } });
+  assert.equal(passedOriginal([repeat], rep('c')), null);
+  assert.equal(passedOriginal([rep('a', { status: 'New' })], rep('c')), null);
+});
+test('a group is sure only when every pair is the same posting from the same recruiter', () => {
+  const [sure] = groupOpportunities([rep('a'), rep('b', { receivedAt: '2026-09-18T12:00:00Z' })]);
+  assert.equal(sure.sure, true);
+  const [likely] = groupOpportunities([pitch('a'), pitch('b', { receivedAt: '2026-09-18T12:00:00Z' })]);
+  assert.equal(likely.pitches.length, 2);
+  assert.equal(likely.sure, false);
+  assert.equal(groupOpportunities([rep('a')])[0].sure, false);
 });

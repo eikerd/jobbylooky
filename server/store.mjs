@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS } from './screen.mjs';
-import { groupOpportunities } from './groups.mjs';
+import { groupOpportunities, passedOriginal } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
 import { originalReceivedAt } from './received-date.mjs';
@@ -34,6 +34,18 @@ const PURSUING = ['Pursue', 'Applied', 'Interviewing', 'Offer'];
 
 /** A resume that actually went out; a preview was never sent. */
 const sentResume = (row) => (row.replies ?? []).some((reply) => reply.attachment && !reply.preview);
+
+/**
+ * Passes `row` if it is the same posting from the same recruiter as a pitch already passed, marked
+ * pending so its Gmail delete starts (and is retried) like a Pass from the page. The owner chose
+ * same-recruiter repeats only (2026-10-13): "once I pass on one, I don't really want to see any of the rest".
+ */
+function passRepeat(rows, row) {
+  const original = passedOriginal(rows, row);
+  if (!original) return false;
+  Object.assign(row, { status: 'Passed', trashPending: true, repeatOf: { id: original.id, receivedAt: original.receivedAt, at: new Date().toISOString() } });
+  return true;
+}
 
 // Once a reply has gone out, a later message in the thread from someone else is their answer.
 // The owner chose: badge the row and move New to Maybe; Pursue moves to Maybe too unless I sent
@@ -221,6 +233,7 @@ export function createStore(directory) {
           const rule = synced ? liveRejection(next.rejectRules, row, budget) : null;
           // Pending before any delete starts, like a Pass from the page, so a failed delete is retried.
           if (rule) Object.assign(row, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
+          else if (synced) passRepeat(next.opportunities, row);
           next.opportunities.push(row);
           added++;
         }
@@ -230,6 +243,21 @@ export function createStore(directory) {
       if (account) next.account = account;
       commit(next);
       return added;
+    },
+    /**
+     * Passes every untouched New pitch that repeats one already passed. Runs once (the first sync
+     * after this shipped); afterwards each arrival is checked as it is imported, so a repeat the
+     * owner keeps — unticked in the Pass dialog, or moved back to New — is never passed behind them.
+     */
+    sweepRepeats() {
+      if (state.repeatSweepAt) return [];
+      const next = structuredClone(state);
+      const passed = next.opportunities.filter(
+        (row) => row.status === 'New' && row.source !== 'manual' && !row.respondsTo && !row.repeatOf && passRepeat(next.opportunities, row),
+      );
+      next.repeatSweepAt = new Date().toISOString();
+      commit(next);
+      return passed.map((row) => row.id);
     },
     /** Addresses the owner has really written to; the mail sync reads all of their mail. */
     watchedSenders: () => [

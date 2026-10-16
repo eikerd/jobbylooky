@@ -46,7 +46,8 @@ async function sync() {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
     const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders() });
     const added = store.import(messages, { synced: true });
-    trashRejected();
+    store.sweepRepeats();
+    trashAutoPassed();
     syncError = '';
     return added;
   } catch (error) {
@@ -82,27 +83,30 @@ function passEndedJobs() {
   return passed;
 }
 /**
- * Mail a live reject rule passed goes to Gmail Trash like a Pass from the page. The store
- * marks it pending as it rejects, so a crash or a Gmail failure is retried on the next sync.
- * No page waits on these deletes, so a failure is kept here and shown in the connection banner.
+ * Mail a live reject rule passed, or a repeat of a job already passed, goes to Gmail Trash like a
+ * Pass from the page. The store marks it pending as it passes it, so a crash or a Gmail failure is
+ * retried on the next sync. No page waits on these deletes, so a failure is kept here and shown in
+ * the connection banner.
  */
-const rejectTrashFailures = new Map();
-function trashRejected() {
+const autoTrashFailures = new Map();
+function trashAutoPassed() {
   for (const row of store.snapshot().opportunities) {
-    if (row.status !== 'Passed' || !row.rejectedBy || !row.trashPending || !gmailIds(row.messageIds).length) continue;
+    if (row.status !== 'Passed' || !(row.rejectedBy || row.repeatOf) || !row.trashPending || !gmailIds(row.messageIds).length) continue;
     void passTrash.enqueue(row.id).then((outcome) => {
-      if (outcome?.trashError) rejectTrashFailures.set(row.id, row.title);
-      else rejectTrashFailures.delete(row.id);
+      if (outcome?.trashError) autoTrashFailures.set(row.id, { title: row.title, rule: Boolean(row.rejectedBy) });
+      else autoTrashFailures.delete(row.id);
     });
   }
 }
-function rejectTrashError() {
-  // Un-passed, or deleted by a later Pass, since it failed: no longer the rule's to report.
+function autoTrashError() {
+  // Un-passed, or deleted by a later Pass, since it failed: no longer ours to report.
   const pending = new Set(store.snapshot().opportunities.filter((row) => row.status === 'Passed' && row.trashPending).map((row) => row.id));
-  const titles = [...rejectTrashFailures].filter(([id]) => pending.has(id)).map(([, title]) => title);
-  if (!titles.length) return '';
-  const more = titles.length > 1 ? ` and ${titles.length - 1} more` : '';
-  return `A reject rule passed "${titles[0]}"${more}, but Gmail did not delete it. It retries on every mail check.`;
+  const failed = [...autoTrashFailures].filter(([id]) => pending.has(id)).map(([, failure]) => failure);
+  if (!failed.length) return '';
+  const more = failed.length > 1 ? ` and ${failed.length - 1} more` : '';
+  const by = failed[0].rule ? 'A reject rule' : 'Jobbylooky';
+  const why = failed[0].rule ? '' : ' as a repeat of a job you passed';
+  return `${by} passed "${failed[0].title}"${more}${why}, but Gmail did not delete it. It retries on every mail check.`;
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -247,7 +251,7 @@ export const server = createServer(async (req, res) => {
         canReply: Boolean(mailer),
         replyPreview: Boolean(mailer?.preview),
         syncing,
-        error: syncError || rejectTrashError(),
+        error: syncError || autoTrashError(),
         account,
         lastSync,
         importedAt,

@@ -23,6 +23,55 @@ function features(row) {
   return { row, title, ids, shingles, company: field(row.company), location: field(row.location), time: Date.parse(row.receivedAt) };
 }
 
+const sender = (from) => String(from ?? '').match(/[^\s<>"]+@[^\s<>"]+/)?.[0]?.toLowerCase() ?? '';
+const subjectKey = (subject) => normalize(String(subject ?? '').replace(/^\s*(?:(?:re|fwd?)\s*:\s*)+/i, ''));
+const multiRole = (row) => row.reasons?.some((reason) => /email describes multiple roles/i.test(reason.text));
+// Below this many six-word runs a "90% the same" is too little text to be sure of.
+const SURE_MIN_SHINGLES = 20;
+const SURE_MIN_RATIO = 0.9;
+
+/**
+ * Sure the two pitches are the same posting from the same recruiter, or null: the same sender
+ * address, the same subject (or the same title and location), and at least 90% of the job text
+ * identical. Unlike `match`, this is strong enough to pass a repeat without asking.
+ */
+function sure(a, b) {
+  const from = sender(a.row.from);
+  if (!from || from !== sender(b.row.from)) return null;
+  if (multiRole(a.row) || multiRole(b.row)) return null;
+  const subject = subjectKey(a.row.subject);
+  const title = normalize(a.row.title || '');
+  const titled = title && title === normalize(b.row.title || '') && a.location && a.location === b.location;
+  if (!((subject && subject === subjectKey(b.row.subject)) || titled)) return null;
+  if (a.ids.size && b.ids.size && ![...a.ids].some((id) => b.ids.has(id))) return null;
+  const text = overlap(a.shingles, b.shingles);
+  if (text.shared < SURE_MIN_SHINGLES || text.ratio < SURE_MIN_RATIO) return null;
+  return { ratio: text.ratio };
+}
+
+/**
+ * The passed pitch a new, untouched pitch repeats, or null. Never when the owner has taken the
+ * job further on any pitch of the same posting, written to the recruiter about it, or noted it.
+ */
+export function passedOriginal(rows, row) {
+  // A note, a next step or a follow-up date on a New pitch means the owner is weighing it.
+  const engaged = (other) =>
+    !['New', 'Passed'].includes(other.status) ||
+    other.replies?.some((reply) => !reply.preview) ||
+    (other.status === 'New' && (other.notes || other.nextAction || other.followUp));
+  if (engaged(row)) return null;
+  const item = features(row);
+  const from = sender(row.from);
+  const same = rows
+    .filter((other) => other.id !== row.id && from && sender(other.from) === from)
+    .map((other) => ({ other, evidence: sure(item, features(other)) }))
+    .filter(({ evidence }) => evidence);
+  if (!same.length || same.some(({ other }) => engaged(other))) return null;
+  // Anchored on a pass the owner (or a rule) made, so a chain of repeats cannot drift to another job.
+  const passed = same.filter(({ other }) => other.status === 'Passed' && !other.repeatOf);
+  return passed.sort((x, y) => y.other.receivedAt.localeCompare(x.other.receivedAt))[0]?.other ?? null;
+}
+
 function overlap(a, b) {
   let shared = 0;
   for (const value of a) if (b.has(value)) shared++;
@@ -30,7 +79,7 @@ function overlap(a, b) {
 }
 
 function match(a, b) {
-  if ([a, b].some(item => item.row.reasons?.some(reason => /email describes multiple roles/i.test(reason.text)))) return null;
+  if ([a, b].some(item => multiRole(item.row))) return null;
   if (!Number.isFinite(a.time) || !Number.isFinite(b.time)) return null;
   const distant = Math.abs(a.time - b.time) > 45 * 86400000;
   if (a.company && b.company && a.company !== b.company) return null;
@@ -118,6 +167,9 @@ export function groupOpportunities(rows, assignments = {}) {
       const repeated = [...counts].find(([, count]) => count > 1);
       if (repeated) evidence += ` Requisition ${repeated[0].toUpperCase()} appears in ${repeated[1]} pitches.`;
     }
-    return { id: group.id, kind: group.kind, evidence: pitches.length > 1 ? evidence : '', history:postingHistory(pitches), pitches };
+    // Sure only when every pair is: one doubtful member makes the whole job "likely".
+    const sureGroup = group.kind === 'likely' && pitches.length > 1 &&
+      group.items.every((a, i) => group.items.slice(i + 1).every((b) => sure(a, b)));
+    return { id: group.id, kind: group.kind, sure: sureGroup, evidence: pitches.length > 1 ? evidence : '', history:postingHistory(pitches), pitches };
   });
 }

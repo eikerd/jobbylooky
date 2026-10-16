@@ -492,3 +492,49 @@ test('a live rule also passes a new email merged into an existing thread, unless
     store.import([{ ...message, id: 'k2@x', threadId: 'tk', body: 'Now onsite.', receivedAt: '2026-09-18T12:00:00.000Z' }], { synced: true });
     assert.equal(store.snapshot().opportunities.find((item) => item.id === kept.id).status, 'Pursue');
   }));
+
+const job = 'Requirements:\nDesign Angular applications with advanced dependency injection and accessible reusable components. Build complex data visualizations using custom rendering strategies and high volume streaming data. Maintain thorough end to end integration coverage for distributed workflows and complex enterprise permissions.';
+const pitchMail = (n, extra = {}) => ({ ...message, id: `p${n}@x`, threadId: `tp${n}`, subject: 'Sr. Full Stack Engineer || Mountain View, CA', from: 'Shobhit <shobhit@tanisha.example>', body: job, receivedAt: `2026-10-0${n}T12:00:00.000Z`, ...extra });
+const rowOf = (store, n) => store.snapshot().opportunities.find((row) => row.id.endsWith(`:tp${n}`));
+
+test('a synced repeat of a passed posting from the same recruiter is passed and queued for Gmail', () =>
+  withStore((store) => {
+    store.import([pitchMail(1)], { synced: true });
+    store.update(rowOf(store, 1).id, { status: 'Passed' });
+    store.import([pitchMail(2), pitchMail(3, { from: 'other@tanisha.example' })], { synced: true });
+    const repeat = rowOf(store, 2);
+    assert.equal(repeat.status, 'Passed');
+    assert.equal(repeat.trashPending, true);
+    assert.equal(repeat.repeatOf.id, rowOf(store, 1).id);
+    assert.equal(repeat.repeatOf.receivedAt, '2026-10-01T12:00:00.000Z');
+    // Another recruiter's copy is not sure enough to pass unseen.
+    assert.equal(rowOf(store, 3).status, 'New');
+    // A pasted email is the owner's own choice to look at.
+    store.import([pitchMail(4)]);
+    assert.equal(rowOf(store, 4).status, 'New');
+  }));
+
+test('a pitch the owner has noted holds back the sweep for its whole posting', () =>
+  withStore((store) => {
+    store.import([pitchMail(1), pitchMail(2), pitchMail(3)], { synced: true });
+    assert.deepEqual([1, 2, 3].map((n) => rowOf(store, n).status), ['New', 'New', 'New']);
+    store.update(rowOf(store, 1).id, { status: 'Passed' });
+    store.update(rowOf(store, 3).id, { notes: 'kept' });
+    // A noted pitch is one the owner is weighing; it and its twin are left for the owner.
+    assert.deepEqual(store.sweepRepeats(), []);
+    store.update(rowOf(store, 3).id, { notes: '' });
+    store.import([pitchMail(4)], { synced: true });
+    assert.equal(rowOf(store, 4).status, 'Passed');
+    assert.equal(rowOf(store, 2).status, 'New');
+  }));
+
+test('the sweep clears a repeat waiting in the inbox once; one moved back to New stays', () =>
+  withStore((store) => {
+    store.import([pitchMail(1), pitchMail(2)], { synced: true });
+    store.update(rowOf(store, 1).id, { status: 'Passed' });
+    assert.deepEqual(store.sweepRepeats(), [rowOf(store, 2).id]);
+    assert.equal(rowOf(store, 2).trashPending, true);
+    store.update(rowOf(store, 2).id, { status: 'New' });
+    assert.deepEqual(store.sweepRepeats(), []);
+    assert.equal(rowOf(store, 2).status, 'New');
+  }));

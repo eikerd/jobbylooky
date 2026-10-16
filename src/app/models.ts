@@ -35,6 +35,8 @@ export interface Opportunity {
   linkChecks?: LinkCheck[];
   /** Set when the sweep passed the pitch because its postings had all closed. */
   autoPassed?: { at: string; reason: 'closed' | 'dead' };
+  /** Set when it arrived as the same posting, from the same recruiter, as a pitch already passed. */
+  repeatOf?: { id: string; receivedAt: string; at: string };
 }
 export interface LinkCheck {
   url: string;
@@ -77,6 +79,8 @@ export interface SentReply {
 export interface JobGroup {
   id: string;
   kind: 'likely' | 'manual';
+  /** Every pair is the same posting from the same recruiter, not just likely the same job. */
+  sure?: boolean;
   evidence: string;
   pitches: Opportunity[];
   history: {

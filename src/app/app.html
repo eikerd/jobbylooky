@@ -219,6 +219,9 @@
                   @if (row.status === 'Passed' && row.rejectedBy) {
                     <span class="rejected-by" [attr.title]="'Passed by the rule ' + row.rejectedBy.name">Rule: {{ row.rejectedBy.name }}</span>
                   }
+                  @if (row.status === 'Passed' && row.repeatOf) {
+                    <span class="rejected-by" [attr.title]="'Repeats the ' + (row.repeatOf.receivedAt | date: 'MMM d') + ' pitch you passed'">Repeat</span>
+                  }
                   @if (row.replyReceivedAt && folder() !== 'Pursuing') {
                     <span class="replied" [attr.title]="'Replied ' + (row.replyReceivedAt | date: 'MMM d, h:mm a')">↩ replied <app-age [at]="row.replyReceivedAt" /></span>
                   }
@@ -316,6 +319,9 @@
             @if (row.autoPassed && row.status === 'Passed') {
               <p class="auto-passed">Passed automatically {{ row.autoPassed.at | date: 'MMM d' }} (<app-age [at]="row.autoPassed.at" />): {{ autoPassedReason(row) }}.</p>
             }
+            @if (row.repeatOf && row.status === 'Passed') {
+              <p class="auto-passed">Passed automatically {{ row.repeatOf.at | date: 'MMM d' }} (<app-age [at]="row.repeatOf.at" />): it repeats the {{ row.repeatOf.receivedAt | date: 'MMM d' }} pitch you passed.</p>
+            }
             <p class="received-detail">
               <strong><app-age [at]="row.receivedAt" /></strong>
               <app-place-links [places]="locationMaps()" [location]="row.location" [scope]="row.id" />
@@ -326,7 +332,7 @@
               @if (group.pitches.length > 1 || group.history.occurrences > 1) {
                 <section class="related" aria-labelledby="related-title">
                   <div class="related-head">
-                    <h3 id="related-title">{{ group.pitches.length === 1 ? 'Emails' : group.kind === 'likely' ? 'Likely same job' : 'Same job' }}</h3>
+                    <h3 id="related-title">{{ group.pitches.length === 1 ? 'Emails' : group.kind === 'likely' ? (group.sure ? 'Same posting, same recruiter' : 'Likely same job') : 'Same job' }}</h3>
                     @if (group.pitches.length > 1) {
                       <button type="button" class="link-action" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
                     }
