@@ -95,6 +95,11 @@ test('a pitch the owner is pursuing vetoes a repeat even when it names the clien
   const passed = rep('b', { status: 'Passed', company: 'Fidelity Investments' });
   assert.equal(passedOriginal([pursued, passed], rep('c', { subject: 'RE: Angular developer', company: 'Fidelity Investments' })), null);
 });
+test('a repeat the owner moved back to New vetoes later copies of the same posting', () => {
+  const passed = rep('a', { status: 'Passed', receivedAt: '2026-10-08T12:00:00Z' });
+  const undone = rep('b', { status: 'New', repeatOf: { id: 'a', receivedAt: '2026-10-08T12:00:00Z', at: '2026-10-09T12:00:00Z' } });
+  assert.equal(passedOriginal([passed, undone], rep('c', { subject: 'RE: Angular developer' })), null);
+});
 test('a repeat is only sure from the same sender, with the same posting and nearly all the same text', () => {
   const passed = rep('a', { status: 'Passed' });
   const half = requirements.split('. ').slice(0, 2).join('. ') + '. Lead the migration of legacy Java services to Kotlin microservices on Kubernetes with Kafka event streaming and Terraform managed infrastructure across three regions.';

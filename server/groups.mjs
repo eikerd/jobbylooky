@@ -63,7 +63,9 @@ export function passedOriginal(rows, row) {
   const engaged = (other) =>
     !['New', 'Passed'].includes(other.status) ||
     other.replies?.some((reply) => !reply.preview) ||
-    (other.status === 'New' && (other.notes || other.nextAction || other.followUp));
+    (other.status === 'New' && (other.notes || other.nextAction || other.followUp)) ||
+    // An automatic pass the owner undid: keeping it New is a decision about this job.
+    (other.status === 'New' && Boolean(other.repeatOf || other.rejectedBy || other.deletedBy));
   if (engaged(row)) return null;
   const item = features(row);
   const from = sender(row.from);
