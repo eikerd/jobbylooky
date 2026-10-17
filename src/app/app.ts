@@ -77,6 +77,8 @@ export class App implements OnDestroy {
     return [...this.deletePhrases()].sort((a, b) => dir * a.phrase.localeCompare(b.phrase, undefined, { sensitivity: 'base' }));
   });
   deletePhraseDraft = '';
+  /** Set from Add until the check is answered, so a second press never opens a second check. */
+  readonly checkingDelete = signal(false);
   readonly rejectRules = signal<RejectRule[]>([]);
   readonly rulesView = viewChild(Rules);
   readonly profileMode = computed(() => {
@@ -639,8 +641,13 @@ export class App implements OnDestroy {
   /** Saved only after the owner has seen how much mail the phrase reaches. */
   async addDeletePhrase() {
     const phrase = this.deletePhraseDraft.trim();
-    if (phrase.length < 2 || this.busy()) return;
-    if (await this.checkDeletePhrase(phrase)) return;
+    if (phrase.length < 2 || this.busy() || this.checkingDelete()) return;
+    this.checkingDelete.set(true);
+    try {
+      if (await this.checkDeletePhrase(phrase)) return;
+    } finally {
+      this.checkingDelete.set(false);
+    }
     if (await this.changeDeletePhrases(() => this.request<DeletePhrase[]>('delete-phrases', 'POST', { phrase }))) {
       this.deletePhraseDraft = '';
       this.toast(`Deleting new mail with “${phrase}”`);
@@ -650,7 +657,11 @@ export class App implements OnDestroy {
     void this.changeDeletePhrases(() => this.request<DeletePhrase[]>(`delete-phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
   }
   private async changeDeletePhrases(change: () => Promise<DeletePhrase[]>) {
-    if (this.busy()) return false;
+    // Confirmed while another save ran: say so rather than drop the phrase without a word.
+    if (this.busy()) {
+      this.error.set('Still saving the last change; the delete phrase was not added. Try again.');
+      return false;
+    }
     this.busy.set(true);
     this.revision++;
     this.error.set('');

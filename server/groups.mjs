@@ -35,13 +35,15 @@ const SURE_MIN_RATIO = 0.9;
  * address, the same subject (or the same title and location), and at least 90% of the job text
  * identical. Unlike `match`, this is strong enough to pass a repeat without asking.
  */
-function sure(a, b) {
+function sure(a, b, { strict = true } = {}) {
   const from = sender(a.row.from);
   if (!from || from !== sender(b.row.from)) return null;
   if (multiRole(a.row) || multiRole(b.row)) return null;
-  // A different stated client or city is a different opening, however alike the text reads.
-  if (a.company && b.company && a.company !== b.company) return null;
-  if (a.location && b.location && a.location !== b.location) return null;
+  // A different stated client or city is a different opening, however alike the text reads. Not
+  // strict is for asking whether the owner weighs the job: "Fidelity" and "Fidelity Investments"
+  // must still count as the same job there.
+  if (strict && a.company && b.company && a.company !== b.company) return null;
+  if (strict && a.location && b.location && a.location !== b.location) return null;
   const subject = subjectKey(a.row.subject);
   const title = normalize(a.row.title || '');
   const titled = title && title === normalize(b.row.title || '') && a.location && a.location === b.location;
@@ -65,11 +67,14 @@ export function passedOriginal(rows, row) {
   if (engaged(row)) return null;
   const item = features(row);
   const from = sender(row.from);
-  const same = rows
+  const alike = rows
     .filter((other) => other.id !== row.id && from && sender(other.from) === from)
-    .map((other) => ({ other, evidence: sure(item, features(other)) }))
-    .filter(({ evidence }) => evidence);
-  if (!same.length || same.some(({ other }) => engaged(other))) return null;
+    .map((other) => ({ other, features: features(other) }))
+    .filter(({ features: them }) => sure(item, them, { strict: false }));
+  // Any alike pitch the owner is weighing vetoes, even one naming the client or city differently.
+  if (alike.some(({ other }) => engaged(other))) return null;
+  const same = alike.filter(({ features: them }) => sure(item, them));
+  if (!same.length) return null;
   // Anchored on a pass the owner (or a rule) made, so a chain of repeats cannot drift to another job.
   const passed = same.filter(({ other }) => other.status === 'Passed' && !other.repeatOf);
   return passed.sort((x, y) => y.other.receivedAt.localeCompare(x.other.receivedAt))[0]?.other ?? null;

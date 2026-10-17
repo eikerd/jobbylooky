@@ -201,10 +201,11 @@ export function createStore(directory) {
           const hit = deletePhraseMatch(next.deletePhrases, message);
           if (!hit) continue;
           if (threadRow) {
-            // A later email in a thread already deleted for a phrase joins that row, and its delete.
+            // A later email in a thread already deleted for a phrase joins that row, and its delete,
+            // unless the owner undid that pass: then it joins the row and nothing is re-passed.
             threadRow.messageIds.push(message.id);
             threadRow.history = [...(threadRow.history ?? []), { id: message.id, receivedAt: message.receivedAt, from: message.from }];
-            Object.assign(threadRow, { status: 'Passed', trashPending: true });
+            if (threadRow.status === 'Passed') threadRow.trashPending = true;
             continue;
           }
           const row = { ...newRow(message, id), phraseOnly: true };

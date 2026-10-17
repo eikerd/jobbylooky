@@ -605,6 +605,19 @@ test('later phrase-only mail in a thread already deleted for a phrase joins that
     assert.deepEqual(rows[0].messageIds, ['g1@x', 'g2@x']);
     assert.equal(rows[0].trashPending, true);
   }));
+test('a phrase-only thread the owner moved back to New is never re-passed by its next email', () =>
+  withStore((store) => {
+    store.addDeletePhrase({ phrase: 'unsubscribe from jobs' });
+    const digest = { ...message, threadId: 'tund', from: 'news@x.example', subject: 'Digest', body: 'unsubscribe from jobs', phraseOnly: true };
+    store.import([{ ...digest, id: 'h1@x', receivedAt: later }], { synced: true });
+    const id = store.snapshot().opportunities.find((row) => row.id.endsWith(':tund')).id;
+    store.update(id, { status: 'New' });
+    store.import([{ ...digest, id: 'h2@x', receivedAt: '2099-01-02T12:00:00.000Z' }], { synced: true });
+    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    // Still New: the Gmail delete queue only ever acts on a Passed row.
+    assert.equal(row.status, 'New');
+    assert.deepEqual(row.messageIds, ['h1@x', 'h2@x']);
+  }));
 
 const job = 'Requirements:\nDesign Angular applications with advanced dependency injection and accessible reusable components. Build complex data visualizations using custom rendering strategies and high volume streaming data. Maintain thorough end to end integration coverage for distributed workflows and complex enterprise permissions.';
 const pitchMail = (n, extra = {}) => ({ ...message, id: `p${n}@x`, threadId: `tp${n}`, subject: 'Sr. Full Stack Engineer || Mountain View, CA', from: 'Shobhit <shobhit@tanisha.example>', body: job, receivedAt: `2026-10-0${n}T12:00:00.000Z`, ...extra });

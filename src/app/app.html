@@ -178,7 +178,7 @@
         <form (ngSubmit)="addDeletePhrase()">
           <label class="visually-hidden" for="new-delete-phrase">Phrase to delete</label>
           <input id="new-delete-phrase" name="deletePhrase" [(ngModel)]="deletePhraseDraft" placeholder="e.g. C2C only" maxlength="100" autocomplete="off" />
-          <button class="button primary" type="submit" [disabled]="busy() || deletePhraseDraft.trim().length < 2">Add</button>
+          <button class="button primary" type="submit" [disabled]="busy() || checkingDelete() || deletePhraseDraft.trim().length < 2">Add</button>
         </form>
         <table class="delete-grid">
           <colgroup><col /><col class="c-remove" /></colgroup>
