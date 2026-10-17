@@ -94,7 +94,20 @@ export interface JobGroup {
     timeline:{id:string;pitchId:string;from:string;receivedAt:string;gapDays:number|null}[];
   };
 }
+/** What a would-be delete phrase reaches; `emails` is null when the mail log could not be read. */
+export interface DeletePreview {
+  phrase: string;
+  pitches: number;
+  emails: number | null;
+  days: number | null;
+}
 export type PhraseKind = 'negative' | 'positive' | 'neutral' | 'purple' | 'pink';
+/** A delete phrase: kept apart from tracked phrases, it never highlights; mail carrying it is deleted. */
+export interface DeletePhrase {
+  id: string;
+  phrase: string;
+  addedAt: string;
+}
 export type RuleField = 'any' | 'subject' | 'body';
 export type RuleMode = 'test' | 'live';
 /** An owner-written regex; mirrors server/reject-rules.mjs. Only a live rule passes mail. */

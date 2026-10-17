@@ -33,3 +33,5 @@
 .decision-dialog .c-tick { width: 36px; } .decision-dialog .c-change { width: 168px; }
 .decision-dialog .related-sender { cursor: inherit; }
 .decision-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.delete-check { width: min(460px, calc(100vw - 32px)); }
+.delete-check p { margin: 0 0 8px; font-size: 14px; }
