@@ -76,11 +76,11 @@ export class App implements OnDestroy {
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
   });
   readonly phrases = signal<TrackedPhrase[]>([]);
-  readonly phraseKinds: PhraseKind[] = ['negative', 'positive', 'neutral', 'purple', 'pink', 'delete'];
-  readonly phraseKindLabels: Record<PhraseKind, string> = { negative: 'Negative', positive: 'Positive', neutral: 'Neutral', purple: 'Purple', pink: 'Pink', delete: 'Delete' };
+  readonly phraseKinds: PhraseKind[] = ['negative', 'positive', 'neutral', 'purple', 'pink'];
+  readonly phraseKindLabels: Record<PhraseKind, string> = { negative: 'Negative', positive: 'Positive', neutral: 'Neutral', purple: 'Purple', pink: 'Pink' };
   readonly phraseColors = signal<Record<PhraseKind, string>>(DEFAULT_PHRASE_COLORS);
   readonly phraseStyle = computed(() => phraseColorStyle(this.phraseColors()));
-  readonly phraseKindMarks: Record<PhraseKind, string> = { negative: '×', positive: '✓', neutral: '•', purple: '•', pink: '•', delete: '🗑' };
+  readonly phraseKindMarks: Record<PhraseKind, string> = { negative: '×', positive: '✓', neutral: '•', purple: '•', pink: '•' };
   readonly openPhraseId = signal('');
   /** Pitches per phrase id, from the reasons the server recorded, newest first. */
   readonly phraseMatches = computed(() => {

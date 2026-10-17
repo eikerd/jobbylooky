@@ -94,7 +94,7 @@ export interface JobGroup {
     timeline:{id:string;pitchId:string;from:string;receivedAt:string;gapDays:number|null}[];
   };
 }
-export type PhraseKind = 'negative' | 'positive' | 'neutral' | 'purple' | 'pink' | 'delete';
+export type PhraseKind = 'negative' | 'positive' | 'neutral' | 'purple' | 'pink';
 export type RuleField = 'any' | 'subject' | 'body';
 export type RuleMode = 'test' | 'live';
 /** An owner-written regex; mirrors server/reject-rules.mjs. Only a live rule passes mail. */
