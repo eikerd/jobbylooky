@@ -4,6 +4,13 @@ import type { Opportunity } from './models';
 import { fingerprintRows, sortFingerprints, type Client, type FingerprintColumn, type FingerprintRow } from './clients';
 
 /**
+ * Names typed into unnamed rows, by the row's key, until each is saved. Module state, like the
+ * Rules draft, so opening a pitch from the grid and coming back does not lose what was typed.
+ */
+const drafts = signal<ReadonlyMap<string, string>>(new Map());
+export const hasClientDraft = () => [...drafts().values()].some((value) => value.trim());
+
+/**
  * Clients: every set of two or more cities a pitch names, and the client it is known as.
  * The owner names a set once a recruiter has said whose it is; from then on every pitch
  * carrying that set is that client's.
@@ -31,8 +38,6 @@ export class Clients {
   // Newest first: the set that just arrived is the one to ask about.
   readonly sort = signal<{ column: FingerprintColumn; descending: boolean }>({ column: 'lastSeen', descending: true });
   readonly sorted = computed(() => sortFingerprints(fingerprintRows(this.rows(), this.clients()), this.sort().column, this.sort().descending));
-  /** The name typed into an unnamed row, by the row's key, until it is saved. */
-  readonly drafts = signal<ReadonlyMap<string, string>>(new Map());
   sortBy(column: FingerprintColumn) {
     this.sort.update((current) => ({ column, descending: current.column === column ? !current.descending : column !== 'client' && column !== 'cities' }));
   }
@@ -41,10 +46,10 @@ export class Clients {
     return current.column !== column ? 'none' : current.descending ? 'descending' : 'ascending';
   }
   draft(row: FingerprintRow) {
-    return this.drafts().get(row.key) ?? '';
+    return drafts().get(row.key) ?? '';
   }
   setDraft(row: FingerprintRow, value: string) {
-    this.drafts.update((drafts) => new Map(drafts).set(row.key, value));
+    drafts.update((current) => new Map(current).set(row.key, value));
   }
   name(row: FingerprintRow) {
     const name = this.draft(row).trim();

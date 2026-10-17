@@ -20,7 +20,7 @@ import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { PlaceLinks } from './place-links.component';
 import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
-import { Clients } from './clients.component';
+import { Clients, hasClientDraft } from './clients.component';
 import { clientLabel, clientsByPitch } from './clients';
 import { InteractionPills } from './interaction-pills.component';
 
@@ -356,8 +356,8 @@ export class App implements OnDestroy {
     void this.pass();
   };
   private beforeUnload = (event: BeforeUnloadEvent) => {
-    // A rule draft survives moving between views, but not a reload or a closed tab.
-    if (this.hasUnsavedWork() || hasRuleDraft()) event.preventDefault();
+    // A rule or client draft survives moving between views, but not a reload or a closed tab.
+    if (this.hasUnsavedWork() || hasRuleDraft() || hasClientDraft()) event.preventDefault();
   };
   // An edited reply counts as unsaved work; the untouched greeting does not.
   private hasUnsavedWork() {

@@ -36,6 +36,13 @@ test('every city counts, past the five the maps show, and work-mode words are no
   assert.deepEqual(pitchCities('Hybrid – Downtown Dallas, TX and Fort Worth, TX'), ['Dallas, TX', 'Fort Worth, TX']);
 });
 
+test('a ZIP does not hide a city, and a preference in parentheses is not a city set (Greptile, PR #30)', () => {
+  assert.deepEqual(pitchCities('Plano, TX 75024 / Charlotte, NC 28202'), ['Plano, TX', 'Charlotte, NC']);
+  assert.equal(pitchFingerprint(pitch('a', 'Plano, TX 75024 / Charlotte, NC 28202'))?.key, pitchFingerprint(pitch('b', 'Charlotte, NC, Plano, TX'))?.key);
+  assert.deepEqual(pitchCities('Remote (Miami, FL and Tampa, FL)'), []);
+  assert.deepEqual(pitchCities('Remote [Boston, MA or Austin, TX preferred]'), []);
+});
+
 test('a fingerprint is two or more cities, keyed without regard to order or case', () => {
   assert.equal(pitchFingerprint(pitch('a', 'Dallas, TX')), null);
   assert.equal(pitchFingerprint(pitch('a', 'Remote')), null);

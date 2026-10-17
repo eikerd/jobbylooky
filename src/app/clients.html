@@ -19,8 +19,10 @@
             <tr [class.unnamed]="!row.client">
               <td>
                 @if (row.client; as client) {
-                  <span class="client-name">{{ client.name }}</span>
-                  <button type="button" class="button secondary small" [disabled]="busy()" (click)="remove.emit(client)" [attr.aria-label]="'Forget ' + client.name">Remove</button>
+                  <span class="client-row">
+                    <span class="client-name" [title]="client.name">{{ client.name }}</span>
+                    <button type="button" class="button secondary small" [disabled]="busy()" (click)="remove.emit(client)" [attr.aria-label]="'Forget ' + client.name">Remove</button>
+                  </span>
                 } @else {
                   <form class="name-form" (submit)="$event.preventDefault(); name(row)">
                     <input [attr.aria-label]="'Client for ' + row.cities.join(', ')" [value]="draft(row)" (input)="setDraft(row, $any($event.target).value)" placeholder="Who is it?" maxlength="80" autocomplete="off" />

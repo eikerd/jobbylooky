@@ -123,8 +123,9 @@ function cityPart(words: string) {
 export function cityStates(location: string): string[] {
   if (!location || unsafe.test(location)) return [];
   const pairs: string[] = [];
-  for (const part of location.split(either)) {
-    const text = cleanQuery(part.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\bremote\b/gi, ' '));
+  // Conditions go before the split: "Remote (Miami, FL and Tampa, FL)" is a preference, not two cities.
+  for (const part of location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(either)) {
+    const text = cleanQuery(part.replace(/\bremote\b/gi, ' '));
     if (streetAddress.test(text)) continue;
     const found = [...text.matchAll(cityState)].map((match) => `${cityPart(match[1])}, ${match[2]}${match[3] ?? ''}`);
     if (found.length) pairs.push(...found);
