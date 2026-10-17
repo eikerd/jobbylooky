@@ -36,6 +36,9 @@
       <button type="button" [class.active]="directoryMode() === 'phrases'" [attr.aria-current]="directoryMode() === 'phrases' ? 'page' : null" (click)="openDirectory('phrases')">
         <span class="nav-icon" aria-hidden="true">×</span>Phrases
       </button>
+      <button type="button" [class.active]="directoryMode() === 'deletes'" [attr.aria-current]="directoryMode() === 'deletes' ? 'page' : null" (click)="openDirectory('deletes')">
+        <span class="nav-icon" aria-hidden="true">🗑</span>Delete phrases
+      </button>
       <button type="button" [class.active]="directoryMode() === 'rules'" [attr.aria-current]="directoryMode() === 'rules' ? 'page' : null" (click)="openDirectory('rules')">
         <span class="nav-icon" aria-hidden="true">⊘</span>Rules
       </button>
@@ -63,7 +66,7 @@
   </aside>
   <main>
     <header class="page-header">
-      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'postings' ? 'Job postings' : directoryMode() === 'rules' ? 'Auto-reject rules' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'deletes' ? 'Delete phrases' : directoryMode() === 'postings' ? 'Job postings' : directoryMode() === 'rules' ? 'Auto-reject rules' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
       <div class="header-actions">
         <button
           class="button secondary"
@@ -169,10 +172,40 @@
           </ul>
         }
       </section>
+    } @else if (directoryMode() === 'deletes') {
+      <section class="phrases delete-phrases" aria-labelledby="deletes-title">
+        <h2 id="deletes-title" class="visually-hidden">Delete phrases</h2>
+        <form (ngSubmit)="addDeletePhrase()">
+          <label class="visually-hidden" for="new-delete-phrase">Phrase to delete</label>
+          <input id="new-delete-phrase" name="deletePhrase" [(ngModel)]="deletePhraseDraft" placeholder="e.g. C2C only" maxlength="100" autocomplete="off" />
+          <button class="button primary" type="submit" [disabled]="busy() || checkingDelete() || deletePhraseDraft.trim().length < 2">Add</button>
+        </form>
+        <table class="delete-grid">
+          <colgroup><col /><col class="c-remove" /></colgroup>
+          <thead>
+            <tr>
+              <th scope="col" [attr.aria-sort]="deleteSortDir() === 'asc' ? 'ascending' : 'descending'">
+                <button type="button" (click)="deleteSortDir.set(deleteSortDir() === 'asc' ? 'desc' : 'asc')">Phrase<span class="sort-mark" aria-hidden="true">{{ deleteSortDir() === 'asc' ? '▲' : '▼' }}</span></button>
+              </th>
+              <th scope="col"><span class="visually-hidden">Remove</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of sortedDeletePhrases(); track row.id) {
+              <tr>
+                <td class="delete-phrase">{{ row.phrase }}</td>
+                <td><button class="button secondary" type="button" [disabled]="busy()" (click)="removeDeletePhrase(row)" [attr.aria-label]="'Stop deleting ' + row.phrase">Remove</button></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="2" class="phrase-empty">None yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      </section>
     } @else if (directoryMode() === 'rules') {
       <app-rules [rows]="opportunities()" [rules]="rejectRules()" [busy]="busy()" (save)="saveRule($event)" (setMode)="setRuleMode($event)" (remove)="removeRule($event)" (openPitch)="openProfilePitch($event)" />
     } @else if (directoryMode() === 'postings') {
-      <app-postings [rows]="opportunities()" (openPitch)="openProfilePitch($event)" />
+      <app-postings [rows]="opportunities()" [heat]="heatByPitch()" (openPitch)="openProfilePitch($event)" />
     } @else if (profileMode(); as mode) {
       <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
     } @else {
@@ -192,12 +225,13 @@
               [class.full-time]="row.employmentType === 'Full-time'"
               [class.convo-waiting]="conversation(group.pitches) === 'waiting'"
               [class.convo-live]="conversation(group.pitches) === 'answered'"
+              [attr.data-heat]="heatByPitch().get(row.id)?.level"
               [class.selected]="selectedGroup()?.id === group.id"
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
               (click)="open(row, true)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><app-convo-heat [heat]="heatByPitch().get(row.id)" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong><app-age [at]="row.receivedAt" /></strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -218,6 +252,12 @@
                   }
                   @if (row.status === 'Passed' && row.rejectedBy) {
                     <span class="rejected-by" [attr.title]="'Passed by the rule ' + row.rejectedBy.name">Rule: {{ row.rejectedBy.name }}</span>
+                  }
+                  @if (row.status === 'Passed' && row.deletedBy) {
+                    <span class="rejected-by" [attr.title]="'Deleted by the phrase “' + row.deletedBy.phrase + '”'">🗑 {{ row.deletedBy.phrase }}</span>
+                  }
+                  @if (row.status === 'Passed' && row.repeatOf) {
+                    <span class="rejected-by" [attr.title]="'Repeats the ' + (row.repeatOf.receivedAt | date: 'MMM d') + ' pitch you passed'">Repeat</span>
                   }
                   @if (row.replyReceivedAt && folder() !== 'Pursuing') {
                     <span class="replied" [attr.title]="'Replied ' + (row.replyReceivedAt | date: 'MMM d, h:mm a')">↩ replied <app-age [at]="row.replyReceivedAt" /></span>
@@ -316,6 +356,12 @@
             @if (row.autoPassed && row.status === 'Passed') {
               <p class="auto-passed">Passed automatically {{ row.autoPassed.at | date: 'MMM d' }} (<app-age [at]="row.autoPassed.at" />): {{ autoPassedReason(row) }}.</p>
             }
+            @if (row.deletedBy && row.status === 'Passed') {
+              <p class="auto-passed">Deleted automatically {{ row.deletedBy.at | date: 'MMM d' }} (<app-age [at]="row.deletedBy.at" />): it contains your delete phrase “{{ row.deletedBy.phrase }}”.</p>
+            }
+            @if (row.repeatOf && row.status === 'Passed') {
+              <p class="auto-passed">Passed automatically {{ row.repeatOf.at | date: 'MMM d' }} (<app-age [at]="row.repeatOf.at" />): it repeats the {{ row.repeatOf.receivedAt | date: 'MMM d' }} pitch you passed.</p>
+            }
             <p class="received-detail">
               <strong><app-age [at]="row.receivedAt" /></strong>
               <app-place-links [places]="locationMaps()" [location]="row.location" [scope]="row.id" />
@@ -326,7 +372,7 @@
               @if (group.pitches.length > 1 || group.history.occurrences > 1) {
                 <section class="related" aria-labelledby="related-title">
                   <div class="related-head">
-                    <h3 id="related-title">{{ group.pitches.length === 1 ? 'Emails' : group.kind === 'likely' ? 'Likely same job' : 'Same job' }}</h3>
+                    <h3 id="related-title">{{ group.pitches.length === 1 ? 'Emails' : group.kind === 'likely' ? (group.sure ? 'Same posting, same recruiter' : 'Likely same job') : 'Same job' }}</h3>
                     @if (group.pitches.length > 1) {
                       <button type="button" class="link-action" (click)="groupCurrent('separate')" [disabled]="busy()">Keep this pitch separate</button>
                     }
@@ -347,7 +393,7 @@
                         @for (item of related(); track item.id) {
                           <tr [class.selected]="item.pitch.id === selectedId()" [class.full-time]="item.pitch.employmentType === 'Full-time'" (click)="busy() || open(item.pitch)">
                             <td><app-age [at]="item.receivedAt" />@if (isDate(item.receivedAt)) { · <time [attr.datetime]="item.receivedAt">{{ item.receivedAt | date: 'MMM d' }}</time>}</td>
-                            <td><button type="button" class="related-sender" [attr.aria-current]="item.pitch.id === selectedId() || null" (click)="$event.stopPropagation(); open(item.pitch)" [disabled]="busy()"><app-source-icon [from]="item.from" /><span>{{ item.from }}</span></button></td>
+                            <td><button type="button" class="related-sender" [attr.aria-current]="item.pitch.id === selectedId() || null" (click)="$event.stopPropagation(); open(item.pitch)" [disabled]="busy()"><app-source-icon [from]="item.from" /><app-convo-heat [heat]="pitchHeat(item.pitch)" /><span>{{ item.from }}</span></button></td>
                             <td>
                               @if (item.pitch.pay; as pay) {
                                 <strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}
@@ -566,6 +612,22 @@
       </button>
       <button type="button" class="button secondary" (click)="confirmDecision(true)">{{ decisionChosenCount() === 1 ? 'Just this one' : 'Just the ' + decisionChosenCount() + ' selected' }}</button>
       <button type="button" class="button secondary" (click)="closeDecision()">Cancel</button>
+    </div>
+  }
+</dialog>
+
+<dialog #deleteCheckDialog class="decision-dialog delete-check" aria-labelledby="delete-check-title" (close)="answerDeleteCheck(false)">
+  @if (deleteCheck(); as check) {
+    <h2 id="delete-check-title">Delete mail with “{{ check.phrase }}”?</h2>
+    @if (check.emails !== null) {
+      <p>It is in <strong>{{ check.emails }}</strong> {{ check.emails === 1 ? 'email' : 'emails' }} from the last {{ check.days }} days, and <strong>{{ check.pitches }}</strong> {{ check.pitches === 1 ? 'pitch' : 'pitches' }} here.</p>
+    } @else {
+      <p>It is in <strong>{{ check.pitches }}</strong> {{ check.pitches === 1 ? 'pitch' : 'pitches' }} here. The mail log could not be read, so the rest of your mail is not counted.</p>
+    }
+    <p>From now on, new emails with it go to Gmail Trash. Mail you already have stays.</p>
+    <div class="decision-actions">
+      <button type="button" class="button primary" (click)="answerDeleteCheck(true)">Add delete phrase</button>
+      <button type="button" class="button secondary" autofocus (click)="answerDeleteCheck(false)">Cancel</button>
     </div>
   }
 </dialog>

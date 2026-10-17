@@ -50,7 +50,7 @@
         @for (job of profile.jobs; track job.id) {
           @let latest = job.pitches[0];
           <article class="profile-job">
-            <div class="job-heading"><h4>{{ latest.title }}</h4><span class="age"><app-age [at]="latest.receivedAt" /><time [attr.datetime]="latest.receivedAt">{{ latest.receivedAt | date:'MMM d, y' }}</time></span></div>
+            <div class="job-heading"><h4><app-convo-heat [heat]="jobHeat(job.pitches)" />{{ latest.title }}</h4><span class="age"><app-age [at]="latest.receivedAt" /><time [attr.datetime]="latest.receivedAt">{{ latest.receivedAt | date:'MMM d, y' }}</time></span></div>
             <p>{{ latest.company !== 'Not stated' ? latest.company + ' · ' : '' }}{{ latest.location }}</p>
             @if (job.history.occurrences > 1) {
               <p class="overlap">First seen {{ job.history.firstSeen | date:'MMM d, y' }} (<app-age [at]="job.history.firstSeen" />) · {{ job.history.spanDays }}-day span · longest gap {{ job.history.longestGapDays }} days</p>

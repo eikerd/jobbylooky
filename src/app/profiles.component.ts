@@ -1,14 +1,17 @@
 import { Component, computed, input, output, signal, effect, ElementRef, viewChild } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import type { JobGroup } from './models';
+import type { JobGroup, Opportunity } from './models';
 import { buildProfiles } from './profiles';
 import { Age } from './age.component';
+import { ConvoHeat } from './convo-heat.component';
+import { conversationHeat, conversationState } from './conversation';
+import { interactions } from './interactions';
 import { LocationMaps } from './location-maps.component';
 import { officeLocations } from './location-map';
 
 @Component({
   selector:'app-profiles',
-  imports:[DatePipe, LocationMaps, Age],
+  imports:[DatePipe, LocationMaps, Age, ConvoHeat],
   templateUrl:'./profiles.html',
   styleUrl:'./profiles.css',
 })
@@ -33,4 +36,9 @@ export class Profiles {
   }
   select(id:string) { this.selectedId.set(id); this.detail()?.nativeElement.scrollTo({top:0}); }
   companyLabel(id:string) { return this.directory().companies.find(p=>p.id===id)?.name || 'Unassigned company'; }
+  /** This profile's own conversation on a job: another recruiter's emails on the same job are theirs, not this one's. */
+  jobHeat(pitches: readonly Opportunity[]) {
+    const state = conversationState(pitches);
+    return state && conversationHeat(state, interactions(pitches, this.groups().flatMap((group) => group.pitches)));
+  }
 }

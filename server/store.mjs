@@ -1,7 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS } from './screen.mjs';
-import { groupOpportunities } from './groups.mjs';
+import { carriesPhrase, cleanDeletePhrase, deletePhraseMatch } from './delete-phrases.mjs';
+import { groupOpportunities, passedOriginal } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
 import { originalReceivedAt } from './received-date.mjs';
@@ -34,6 +35,30 @@ const PURSUING = ['Pursue', 'Applied', 'Interviewing', 'Offer'];
 
 /** A resume that actually went out; a preview was never sent. */
 const sentResume = (row) => (row.replies ?? []).some((reply) => reply.attachment && !reply.preview);
+
+/**
+ * Passes `row` if it is the same posting from the same recruiter as a pitch already passed, marked
+ * pending so its Gmail delete starts (and is retried) like a Pass from the page. The owner chose
+ * same-recruiter repeats only (2026-10-13): "once I pass on one, I don't really want to see any of the rest".
+ */
+function passRepeat(rows, row) {
+  const original = passedOriginal(rows, row);
+  if (!original) return false;
+  Object.assign(row, { status: 'Passed', trashPending: true, repeatOf: { id: original.id, receivedAt: original.receivedAt, at: new Date().toISOString() } });
+  return true;
+}
+
+/**
+ * Passes `row` when the email carries one of the owner's delete phrases, pending its Gmail delete.
+ * The owner, 2026-10-16: "If they're in the email, immediate deletion."
+ */
+function passByPhrase(phrases, row, message, since = message.receivedAt) {
+  // `since` is the thread's first email: a phrase added after it would reach back into older mail.
+  const hit = deletePhraseMatch(phrases, message, since);
+  if (!hit) return false;
+  Object.assign(row, { status: 'Passed', trashPending: true, deletedBy: { id: hit.id, phrase: hit.phrase, at: new Date().toISOString() } });
+  return true;
+}
 
 // Once a reply has gone out, a later message in the thread from someone else is their answer.
 // The owner chose: badge the row and move New to Maybe; Pursue moves to Maybe too unless I sent
@@ -166,6 +191,31 @@ export function createStore(directory) {
           added++;
           continue;
         }
+        // Not job mail, read only because it carries a delete phrase: kept as a passed row, so its
+        // Gmail delete is queued and retried like any other, and the owner can see what went.
+        if (message.phraseOnly) {
+          if (known || !synced) continue;
+          const threadRow = next.opportunities.find((row) => row.id === id || row.messageIds.includes(message.threadId));
+          // A thread that already holds a job pitch is the owner's: its non-job mail is left alone.
+          if (threadRow && !threadRow.phraseOnly) continue;
+          const hit = deletePhraseMatch(next.deletePhrases, message);
+          if (!hit) continue;
+          if (threadRow) {
+            // A later email in a thread already deleted for a phrase joins that row, and its delete,
+            // unless the owner undid that pass: then it joins the row and nothing is re-passed.
+            threadRow.messageIds.push(message.id);
+            threadRow.history = [...(threadRow.history ?? []), { id: message.id, receivedAt: message.receivedAt, from: message.from }];
+            // Passed again by hand drops the marker; the delete queue needs it to pick the row up.
+            if (threadRow.status === 'Passed')
+              Object.assign(threadRow, { trashPending: true, deletedBy: threadRow.deletedBy ?? { id: hit.id, phrase: hit.phrase, at: new Date().toISOString() } });
+            continue;
+          }
+          const row = { ...newRow(message, id), phraseOnly: true };
+          passByPhrase(next.deletePhrases, row, message);
+          next.opportunities.push(row);
+          added++;
+          continue;
+        }
         // Read only because the sender is watched, and not an answer: e.g. older non-job mail.
         if (message.watchedOnly && !known) continue;
         const existing = next.opportunities.find((row) => row.messageIds.includes(message.id)) ?? next.opportunities.find(
@@ -212,15 +262,25 @@ export function createStore(directory) {
           );
           // New mail in a known thread meets the live rules too, judged on its own text. A rule never
           // overrides the owner: only an untouched New row with no reply from the owner is passed.
-          const engaged = existing.status !== 'New' || existing.replies?.some((reply) => !reply.preview);
+          // A note, a next step, a follow-up date, or undoing an automatic pass all count as touching it.
+          const engaged =
+            existing.status !== 'New' ||
+            existing.replies?.some((reply) => !reply.preview) ||
+            Boolean(existing.notes || existing.nextAction || existing.followUp) ||
+            Boolean(existing.rejectedBy || existing.repeatOf || existing.deletedBy);
           const rule = synced && !engaged ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }, budget) : null;
           if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
+          else if (synced && !engaged) {
+            const first = (existing.history ?? []).map((item) => item.receivedAt).sort()[0] ?? existing.receivedAt;
+            passByPhrase(next.deletePhrases, existing, message, first < message.receivedAt ? first : message.receivedAt);
+          }
         } else {
           const row = newRow(message, id);
           // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
           const rule = synced ? liveRejection(next.rejectRules, row, budget) : null;
           // Pending before any delete starts, like a Pass from the page, so a failed delete is retried.
           if (rule) Object.assign(row, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
+          else if (synced && !passByPhrase(next.deletePhrases, row, message)) passRepeat(next.opportunities, row);
           next.opportunities.push(row);
           added++;
         }
@@ -230,6 +290,47 @@ export function createStore(directory) {
       if (account) next.account = account;
       commit(next);
       return added;
+    },
+    /**
+     * Passes every untouched New pitch that repeats one already passed. Runs once (the first sync
+     * after this shipped); afterwards each arrival is checked as it is imported, so a repeat the
+     * owner keeps — unticked in the Pass dialog, or moved back to New — is never passed behind them.
+     */
+    sweepRepeats(exclude = new Set()) {
+      if (state.repeatSweepAt) return [];
+      const next = structuredClone(state);
+      // `exclude`: pitches the owner decided on outside this store (kept after a closed-posting pass,
+      // or phoned about), which the store cannot see.
+      const passed = next.opportunities.filter(
+        (row) =>
+          row.status === 'New' && row.source !== 'manual' && !row.respondsTo && !row.repeatOf && !exclude.has(row.id) &&
+          passRepeat(next.opportunities, row),
+      );
+      next.repeatSweepAt = new Date().toISOString();
+      commit(next);
+      return passed.map((row) => row.id);
+    },
+    /** Delete phrases, kept apart from the tracked ones; the mail sync reads any mail that carries one. */
+    deletePhrases: () => structuredClone(state.deletePhrases ?? []),
+    /** How many pitches here a would-be delete phrase matches, shown before it is saved. */
+    deletePhrasePreview(input) {
+      const phrase = cleanDeletePhrase(input);
+      return { phrase, pitches: state.opportunities.filter((row) => carriesPhrase(phrase, row)).length };
+    },
+    addDeletePhrase(input) {
+      const phrase = cleanDeletePhrase(input);
+      const list = state.deletePhrases ?? [];
+      if (list.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
+        throw Object.assign(new Error('That delete phrase is already on the list.'), { status: 409 });
+      // It dates itself: it deletes mail that arrives from now on, never what is already here.
+      commit({ ...state, deletePhrases: [...list, { id: randomUUID(), phrase, addedAt: new Date().toISOString() }] });
+      return structuredClone(state.deletePhrases);
+    },
+    removeDeletePhrase(id) {
+      if (!(state.deletePhrases ?? []).some((row) => row.id === id))
+        throw Object.assign(new Error('Delete phrase not found.'), { status: 404 });
+      commit({ ...state, deletePhrases: state.deletePhrases.filter((row) => row.id !== id) });
+      return structuredClone(state.deletePhrases);
     },
     /** Addresses the owner has really written to; the mail sync reads all of their mail. */
     watchedSenders: () => [
@@ -339,6 +440,12 @@ export function createStore(directory) {
             new Date(value).toISOString().slice(0, 10) !== value)
         )
           throw Object.assign(new Error('Invalid follow-up date.'), { status: 400 });
+        // The owner passing it themselves makes it their pass: an automatic one no longer explains it.
+        if (key === 'status' && value === 'Passed' && row.status !== 'Passed') {
+          delete row.rejectedBy;
+          delete row.repeatOf;
+          delete row.deletedBy;
+        }
         row[key] = value;
       }
       commit(next);

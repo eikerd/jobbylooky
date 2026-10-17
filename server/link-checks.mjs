@@ -127,6 +127,8 @@ export function createLinkChecks(directory) {
       });
     },
     wasAutoPassed: (id) => Boolean(state.autoPassed[id]),
+    /** The owner moved this pitch out of an automatic pass, so no sweep may pass it again. */
+    wasKept: (id) => Boolean(state.kept[id]),
     /** The owner moved a pitch out of Passed: the sweep never passes it again. */
     keep(id) {
       if (!state.kept[id]) commit({ ...state, kept: { ...state.kept, [id]: new Date().toISOString() } });

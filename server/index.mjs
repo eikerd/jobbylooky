@@ -5,7 +5,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
-import { readWorker } from './mail-worker.mjs';
+import { readWorker, countPhraseMail } from './mail-worker.mjs';
 import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
@@ -44,9 +44,14 @@ async function sync() {
   syncing = true;
   try {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
-    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders() });
+    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases().map((row) => row.phrase) });
     const added = store.import(messages, { synced: true });
-    trashRejected();
+    // A pitch the owner kept after an automatic pass, or one with a voicemail, is theirs to decide.
+    const owned = voicemails.attach(store.snapshot().opportunities)
+      .filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id) || row.voicemails?.length)
+      .map((row) => row.id);
+    store.sweepRepeats(new Set(owned));
+    trashAutoPassed();
     syncError = '';
     return added;
   } catch (error) {
@@ -82,27 +87,30 @@ function passEndedJobs() {
   return passed;
 }
 /**
- * Mail a live reject rule passed goes to Gmail Trash like a Pass from the page. The store
- * marks it pending as it rejects, so a crash or a Gmail failure is retried on the next sync.
- * No page waits on these deletes, so a failure is kept here and shown in the connection banner.
+ * Mail a live reject rule or a delete phrase passed, or a repeat of a job already passed, goes to Gmail Trash like a
+ * Pass from the page. The store marks it pending as it passes it, so a crash or a Gmail failure is
+ * retried on the next sync. No page waits on these deletes, so a failure is kept here and shown in
+ * the connection banner.
  */
-const rejectTrashFailures = new Map();
-function trashRejected() {
+const autoTrashFailures = new Map();
+function trashAutoPassed() {
   for (const row of store.snapshot().opportunities) {
-    if (row.status !== 'Passed' || !row.rejectedBy || !row.trashPending || !gmailIds(row.messageIds).length) continue;
+    if (row.status !== 'Passed' || !(row.rejectedBy || row.repeatOf || row.deletedBy) || !row.trashPending || !gmailIds(row.messageIds).length) continue;
     void passTrash.enqueue(row.id).then((outcome) => {
-      if (outcome?.trashError) rejectTrashFailures.set(row.id, row.title);
-      else rejectTrashFailures.delete(row.id);
+      if (outcome?.trashError) autoTrashFailures.set(row.id, { title: row.title, rule: Boolean(row.rejectedBy), phrase: row.deletedBy?.phrase });
+      else autoTrashFailures.delete(row.id);
     });
   }
 }
-function rejectTrashError() {
-  // Un-passed, or deleted by a later Pass, since it failed: no longer the rule's to report.
+function autoTrashError() {
+  // Un-passed, or deleted by a later Pass, since it failed: no longer ours to report.
   const pending = new Set(store.snapshot().opportunities.filter((row) => row.status === 'Passed' && row.trashPending).map((row) => row.id));
-  const titles = [...rejectTrashFailures].filter(([id]) => pending.has(id)).map(([, title]) => title);
-  if (!titles.length) return '';
-  const more = titles.length > 1 ? ` and ${titles.length - 1} more` : '';
-  return `A reject rule passed "${titles[0]}"${more}, but Gmail did not delete it. It retries on every mail check.`;
+  const failed = [...autoTrashFailures].filter(([id]) => pending.has(id)).map(([, failure]) => failure);
+  if (!failed.length) return '';
+  const more = failed.length > 1 ? ` and ${failed.length - 1} more` : '';
+  const by = failed[0].rule ? 'A reject rule' : failed[0].phrase ? `The delete phrase "${failed[0].phrase}"` : 'Jobbylooky';
+  const why = failed[0].rule || failed[0].phrase ? '' : ' as a repeat of a job you passed';
+  return `${by} passed "${failed[0].title}"${more}${why}, but Gmail did not delete it. It retries on every mail check.`;
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -247,7 +255,7 @@ export const server = createServer(async (req, res) => {
         canReply: Boolean(mailer),
         replyPreview: Boolean(mailer?.preview),
         syncing,
-        error: syncError || rejectTrashError(),
+        error: syncError || autoTrashError(),
         account,
         lastSync,
         importedAt,
@@ -255,6 +263,17 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'GET' && url.pathname === '/api/delete-phrases') return json(200, store.deletePhrases());
+    // Before a delete phrase is saved: how much mail it would have caught. The mail log is optional.
+    if (req.method === 'GET' && url.pathname === '/api/delete-phrases/preview') {
+      const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') });
+      if (!workerUrl) return json(200, { ...preview, emails: null, days: null });
+      try {
+        return json(200, { ...preview, ...(await countPhraseMail(workerUrl, preview.phrase)) });
+      } catch (error) {
+        return json(200, { ...preview, emails: null, days: null, mailError: error.message });
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/reject-rules') return json(200, store.rejectRules());
     if (req.method === 'GET' && url.pathname === '/api/phrase-colors') return json(200, store.phraseColors());
     if (req.method === 'GET' && url.pathname === '/api/resume') {
@@ -297,6 +316,8 @@ export const server = createServer(async (req, res) => {
     }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/reject-rules/'))
       return json(200, store.removeRejectRule(decodeURIComponent(url.pathname.slice('/api/reject-rules/'.length))));
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/delete-phrases/'))
+      return json(200, store.removeDeletePhrase(decodeURIComponent(url.pathname.slice('/api/delete-phrases/'.length))));
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
@@ -304,6 +325,8 @@ export const server = createServer(async (req, res) => {
         return json(415, { error: 'JSON content is required.' });
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
+      if (req.method === 'POST' && url.pathname === '/api/delete-phrases')
+        return json(201, store.addDeletePhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/reject-rules')
         return json(201, store.addRejectRule(await body(req)));
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/reject-rules/'))

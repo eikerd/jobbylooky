@@ -1,4 +1,5 @@
 import type { JobGroup, Opportunity } from './models';
+import type { Interactions } from './interactions';
 
 /** `waiting`: the owner wrote and has no answer yet. `answered`: they wrote back, a live conversation. */
 export type ConversationState = 'waiting' | 'answered' | null;
@@ -68,4 +69,24 @@ export function planDecision(groups: readonly JobGroup[], chosen: readonly Oppor
   // A Pursue or Maybe on a repeat must not move a job already applied to back a step.
   const keptStatus = status !== 'Passed' && UNDER_WAY.has(decide[0].status) && !UNDER_WAY.has(status) ? decide[0].status : status;
   return { status, decide, keptStatus, others: others.sort(newestFirst) };
+}
+
+/** Messages both ways at which a conversation reaches each heat level, one to five. */
+export const HEAT_STEPS = [1, 2, 3, 5, 8] as const;
+
+export interface ConversationHeat {
+  state: Exclude<ConversationState, null>;
+  /** Emails the owner sent plus their replies: the original pitch is not part of the talk. */
+  messages: number;
+  level: number;
+}
+
+/**
+ * How hot a job's conversation runs, from its state and what passed both ways: deeper with every
+ * email (the owner, 2026-10-16: "more intense as the conversations continue"). Null when nobody wrote.
+ */
+export function conversationHeat(state: ConversationState, talk: Pick<Interactions, 'sent' | 'replies'>): ConversationHeat | null {
+  if (!state) return null;
+  const messages = talk.sent.length + talk.replies.length;
+  return { state, messages, level: Math.max(1, HEAT_STEPS.filter((step) => messages >= step).length) };
 }

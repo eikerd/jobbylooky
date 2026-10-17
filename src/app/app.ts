@@ -4,12 +4,14 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageText, daysSince } from './age';
 import { Age } from './age.component';
-import { conversationState, planDecision, type GroupDecision } from './conversation';
+import { conversationHeat, conversationState, planDecision, type ConversationHeat, type GroupDecision } from './conversation';
+import { interactions } from './interactions';
+import { ConvoHeat } from './convo-heat.component';
 import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import { daysUp, jobState } from './link-state';
-import type { RejectRule, RuleMode, Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck } from './models';
+import type { RejectRule, RuleMode, Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck, DeletePreview, DeletePhrase } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -38,7 +40,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills, ConvoHeat],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -51,10 +53,32 @@ export class App implements OnDestroy {
   readonly statuses = ['New', 'Pursue', 'Maybe', 'Applied', 'Interviewing', 'Offer', 'Passed'];
   readonly jobGroups = signal<JobGroup[]>([]);
   readonly opportunities = computed(() => this.jobGroups().flatMap(group => group.pitches));
+  /** Each pitch's job conversation heat, counted once per change rather than on every render. */
+  readonly heatByPitch = computed(() => {
+    const all = this.opportunities();
+    const heat = new Map<string, ConversationHeat>();
+    for (const group of this.jobGroups()) {
+      // Most jobs have no conversation: only those pay for following their emails.
+      const state = conversationState(group.pitches);
+      const found = state && conversationHeat(state, interactions(group.pitches, all));
+      if (found) for (const pitch of group.pitches) heat.set(pitch.id, found);
+    }
+    return heat;
+  });
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'postings' | 'rules' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'deletes' | 'postings' | 'rules' | null>(null);
+  /** The owner's delete phrases, apart from the tracked ones; mail carrying one goes to Gmail Trash. */
+  readonly deletePhrases = signal<DeletePhrase[]>([]);
+  readonly deleteSortDir = signal<'asc' | 'desc'>('asc');
+  readonly sortedDeletePhrases = computed(() => {
+    const dir = this.deleteSortDir() === 'asc' ? 1 : -1;
+    return [...this.deletePhrases()].sort((a, b) => dir * a.phrase.localeCompare(b.phrase, undefined, { sensitivity: 'base' }));
+  });
+  deletePhraseDraft = '';
+  /** Set from Add until the check is answered, so a second press never opens a second check. */
+  readonly checkingDelete = signal(false);
   readonly rejectRules = signal<RejectRule[]>([]);
   readonly rulesView = viewChild(Rules);
   readonly profileMode = computed(() => {
@@ -191,6 +215,9 @@ export class App implements OnDestroy {
   private decisionChosen: readonly Opportunity[] = [];
   readonly decisionChosenCount = signal(0);
   readonly decisionDialog = viewChild<ElementRef<HTMLDialogElement>>('decisionDialog');
+  readonly deleteCheckDialog = viewChild<ElementRef<HTMLDialogElement>>('deleteCheckDialog');
+  readonly deleteCheck = signal<DeletePreview | null>(null);
+  private settleDeleteCheck: ((go: boolean) => void) | null = null;
   readonly decisionRows = computed(() => {
     const plan = this.decision();
     if (!plan) return [];
@@ -364,12 +391,13 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection, phrases, colors, rules] = await Promise.all([
+      const [rows, connection, phrases, colors, rules, deletes] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
         this.request<TrackedPhrase[]>('phrases'),
         this.request<Record<PhraseKind, string>>('phrase-colors'),
         this.request<RejectRule[]>('reject-rules'),
+        this.request<DeletePhrase[]>('delete-phrases'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision || this.passesSaving) return;
@@ -377,6 +405,7 @@ export class App implements OnDestroy {
       this.phrases.set(phrases);
       this.phraseColors.set(colors);
       this.rejectRules.set(rules);
+      this.deletePhrases.set(deletes);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -457,7 +486,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'postings' | 'rules', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'deletes' | 'postings' | 'rules', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -558,6 +587,32 @@ export class App implements OnDestroy {
     this.toast(`Tracking “${phrase}” as ${this.phraseKindLabels[kind]}`);
     return null;
   };
+  /**
+   * A delete phrase is saved only after the owner has seen how much mail it reaches (the owner,
+   * 2026-10-17). Null to go ahead, else why not.
+   */
+  private async checkDeletePhrase(phrase: string): Promise<string | null> {
+    let preview: DeletePreview;
+    try {
+      preview = await this.request<DeletePreview>(`delete-phrases/preview?phrase=${encodeURIComponent(phrase)}`);
+    } catch (error) {
+      const reason = this.message(error);
+      this.error.set(reason);
+      return reason;
+    }
+    this.deleteCheck.set(preview);
+    this.deleteCheckDialog()?.nativeElement.showModal();
+    const go = await new Promise<boolean>((resolve) => (this.settleDeleteCheck = resolve));
+    return go ? null : 'Not added.';
+  }
+  answerDeleteCheck(go: boolean) {
+    const settle = this.settleDeleteCheck;
+    this.settleDeleteCheck = null;
+    const dialog = this.deleteCheckDialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
+    this.deleteCheck.set(null);
+    settle?.(go);
+  }
   // Optimistic: the crayon shows at once and is put back if the server refuses it. Each answer touches
   // only its own kind, and only while it is still that kind's latest pick, so a slow or failed earlier
   // request never undoes a newer crayon.
@@ -582,6 +637,43 @@ export class App implements OnDestroy {
   }
   togglePhrase(id: string) {
     this.openPhraseId.update((open) => (open === id ? '' : id));
+  }
+  /** Saved only after the owner has seen how much mail the phrase reaches. */
+  async addDeletePhrase() {
+    const phrase = this.deletePhraseDraft.trim();
+    if (phrase.length < 2 || this.busy() || this.checkingDelete()) return;
+    this.checkingDelete.set(true);
+    try {
+      if (await this.checkDeletePhrase(phrase)) return;
+    } finally {
+      this.checkingDelete.set(false);
+    }
+    if (await this.changeDeletePhrases(() => this.request<DeletePhrase[]>('delete-phrases', 'POST', { phrase }))) {
+      this.deletePhraseDraft = '';
+      this.toast(`Deleting new mail with “${phrase}”`);
+    }
+  }
+  removeDeletePhrase(row: DeletePhrase) {
+    void this.changeDeletePhrases(() => this.request<DeletePhrase[]>(`delete-phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
+  }
+  private async changeDeletePhrases(change: () => Promise<DeletePhrase[]>) {
+    // Confirmed while another save ran: say so rather than drop the phrase without a word.
+    if (this.busy()) {
+      this.error.set('Still saving the last change; the delete phrase was not added. Try again.');
+      return false;
+    }
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      this.deletePhrases.set(await change());
+      return true;
+    } catch (error) {
+      this.error.set(this.message(error));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
   }
   removePhrase(row: TrackedPhrase) {
     void this.changePhrases(() => this.request<TrackedPhrase[]>(`phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
@@ -977,6 +1069,11 @@ export class App implements OnDestroy {
   /** Orange while the owner waits on an answer, bright pink once they have written back. */
   conversation(pitches: readonly Opportunity[]) {
     return conversationState(pitches);
+  }
+  /** One pitch's own heat, for the same-job grid where its rows differ. */
+  pitchHeat(pitch: Opportunity) {
+    const state = conversationState([pitch]);
+    return state && conversationHeat(state, interactions([pitch], this.opportunities()));
   }
   /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
   ageWords(date: string) {

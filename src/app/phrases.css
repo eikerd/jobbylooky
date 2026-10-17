@@ -23,3 +23,10 @@
 .pitch-age { color: var(--muted); flex-shrink: 0; }
 .phrase-empty { color: var(--muted); padding: 8px 0; font-size: 15px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* Delete phrases: their own list, one line per phrase. */
+.delete-grid { width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 14px; }
+.delete-grid .c-remove { width: 96px; }
+.delete-grid th { text-align: left; border-bottom: 1px solid var(--line); padding: 6px 0; }
+.delete-grid th button { all: unset; cursor: pointer; font-weight: 700; }
+.delete-grid td { border-bottom: 1px solid var(--line); padding: 6px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delete-phrase { font-weight: 700; color: var(--bad); }

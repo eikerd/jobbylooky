@@ -17,7 +17,7 @@
         <tbody>
           @for (row of sorted(); track row.key) {
             <tr (click)="openPitch.emit(row.pitchId)">
-              <td><button type="button" class="job" (click)="openPitch.emit(row.pitchId); $event.stopPropagation()">{{ row.title }}</button></td>
+              <td><button type="button" class="job" (click)="openPitch.emit(row.pitchId); $event.stopPropagation()"><app-convo-heat [heat]="heat().get(row.pitchId)" />{{ row.title }}</button></td>
               <td>{{ row.company }}</td>
               <td>{{ row.site }}</td>
               <td>@if (row.postedAt) {<time [attr.datetime]="row.postedAt">{{ row.postedAt | date: 'MMM d, y' }}</time> · <app-age [at]="row.postedAt" />}</td>
