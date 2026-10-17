@@ -51,6 +51,8 @@ test('a state written "Ma" still counts, but a word like "Or" is never a state (
   assert.deepEqual(pitchCities('Denver, Or Remote'), []);
   assert.deepEqual(pitchCities('Plano, TX Or Frisco, TX'), ['Plano, TX', 'Frisco, TX']);
   assert.deepEqual(pitchCities('Chicago, Il or Dallas, Tx'), ['Chicago, IL', 'Dallas, TX']);
+  assert.deepEqual(pitchCities('Washington, D.C. / Dallas, TX'), ['Washington, DC', 'Dallas, TX']);
+  assert.deepEqual(pitchCities('Raleigh, N.C., Plano, TX'), ['Raleigh, NC', 'Plano, TX']);
 });
 
 test('a fingerprint is two or more cities, keyed without regard to order or case', () => {

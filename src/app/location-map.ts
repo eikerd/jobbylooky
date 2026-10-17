@@ -131,7 +131,8 @@ export function cityStates(location: string): string[] {
   const pairs: string[] = [];
   // Conditions go before the split: "Remote (Miami, FL and Tampa, FL)" is a preference, not two cities.
   for (const part of location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(either)) {
-    const text = cleanQuery(part.replace(/\bremote\b/gi, ' '));
+    // "D.C." is "DC"; a dotted code is still the state.
+    const text = cleanQuery(part.replace(/\bremote\b/gi, ' ').replace(/\b([A-Za-z])\.([A-Za-z])\.(?![A-Za-z])/g, '$1$2'));
     if (streetAddress.test(text)) continue;
     // "Tx" is written as "TX"; a state's full name is left as written.
     const found = [...text.matchAll(cityState)].map((match) => `${cityPart(match[1])}, ${match[2].length === 2 ? match[2].toUpperCase() : match[2]}${match[3] ?? ''}`);
