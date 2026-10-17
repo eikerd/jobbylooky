@@ -205,7 +205,9 @@ export function createStore(directory) {
             // unless the owner undid that pass: then it joins the row and nothing is re-passed.
             threadRow.messageIds.push(message.id);
             threadRow.history = [...(threadRow.history ?? []), { id: message.id, receivedAt: message.receivedAt, from: message.from }];
-            if (threadRow.status === 'Passed') threadRow.trashPending = true;
+            // Passed again by hand drops the marker; the delete queue needs it to pick the row up.
+            if (threadRow.status === 'Passed')
+              Object.assign(threadRow, { trashPending: true, deletedBy: threadRow.deletedBy ?? { id: hit.id, phrase: hit.phrase, at: new Date().toISOString() } });
             continue;
           }
           const row = { ...newRow(message, id), phraseOnly: true };
@@ -294,11 +296,15 @@ export function createStore(directory) {
      * after this shipped); afterwards each arrival is checked as it is imported, so a repeat the
      * owner keeps — unticked in the Pass dialog, or moved back to New — is never passed behind them.
      */
-    sweepRepeats() {
+    sweepRepeats(exclude = new Set()) {
       if (state.repeatSweepAt) return [];
       const next = structuredClone(state);
+      // `exclude`: pitches the owner decided on outside this store (kept after a closed-posting pass,
+      // or phoned about), which the store cannot see.
       const passed = next.opportunities.filter(
-        (row) => row.status === 'New' && row.source !== 'manual' && !row.respondsTo && !row.repeatOf && passRepeat(next.opportunities, row),
+        (row) =>
+          row.status === 'New' && row.source !== 'manual' && !row.respondsTo && !row.repeatOf && !exclude.has(row.id) &&
+          passRepeat(next.opportunities, row),
       );
       next.repeatSweepAt = new Date().toISOString();
       commit(next);

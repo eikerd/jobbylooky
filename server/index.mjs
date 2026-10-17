@@ -46,7 +46,11 @@ async function sync() {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
     const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases().map((row) => row.phrase) });
     const added = store.import(messages, { synced: true });
-    store.sweepRepeats();
+    // A pitch the owner kept after an automatic pass, or one with a voicemail, is theirs to decide.
+    const owned = voicemails.attach(store.snapshot().opportunities)
+      .filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id) || row.voicemails?.length)
+      .map((row) => row.id);
+    store.sweepRepeats(new Set(owned));
     trashAutoPassed();
     syncError = '';
     return added;

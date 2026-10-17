@@ -44,6 +44,8 @@ function sure(a, b, { strict = true } = {}) {
   // must still count as the same job there.
   if (strict && a.company && b.company && a.company !== b.company) return null;
   if (strict && a.location && b.location && a.location !== b.location) return null;
+  // Two stated job titles that differ are two jobs, even under one generic subject line.
+  if (a.title.size && b.title.size && (a.title.size !== b.title.size || [...a.title].some((word) => !b.title.has(word)))) return null;
   const subject = subjectKey(a.row.subject);
   const title = normalize(a.row.title || '');
   const titled = title && title === normalize(b.row.title || '') && a.location && a.location === b.location;

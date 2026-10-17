@@ -100,6 +100,11 @@ test('a repeat the owner moved back to New vetoes later copies of the same posti
   const undone = rep('b', { status: 'New', repeatOf: { id: 'a', receivedAt: '2026-10-08T12:00:00Z', at: '2026-10-09T12:00:00Z' } });
   assert.equal(passedOriginal([passed, undone], rep('c', { subject: 'RE: Angular developer' })), null);
 });
+test('a different job title under the same generic subject is never a repeat', () => {
+  const passed = rep('a', { status: 'Passed', subject: 'Immediate Requirement', title: 'Java Developer' });
+  assert.equal(passedOriginal([passed], rep('c', { subject: 'Immediate Requirement', title: 'Angular Developer' })), null);
+  assert.equal(passedOriginal([passed], rep('d', { subject: 'Immediate Requirement', title: 'Java Developer' })).id, 'a');
+});
 test('a repeat is only sure from the same sender, with the same posting and nearly all the same text', () => {
   const passed = rep('a', { status: 'Passed' });
   const half = requirements.split('. ').slice(0, 2).join('. ') + '. Lead the migration of legacy Java services to Kotlin microservices on Kubernetes with Kafka event streaming and Terraform managed infrastructure across three regions.';
