@@ -36,7 +36,13 @@ export function stateCode(state: string) {
   return STATE_CODE.get(state.trim().toLowerCase()) ?? state.trim().toUpperCase();
 }
 /** "Plano, TX", "Plano TX 75024", "Durham, North Carolina". Case-sensitive: "or" and "in" are words, OR and IN are states. */
-const cityState = new RegExp(`([A-Z][A-Za-z.'’-]*(?:[ -][A-Za-z.'’-]+){0,3}),?\\s+(${STATE})\\b(\\s+${ZIP})?`, 'g');
+/**
+ * A code written "Ma" or "Tx" still names the state when it ends the place (before a ZIP, a
+ * separator or the end), except codes that read as English words: "Dallas, Or Remote" is not Oregon.
+ */
+const TITLE_CODES = STATE_CODES.filter((code) => !['OR', 'IN', 'HI', 'OH', 'OK', 'ME', 'DE'].includes(code)).map((code) => code[0] + code[1].toLowerCase());
+const STATE_ANY = `(?:${STATE}|(?:${TITLE_CODES.join('|')})(?=(?:\\s+${ZIP})?\\s*(?:$|[,/|;])))`;
+const cityState = new RegExp(`([A-Z][A-Za-z.'’-]*(?:[ -][A-Za-z.'’-]+){0,3}),?\\s+(${STATE_ANY})\\b(\\s+${ZIP})?`, 'g');
 /** The state a place ends with, allowing a ZIP and a country after it. */
 const trailingState = new RegExp(`[\\s,]+(${STATE})(?:\\s+${ZIP})?(?:,?\\s*(?:USA?|United States))?\\s*$`);
 const streetAddress = /\b\d{1,6}\s+(?:[A-Za-z0-9.'’-]+\s+){1,7}(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|parkway|pkwy|lane|ln|way|highway|hwy|court|ct|circle|cir|terrace|ter)\b/i;
@@ -127,7 +133,8 @@ export function cityStates(location: string): string[] {
   for (const part of location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(either)) {
     const text = cleanQuery(part.replace(/\bremote\b/gi, ' '));
     if (streetAddress.test(text)) continue;
-    const found = [...text.matchAll(cityState)].map((match) => `${cityPart(match[1])}, ${match[2]}${match[3] ?? ''}`);
+    // "Tx" is written as "TX"; a state's full name is left as written.
+    const found = [...text.matchAll(cityState)].map((match) => `${cityPart(match[1])}, ${match[2].length === 2 ? match[2].toUpperCase() : match[2]}${match[3] ?? ''}`);
     if (found.length) pairs.push(...found);
     else {
       const city = northTexasCity.exec(text);

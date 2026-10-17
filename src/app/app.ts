@@ -20,8 +20,8 @@ import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { PlaceLinks } from './place-links.component';
 import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
-import { Clients, hasClientDraft } from './clients.component';
-import { clientLabel, clientsByPitch } from './clients';
+import { Clients, clearClientDraft, hasClientDraft } from './clients.component';
+import { clientLabel, clientsByPitch, fingerprintKey } from './clients';
 import { InteractionPills } from './interaction-pills.component';
 
 interface Connection {
@@ -684,7 +684,9 @@ export class App implements OnDestroy {
     }
   }
   async saveClient({ name, cities }: { name: string; cities: string[] }) {
-    if (await this.changeClients(() => this.request<Client[]>('clients', 'POST', { name, cities }))) this.toast(`${cities.join(' · ')} is ${name}`);
+    if (!(await this.changeClients(() => this.request<Client[]>('clients', 'POST', { name, cities })))) return;
+    clearClientDraft(fingerprintKey(cities));
+    this.toast(`${cities.join(' · ')} is ${name}`);
   }
   removeClient(client: Client) {
     void this.changeClients(() => this.request<Client[]>(`clients/${encodeURIComponent(client.id)}`, 'DELETE'));

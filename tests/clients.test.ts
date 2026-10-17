@@ -43,6 +43,16 @@ test('a ZIP does not hide a city, and a preference in parentheses is not a city 
   assert.deepEqual(pitchCities('Remote [Boston, MA or Austin, TX preferred]'), []);
 });
 
+test('a state written "Ma" still counts, but a word like "Or" is never a state (Codex, PR #30)', () => {
+  assert.deepEqual(pitchCities('Boston, Ma / Minneapolis, MN'), ['Boston, MA', 'Minneapolis, MN']);
+  assert.deepEqual(pitchCities('Plano, Tx 75024, Charlotte, Nc'), ['Plano, TX', 'Charlotte, NC']);
+  // "Or" is a word, not Oregon: Dallas falls back to the metroplex rule, Denver names nothing.
+  assert.deepEqual(pitchCities('Dallas, Or Remote'), ['Dallas, TX']);
+  assert.deepEqual(pitchCities('Denver, Or Remote'), []);
+  assert.deepEqual(pitchCities('Plano, TX Or Frisco, TX'), ['Plano, TX', 'Frisco, TX']);
+  assert.deepEqual(pitchCities('Chicago, Il or Dallas, Tx'), ['Chicago, IL', 'Dallas, TX']);
+});
+
 test('a fingerprint is two or more cities, keyed without regard to order or case', () => {
   assert.equal(pitchFingerprint(pitch('a', 'Dallas, TX')), null);
   assert.equal(pitchFingerprint(pitch('a', 'Remote')), null);

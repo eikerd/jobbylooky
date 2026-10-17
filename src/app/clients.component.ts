@@ -9,6 +9,14 @@ import { fingerprintRows, sortFingerprints, type Client, type FingerprintColumn,
  */
 const drafts = signal<ReadonlyMap<string, string>>(new Map());
 export const hasClientDraft = () => [...drafts().values()].some((value) => value.trim());
+/** Once a row's name is saved its draft is spent; a failed save keeps it. */
+export function clearClientDraft(key: string) {
+  drafts.update((current) => {
+    const next = new Map(current);
+    next.delete(key);
+    return next;
+  });
+}
 
 /**
  * Clients: every set of two or more cities a pitch names, and the client it is known as.

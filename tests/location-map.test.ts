@@ -155,4 +155,6 @@ test('cityStates names every city with no cap while the maps keep to five', () =
   assert.deepEqual(cityStates('5000 Legacy Dr, Plano, TX'), []);
   assert.deepEqual(cityStates('Remote'), []);
   assert.deepEqual(cityStates('Remote (Miami, FL and Tampa, FL)'), []);
+  assert.deepEqual(cityStates('Boston, Ma / Minneapolis, MN'), ['Boston, MA', 'Minneapolis, MN']);
+  assert.deepEqual(cityStates('Denver, Or Remote'), []);
 });
