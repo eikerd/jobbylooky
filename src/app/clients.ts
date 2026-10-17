@@ -4,7 +4,7 @@
  * every time, so once the owner has asked a recruiter and been told, that city set names the
  * client on every later posting that carries it. Mirrors server/clients.mjs.
  */
-import { isNorthTexas, mapLocations, stateCode } from './location-map.ts';
+import { cityStates, isNorthTexas, stateCode } from './location-map.ts';
 import { senderIdentity } from './profiles.ts';
 import type { Client, Opportunity } from './models';
 
@@ -34,19 +34,15 @@ function cityName(query: string) {
   return `${city}, ${stateCode(query.slice(comma + 1).replace(/\d{5}(?:-\d{4})?/, ''))}`;
 }
 
-/** "Pittsburgh PA or Dallas, TX": each side of an "or", a slash or a bar is its own place. */
-const either = /\s+(?:or|and)\s+|\s*[/|;]\s*/i;
-
 /**
- * The cities a posting's location names, each once, in the order written. A street address
- * is one office, not a fingerprint, and "Remote" names nowhere.
+ * The cities a posting's location names, each once, in the order written, one spelling per
+ * state and no ZIP. A street address is one office, not a fingerprint, and "Remote" names nowhere.
  */
 export function pitchCities(location: string): string[] {
   const seen = new Set<string>();
   const cities: string[] = [];
-  for (const place of location.split(either).flatMap((part) => mapLocations(part))) {
-    if (/\d/.test(place.query) || !place.query.includes(',')) continue;
-    const name = cityName(place.query);
+  for (const pair of cityStates(location)) {
+    const name = cityName(pair);
     if (seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
     cities.push(name);

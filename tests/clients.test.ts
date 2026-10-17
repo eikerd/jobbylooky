@@ -21,8 +21,19 @@ test('the cities a location names, each once, however the pitch wrote them', () 
 });
 
 test('remote, unknown, template and street-address locations name no city set', () => {
-  for (const location of ['Remote', 'Not stated', '', '{JobPosting : city}, Texas', 'Plano, TX (5000 Legacy Dr)', 'Remote – (East coast Only, Preferred Miami, FL)'])
+  for (const location of ['Remote', 'Not stated', '', '{JobPosting : city}, Texas', '5000 Legacy Dr, Plano, TX', 'Remote – (East coast Only, Preferred Miami, FL)'])
     assert.deepEqual(pitchCities(location), [], location);
+  // An address in parentheses is the office; the city before it is still the city.
+  assert.deepEqual(pitchCities('Plano, TX (5000 Legacy Dr)'), ['Plano, TX']);
+});
+
+test('every city counts, past the five the maps show, and work-mode words are not a city (Codex, PR #30)', () => {
+  const six = 'Plano, TX, Raleigh, NC, Reston, VA, Richardson, TX, Tempe, AZ, Columbus, OH';
+  assert.deepEqual(pitchCities(six), ['Plano, TX', 'Raleigh, NC', 'Reston, VA', 'Richardson, TX', 'Tempe, AZ', 'Columbus, OH']);
+  assert.notEqual(pitchFingerprint(pitch('a', six))?.key, pitchFingerprint(pitch('b', six.replace(', Columbus, OH', ', Boise, ID')))?.key);
+  assert.deepEqual(pitchCities('Onsite in Dallas, TX / Charlotte, NC'), ['Dallas, TX', 'Charlotte, NC']);
+  assert.equal(pitchFingerprint(pitch('a', 'Onsite in Dallas, TX / Charlotte, NC'))?.key, pitchFingerprint(pitch('b', 'Dallas, TX / Charlotte, NC'))?.key);
+  assert.deepEqual(pitchCities('Hybrid – Downtown Dallas, TX and Fort Worth, TX'), ['Dallas, TX', 'Fort Worth, TX']);
 });
 
 test('a fingerprint is two or more cities, keyed without regard to order or case', () => {

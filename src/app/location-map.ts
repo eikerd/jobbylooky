@@ -103,6 +103,39 @@ function unique(queries: string[]) {
   });
 }
 
+/** Words that say where or how the job is worked, never the start of a city's name: "Onsite in Dallas". */
+const notCity = /^(?:on[\s-]?site|hybrid|remote|in|at|near|or|and|the|to|from|only|local|locals|office|offices|location|locations|client|preferred|based|work|working|hq|headquarters|downtown|area|metro|greater)$/i;
+/** "Pittsburgh PA or Dallas, TX": each side of an "or", a slash, a bar or a semicolon is its own place. */
+const either = /\s+(?:or|and)\s+|\s*[/|;]\s*/i;
+
+function cityPart(words: string) {
+  const parts = words.trim().split(/\s+/);
+  while (parts.length > 1 && notCity.test(parts[0])) parts.shift();
+  return parts.join(' ');
+}
+
+/**
+ * Every "City, ST" a job's "Location:" field names, each once, in the order written and with
+ * no cap: a fingerprint needs them all, the maps show the first few. A ZIP stays on the pair.
+ * A street address is an office, not a city; Remote, "Not stated" and conditions in
+ * parentheses name nowhere; "Plano" on its own is the metroplex city, not Plano, Illinois.
+ */
+export function cityStates(location: string): string[] {
+  if (!location || unsafe.test(location)) return [];
+  const pairs: string[] = [];
+  for (const part of location.split(either)) {
+    const text = cleanQuery(part.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\bremote\b/gi, ' '));
+    if (streetAddress.test(text)) continue;
+    const found = [...text.matchAll(cityState)].map((match) => `${cityPart(match[1])}, ${match[2]}${match[3] ?? ''}`);
+    if (found.length) pairs.push(...found);
+    else {
+      const city = northTexasCity.exec(text);
+      if (city) pairs.push(`${city[0]}, TX`);
+    }
+  }
+  return unique(pairs);
+}
+
 /**
  * Maps for a job's "Location:" field. A street address maps as written; otherwise every
  * "City, ST" in the field maps separately, so a multi-city requisition shows each city.
@@ -115,11 +148,8 @@ export function mapLocations(location: string): MapPlace[] {
     return [placeMap(cleanQuery(`${embedded[1]}, ${location.slice(0, embedded.index).trim()}`), 'Job location')];
   const text = cleanQuery(location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\bremote\b/gi, ' '));
   if (streetAddress.test(text)) return [placeMap(text, 'Job location')];
-  const pairs = [...text.matchAll(cityState)].map((match) => `${match[1].trim()}, ${match[2]}${match[3] ?? ''}`);
-  if (pairs.length) return unique(pairs).slice(0, MAX_MAPS).map((query) => placeMap(query, 'Job location'));
-  // "Plano" on its own is the metroplex city, not Plano, Illinois.
-  const city = northTexasCity.exec(text);
-  if (city) return [placeMap(`${city[0]}, TX`, 'Job location')];
+  const pairs = cityStates(location);
+  if (pairs.length) return pairs.slice(0, MAX_MAPS).map((query) => placeMap(query, 'Job location'));
   if (text.includes(',') && /[A-Za-z]/.test(text)) return [placeMap(text, 'Job location')];
   return [];
 }
