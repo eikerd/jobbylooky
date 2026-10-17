@@ -108,6 +108,14 @@ export interface DeletePhrase {
   phrase: string;
   addedAt: string;
 }
+/** A client, known by its fingerprint: the cities its postings name. Mirrors server/clients.mjs. */
+export interface Client {
+  id: string;
+  name: string;
+  /** "City, ST", in the order the pitch that named the client wrote them. */
+  cities: string[];
+  addedAt: string;
+}
 export type RuleField = 'any' | 'subject' | 'body';
 export type RuleMode = 'test' | 'live';
 /** An owner-written regex; mirrors server/reject-rules.mjs. Only a live rule passes mail. */

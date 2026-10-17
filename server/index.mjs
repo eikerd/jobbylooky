@@ -264,6 +264,7 @@ export const server = createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
     if (req.method === 'GET' && url.pathname === '/api/delete-phrases') return json(200, store.deletePhrases());
+    if (req.method === 'GET' && url.pathname === '/api/clients') return json(200, store.clients());
     // Before a delete phrase is saved: how much mail it would have caught. The mail log is optional.
     if (req.method === 'GET' && url.pathname === '/api/delete-phrases/preview') {
       const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') });
@@ -318,6 +319,8 @@ export const server = createServer(async (req, res) => {
       return json(200, store.removeRejectRule(decodeURIComponent(url.pathname.slice('/api/reject-rules/'.length))));
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/delete-phrases/'))
       return json(200, store.removeDeletePhrase(decodeURIComponent(url.pathname.slice('/api/delete-phrases/'.length))));
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/clients/'))
+      return json(200, store.removeClient(decodeURIComponent(url.pathname.slice('/api/clients/'.length))));
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
@@ -327,6 +330,8 @@ export const server = createServer(async (req, res) => {
         return json(201, store.addPhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/delete-phrases')
         return json(201, store.addDeletePhrase(await body(req)));
+      if (req.method === 'POST' && url.pathname === '/api/clients')
+        return json(201, store.addClient(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/reject-rules')
         return json(201, store.addRejectRule(await body(req)));
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/reject-rules/'))

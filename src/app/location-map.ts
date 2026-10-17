@@ -30,7 +30,11 @@ const STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', '
 const STATE = `(?:${[...STATE_NAMES, ...STATE_CODES].join('|')})`;
 const ZIP = '\\d{5}(?:-\\d{4})?';
 /** "Texas" → "TX": the two lists run in the same order. */
-const STATE_CODE = new Map(STATE_NAMES.map((name, index) => [name, STATE_CODES[index]]));
+const STATE_CODE = new Map(STATE_NAMES.map((name, index) => [name.toLowerCase(), STATE_CODES[index]]));
+/** The two-letter code for a state written either way: "North Carolina" and "nc" are both "NC". */
+export function stateCode(state: string) {
+  return STATE_CODE.get(state.trim().toLowerCase()) ?? state.trim().toUpperCase();
+}
 /** "Plano, TX", "Plano TX 75024", "Durham, North Carolina". Case-sensitive: "or" and "in" are words, OR and IN are states. */
 const cityState = new RegExp(`([A-Z][A-Za-z.'’-]*(?:[ -][A-Za-z.'’-]+){0,3}),?\\s+(${STATE})\\b(\\s+${ZIP})?`, 'g');
 /** The state a place ends with, allowing a ZIP and a country after it. */
@@ -189,7 +193,7 @@ export function officeLocations(bodies: string[]): MapPlace[] {
       // The city is read after the street, so "West Virginia Avenue" is never a locality.
       const street = streetAddress.exec(query)!;
       const place = new RegExp(cityState.source).exec(query.slice(street.index + street[0].length));
-      const locality = place ? `${place[1].toLowerCase()},${STATE_CODE.get(place[2]) ?? place[2]}` : '';
+      const locality = place ? `${place[1].toLowerCase()},${stateCode(place[2])}` : '';
       const identity = `${street[0].toLowerCase().replace(/[.,]/g, '')}|${locality}`;
       const spellings = offices.get(identity) ?? new Map<string, number>();
       spellings.set(query, (spellings.get(query) ?? 0) + 1);

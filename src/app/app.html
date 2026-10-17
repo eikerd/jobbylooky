@@ -33,6 +33,9 @@
       <button type="button" [class.active]="directoryMode() === 'companies'" [attr.aria-current]="directoryMode() === 'companies' ? 'page' : null" (click)="openDirectory('companies')">
         <span class="nav-icon" aria-hidden="true">▦</span>Companies
       </button>
+      <button type="button" [class.active]="directoryMode() === 'clients'" [attr.aria-current]="directoryMode() === 'clients' ? 'page' : null" (click)="openDirectory('clients')">
+        <span class="nav-icon" aria-hidden="true">◉</span>Clients
+      </button>
       <button type="button" [class.active]="directoryMode() === 'phrases'" [attr.aria-current]="directoryMode() === 'phrases' ? 'page' : null" (click)="openDirectory('phrases')">
         <span class="nav-icon" aria-hidden="true">×</span>Phrases
       </button>
@@ -66,7 +69,7 @@
   </aside>
   <main>
     <header class="page-header">
-      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'deletes' ? 'Delete phrases' : directoryMode() === 'postings' ? 'Job postings' : directoryMode() === 'rules' ? 'Auto-reject rules' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
+      <h1>{{ directoryMode() === 'recruiters' ? 'Recruiters' : directoryMode() === 'companies' ? 'Recruiting companies' : directoryMode() === 'clients' ? 'Clients' : directoryMode() === 'phrases' ? 'Tracked phrases' : directoryMode() === 'deletes' ? 'Delete phrases' : directoryMode() === 'postings' ? 'Job postings' : directoryMode() === 'rules' ? 'Auto-reject rules' : folder() === 'Inbox' ? 'Your opportunities' : folder() }}</h1>
       <div class="header-actions">
         <button
           class="button secondary"
@@ -202,6 +205,8 @@
           </tbody>
         </table>
       </section>
+    } @else if (directoryMode() === 'clients') {
+      <app-clients [rows]="opportunities()" [clients]="clients()" [busy]="busy()" (save)="saveClient($event)" (remove)="removeClient($event)" (openPitch)="openProfilePitch($event)" />
     } @else if (directoryMode() === 'rules') {
       <app-rules [rows]="opportunities()" [rules]="rejectRules()" [busy]="busy()" (save)="saveRule($event)" (setMode)="setRuleMode($event)" (remove)="removeRule($event)" (openPitch)="openProfilePitch($event)" />
     } @else if (directoryMode() === 'postings') {
@@ -433,7 +438,7 @@
                   Pay not stated
                 }
               </span>
-              <span>{{ row.company !== 'Not stated' ? row.company : 'Company not stated' }}</span>
+              <span>{{ row.company !== 'Not stated' ? row.company : 'Company not stated' }}@if (clientByPitch().get(row.id); as client) { · <strong class="client-by-location">{{ clientLabel(client) }}</strong> by location}</span>
             </p>
             <ul class="fit-tags" aria-label="How it fits">
               @for (reason of fitTags(row); track $index) {

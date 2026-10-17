@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapLocations, unmappedLocation, workMode, officeLocations, signatureAddresses, isNorthTexas, zoomFor, STATE_ZOOM } from '../src/app/location-map.ts';
+import { STATE_ZOOM, isNorthTexas, mapLocations, officeLocations, signatureAddresses, stateCode, unmappedLocation, workMode, zoomFor } from '../src/app/location-map.ts';
 
 test('remote, unstated and templated locations create no maps', () => {
   for (const location of ['Remote', 'Remote (US)', 'Not stated', '', 'Remote – (East coast Only, Preferred Miami, FL due to client visits)', '{JobPosting : city}, Texas', 'Dallas, TX 75214 - https://cts.indeed.com/v3/abc', 'Hybrid', 'Fully Remote', 'Multiple locations']) {
@@ -136,4 +136,11 @@ test('the work mode a location states, if any', () => {
     ["Remote isn't available Mondays; remote Tuesday-Friday", 'Hybrid'],
   ];
   for (const [location, mode] of cases) assert.equal(workMode(location), mode, location);
+});
+
+test('a state code reads a state written either way', () => {
+  assert.equal(stateCode('North Carolina'), 'NC');
+  assert.equal(stateCode(' texas '), 'TX');
+  assert.equal(stateCode('nc'), 'NC');
+  assert.equal(stateCode('TX 75024'.replace(/\d{5}/, '')), 'TX');
 });

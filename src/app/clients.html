@@ -1,0 +1,49 @@
+<section class="clients" aria-label="Clients">
+  @if (sorted().length) {
+    <div class="clients-scroll">
+      <table>
+        <colgroup>
+          <col class="c-client" /><col class="c-cities" /><col class="c-pitches" /><col class="c-recruiters" /><col class="c-seen" />
+        </colgroup>
+        <thead>
+          <tr>
+            @for (column of columns; track column.key) {
+              <th scope="col" [attr.aria-sort]="ariaSort(column.key)" [class.numeric]="column.key === 'pitches' || column.key === 'recruiters'">
+                <button type="button" (click)="sortBy(column.key)">{{ column.label }}<span class="arrow" aria-hidden="true">{{ ariaSort(column.key) === 'ascending' ? '▲' : ariaSort(column.key) === 'descending' ? '▼' : '' }}</span></button>
+              </th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of sorted(); track row.key) {
+            <tr [class.unnamed]="!row.client">
+              <td>
+                @if (row.client; as client) {
+                  <span class="client-name">{{ client.name }}</span>
+                  <button type="button" class="button secondary small" [disabled]="busy()" (click)="remove.emit(client)" [attr.aria-label]="'Forget ' + client.name">Remove</button>
+                } @else {
+                  <form class="name-form" (submit)="$event.preventDefault(); name(row)">
+                    <input [attr.aria-label]="'Client for ' + row.cities.join(', ')" [value]="draft(row)" (input)="setDraft(row, $any($event.target).value)" placeholder="Who is it?" maxlength="80" autocomplete="off" />
+                    <button type="submit" class="button primary small" [disabled]="busy() || !draft(row).trim()">Name</button>
+                  </form>
+                }
+              </td>
+              <td>
+                @if (row.pitches[0]; as newest) {
+                  <button type="button" class="cities" [title]="row.cities.join(' · ')" (click)="openPitch.emit(newest.id)">{{ row.cities.join(' · ') }}</button>
+                } @else {
+                  <span class="cities" [title]="row.cities.join(' · ')">{{ row.cities.join(' · ') }}</span>
+                }
+              </td>
+              <td class="numeric">{{ row.pitches.length }}</td>
+              <td class="numeric">{{ row.recruiters }}</td>
+              <td>@if (row.lastSeen) {<app-age [at]="row.lastSeen" />}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  } @else {
+    <p class="clients-empty">No pitch names two or more cities yet.</p>
+  }
+</section>
