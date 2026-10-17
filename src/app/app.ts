@@ -11,7 +11,7 @@ import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
 import { daysUp, jobState } from './link-state';
-import type { RejectRule, RuleMode, Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck, DeletePreview, DeletePhrase } from './models';
+import type { RejectRule, RuleMode, Opportunity, JobGroup, TrackedPhrase, PhraseKind, PitchVoicemail, LinkCheck, DeletePreview, DeletePhrase, Client } from './models';
 import { Highlight } from './highlight.component';
 import { Profiles } from './profiles.component';
 import { SourceIcon } from './source-icon.component';
@@ -20,6 +20,8 @@ import { DEFAULT_PHRASE_COLORS, phraseColorStyle } from './crayons';
 import { PlaceLinks } from './place-links.component';
 import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
+import { Clients, clearClientDraft, hasClientDraft } from './clients.component';
+import { clientLabel, clientsByPitch, fingerprintKey } from './clients';
 import { InteractionPills } from './interaction-pills.component';
 
 interface Connection {
@@ -40,7 +42,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills, ConvoHeat],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Clients, Rules, Age, InteractionPills, ConvoHeat],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -68,7 +70,11 @@ export class App implements OnDestroy {
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
-  readonly directoryMode = signal<'recruiters' | 'companies' | 'phrases' | 'deletes' | 'postings' | 'rules' | null>(null);
+  readonly directoryMode = signal<'recruiters' | 'companies' | 'clients' | 'phrases' | 'deletes' | 'postings' | 'rules' | null>(null);
+  readonly clients = signal<Client[]>([]);
+  /** The client each pitch is known to be for, by the cities its location names. */
+  readonly clientByPitch = computed(() => clientsByPitch(this.opportunities(), this.clients()));
+  readonly clientLabel = clientLabel;
   /** The owner's delete phrases, apart from the tracked ones; mail carrying one goes to Gmail Trash. */
   readonly deletePhrases = signal<DeletePhrase[]>([]);
   readonly deleteSortDir = signal<'asc' | 'desc'>('asc');
@@ -350,8 +356,8 @@ export class App implements OnDestroy {
     void this.pass();
   };
   private beforeUnload = (event: BeforeUnloadEvent) => {
-    // A rule draft survives moving between views, but not a reload or a closed tab.
-    if (this.hasUnsavedWork() || hasRuleDraft()) event.preventDefault();
+    // A rule or client draft survives moving between views, but not a reload or a closed tab.
+    if (this.hasUnsavedWork() || hasRuleDraft() || hasClientDraft()) event.preventDefault();
   };
   // An edited reply counts as unsaved work; the untouched greeting does not.
   private hasUnsavedWork() {
@@ -391,13 +397,14 @@ export class App implements OnDestroy {
   private async refresh() {
     const revision = this.revision;
     try {
-      const [rows, connection, phrases, colors, rules, deletes] = await Promise.all([
+      const [rows, connection, phrases, colors, rules, deletes, clients] = await Promise.all([
         this.request<JobGroup[]>('groups'),
         this.request<Connection>('connection'),
         this.request<TrackedPhrase[]>('phrases'),
         this.request<Record<PhraseKind, string>>('phrase-colors'),
         this.request<RejectRule[]>('reject-rules'),
         this.request<DeletePhrase[]>('delete-phrases'),
+        this.request<Client[]>('clients'),
       ]);
       // A background response started before a decision must not undo its UI state.
       if (revision !== this.revision || this.passesSaving) return;
@@ -406,6 +413,7 @@ export class App implements OnDestroy {
       this.phraseColors.set(colors);
       this.rejectRules.set(rules);
       this.deletePhrases.set(deletes);
+      this.clients.set(clients);
       this.connection.set(connection);
     } catch (error) {
       this.error.set(this.message(error));
@@ -486,7 +494,7 @@ export class App implements OnDestroy {
     this.selectedId.set('');
     if (this.visible()[0]) this.select(this.visible()[0].representative);
   }
-  openDirectory(mode: 'recruiters' | 'companies' | 'phrases' | 'deletes' | 'postings' | 'rules', id = '') {
+  openDirectory(mode: 'recruiters' | 'companies' | 'clients' | 'phrases' | 'deletes' | 'postings' | 'rules', id = '') {
     if (this.busy() || !this.canLeave()) return;
     this.dirty.set(false);
     this.directoryMode.set(mode);
@@ -667,6 +675,29 @@ export class App implements OnDestroy {
     this.error.set('');
     try {
       this.deletePhrases.set(await change());
+      return true;
+    } catch (error) {
+      this.error.set(this.message(error));
+      return false;
+    } finally {
+      this.busy.set(false);
+    }
+  }
+  async saveClient({ name, cities }: { name: string; cities: string[] }) {
+    if (!(await this.changeClients(() => this.request<Client[]>('clients', 'POST', { name, cities })))) return;
+    clearClientDraft(fingerprintKey(cities));
+    this.toast(`${cities.join(' · ')} is ${name}`);
+  }
+  removeClient(client: Client) {
+    void this.changeClients(() => this.request<Client[]>(`clients/${encodeURIComponent(client.id)}`, 'DELETE'));
+  }
+  private async changeClients(change: () => Promise<Client[]>) {
+    if (this.busy()) return false;
+    this.busy.set(true);
+    this.revision++;
+    this.error.set('');
+    try {
+      this.clients.set(await change());
       return true;
     } catch (error) {
       this.error.set(this.message(error));

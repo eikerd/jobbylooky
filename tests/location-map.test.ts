@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mapLocations, unmappedLocation, workMode, officeLocations, signatureAddresses, isNorthTexas, zoomFor, STATE_ZOOM } from '../src/app/location-map.ts';
+import { STATE_ZOOM, cityStates, isNorthTexas, mapLocations, officeLocations, signatureAddresses, stateCode, unmappedLocation, workMode, zoomFor } from '../src/app/location-map.ts';
 
 test('remote, unstated and templated locations create no maps', () => {
   for (const location of ['Remote', 'Remote (US)', 'Not stated', '', 'Remote – (East coast Only, Preferred Miami, FL due to client visits)', '{JobPosting : city}, Texas', 'Dallas, TX 75214 - https://cts.indeed.com/v3/abc', 'Hybrid', 'Fully Remote', 'Multiple locations']) {
@@ -136,4 +136,25 @@ test('the work mode a location states, if any', () => {
     ["Remote isn't available Mondays; remote Tuesday-Friday", 'Hybrid'],
   ];
   for (const [location, mode] of cases) assert.equal(workMode(location), mode, location);
+});
+
+test('a state code reads a state written either way', () => {
+  assert.equal(stateCode('North Carolina'), 'NC');
+  assert.equal(stateCode(' texas '), 'TX');
+  assert.equal(stateCode('nc'), 'NC');
+  assert.equal(stateCode('TX 75024'.replace(/\d{5}/, '')), 'TX');
+});
+
+test('cityStates names every city with no cap while the maps keep to five', () => {
+  const six = 'Plano, TX, Raleigh, NC, Reston, VA, Richardson, TX, Tempe, AZ, Columbus, OH';
+  assert.equal(cityStates(six).length, 6);
+  assert.equal(mapLocations(six).length, 5);
+  assert.deepEqual(cityStates('Onsite in Dallas, TX / Charlotte, NC'), ['Dallas, TX', 'Charlotte, NC']);
+  assert.deepEqual(cityStates('Pittsburgh PA or Dallas, TX'), ['Pittsburgh, PA', 'Dallas, TX']);
+  assert.deepEqual(cityStates('Plano TX 75024'), ['Plano, TX 75024']);
+  assert.deepEqual(cityStates('5000 Legacy Dr, Plano, TX'), []);
+  assert.deepEqual(cityStates('Remote'), []);
+  assert.deepEqual(cityStates('Remote (Miami, FL and Tampa, FL)'), []);
+  assert.deepEqual(cityStates('Boston, Ma / Minneapolis, MN'), ['Boston, MA', 'Minneapolis, MN']);
+  assert.deepEqual(cityStates('Denver, Or Remote'), []);
 });

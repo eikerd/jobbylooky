@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSy
 import { join } from 'node:path';
 import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS } from './screen.mjs';
 import { carriesPhrase, cleanDeletePhrase, deletePhraseMatch } from './delete-phrases.mjs';
+import { cleanClient, fingerprintKey } from './clients.mjs';
 import { groupOpportunities, passedOriginal } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
@@ -331,6 +332,22 @@ export function createStore(directory) {
         throw Object.assign(new Error('Delete phrase not found.'), { status: 404 });
       commit({ ...state, deletePhrases: state.deletePhrases.filter((row) => row.id !== id) });
       return structuredClone(state.deletePhrases);
+    },
+    /** Clients, each known by its fingerprint: the set of cities its postings name. */
+    clients: () => structuredClone(state.clients ?? []),
+    addClient(input) {
+      const { name, cities } = cleanClient(input);
+      const list = state.clients ?? [];
+      const taken = list.find((row) => fingerprintKey(row.cities) === fingerprintKey(cities));
+      if (taken) throw Object.assign(new Error(`Those cities already name ${taken.name}.`), { status: 409 });
+      commit({ ...state, clients: [...list, { id: randomUUID(), name, cities, addedAt: new Date().toISOString() }] });
+      return structuredClone(state.clients);
+    },
+    removeClient(id) {
+      if (!(state.clients ?? []).some((row) => row.id === id))
+        throw Object.assign(new Error('Client not found.'), { status: 404 });
+      commit({ ...state, clients: state.clients.filter((row) => row.id !== id) });
+      return structuredClone(state.clients);
     },
     /** Addresses the owner has really written to; the mail sync reads all of their mail. */
     watchedSenders: () => [

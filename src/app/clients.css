@@ -1,0 +1,29 @@
+.clients { padding: 0 24px 24px; min-width: 0; }
+/* Wider than a phone: the table scrolls in its own box, never the page. */
+.clients-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+table { width: 100%; min-width: 760px; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
+.c-client { width: 25%; } .c-cities { width: 38%; } .c-pitches { width: 11%; } .c-recruiters { width: 13%; } .c-seen { width: 13%; }
+th, td { padding: 7px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--line); }
+th button { all: unset; cursor: pointer; font-weight: 800; font-size: 13px; color: var(--soft); white-space: nowrap; }
+th button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.arrow { margin-left: 4px; font-size: 10px; }
+.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--accent-soft); }
+/* The name shrinks and ellipsizes; Remove keeps its room beside it. */
+.client-row, .name-form { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.client-name { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name-form input { flex: 1; min-width: 0; font: inherit; padding: 3px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: inherit; }
+.name-form input:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 1px; }
+/* The page's buttons are scoped to the app shell; this view carries its own, as the Rules view does. */
+.button { flex: none; display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; min-height: 38px; border-radius: 999px; font-size: 14px; font-weight: 700; cursor: pointer; border: 1.5px solid transparent; white-space: nowrap; }
+.button.small { min-height: 28px; padding: 2px 11px; font-size: 12px; }
+.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+.primary:hover { background: var(--accent-hover); }
+.secondary { background: var(--card); color: var(--ink); border-color: var(--control-border); }
+.secondary:hover { background: var(--hover); }
+.button:disabled { background: var(--hover); border-color: var(--line-strong); color: var(--muted); cursor: default; }
+.cities { all: unset; box-sizing: border-box; display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.cities { cursor: pointer; font-weight: 700; }
+button.cities:focus-visible { outline: 2px solid var(--accent-ink); }
+.clients-empty { color: var(--soft); }

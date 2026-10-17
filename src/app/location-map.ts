@@ -30,9 +30,19 @@ const STATE_NAMES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', '
 const STATE = `(?:${[...STATE_NAMES, ...STATE_CODES].join('|')})`;
 const ZIP = '\\d{5}(?:-\\d{4})?';
 /** "Texas" → "TX": the two lists run in the same order. */
-const STATE_CODE = new Map(STATE_NAMES.map((name, index) => [name, STATE_CODES[index]]));
+const STATE_CODE = new Map(STATE_NAMES.map((name, index) => [name.toLowerCase(), STATE_CODES[index]]));
+/** The two-letter code for a state written either way: "North Carolina" and "nc" are both "NC". */
+export function stateCode(state: string) {
+  return STATE_CODE.get(state.trim().toLowerCase()) ?? state.trim().toUpperCase();
+}
 /** "Plano, TX", "Plano TX 75024", "Durham, North Carolina". Case-sensitive: "or" and "in" are words, OR and IN are states. */
-const cityState = new RegExp(`([A-Z][A-Za-z.'’-]*(?:[ -][A-Za-z.'’-]+){0,3}),?\\s+(${STATE})\\b(\\s+${ZIP})?`, 'g');
+/**
+ * A code written "Ma" or "Tx" still names the state when it ends the place (before a ZIP, a
+ * separator or the end), except codes that read as English words: "Dallas, Or Remote" is not Oregon.
+ */
+const TITLE_CODES = STATE_CODES.filter((code) => !['OR', 'IN', 'HI', 'OH', 'OK', 'ME', 'DE'].includes(code)).map((code) => code[0] + code[1].toLowerCase());
+const STATE_ANY = `(?:${STATE}|(?:${TITLE_CODES.join('|')})(?=(?:\\s+${ZIP})?\\s*(?:$|[,/|;])))`;
+const cityState = new RegExp(`([A-Z][A-Za-z.'’-]*(?:[ -][A-Za-z.'’-]+){0,3}),?\\s+(${STATE_ANY})\\b(\\s+${ZIP})?`, 'g');
 /** The state a place ends with, allowing a ZIP and a country after it. */
 const trailingState = new RegExp(`[\\s,]+(${STATE})(?:\\s+${ZIP})?(?:,?\\s*(?:USA?|United States))?\\s*$`);
 const streetAddress = /\b\d{1,6}\s+(?:[A-Za-z0-9.'’-]+\s+){1,7}(?:street|st|road|rd|avenue|ave|boulevard|blvd|drive|dr|parkway|pkwy|lane|ln|way|highway|hwy|court|ct|circle|cir|terrace|ter)\b/i;
@@ -99,6 +109,42 @@ function unique(queries: string[]) {
   });
 }
 
+/** Words that say where or how the job is worked, never the start of a city's name: "Onsite in Dallas". */
+const notCity = /^(?:on[\s-]?site|hybrid|remote|in|at|near|or|and|the|to|from|only|local|locals|office|offices|location|locations|client|preferred|based|work|working|hq|headquarters|downtown|area|metro|greater)$/i;
+/** "Pittsburgh PA or Dallas, TX": each side of an "or", a slash, a bar or a semicolon is its own place. */
+const either = /\s+(?:or|and)\s+|\s*[/|;]\s*/i;
+
+function cityPart(words: string) {
+  const parts = words.trim().split(/\s+/);
+  while (parts.length > 1 && notCity.test(parts[0])) parts.shift();
+  return parts.join(' ');
+}
+
+/**
+ * Every "City, ST" a job's "Location:" field names, each once, in the order written and with
+ * no cap: a fingerprint needs them all, the maps show the first few. A ZIP stays on the pair.
+ * A street address is an office, not a city; Remote, "Not stated" and conditions in
+ * parentheses name nowhere; "Plano" on its own is the metroplex city, not Plano, Illinois.
+ */
+export function cityStates(location: string): string[] {
+  if (!location || unsafe.test(location)) return [];
+  const pairs: string[] = [];
+  // Conditions go before the split: "Remote (Miami, FL and Tampa, FL)" is a preference, not two cities.
+  for (const part of location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(either)) {
+    // "D.C." is "DC"; a dotted code is still the state.
+    const text = cleanQuery(part.replace(/\bremote\b/gi, ' ').replace(/\b([A-Za-z])\.([A-Za-z])\.(?![A-Za-z])/g, '$1$2'));
+    if (streetAddress.test(text)) continue;
+    // "Tx" is written as "TX"; a state's full name is left as written.
+    const found = [...text.matchAll(cityState)].map((match) => `${cityPart(match[1])}, ${match[2].length === 2 ? match[2].toUpperCase() : match[2]}${match[3] ?? ''}`);
+    if (found.length) pairs.push(...found);
+    else {
+      const city = northTexasCity.exec(text);
+      if (city) pairs.push(`${city[0]}, TX`);
+    }
+  }
+  return unique(pairs);
+}
+
 /**
  * Maps for a job's "Location:" field. A street address maps as written; otherwise every
  * "City, ST" in the field maps separately, so a multi-city requisition shows each city.
@@ -111,11 +157,8 @@ export function mapLocations(location: string): MapPlace[] {
     return [placeMap(cleanQuery(`${embedded[1]}, ${location.slice(0, embedded.index).trim()}`), 'Job location')];
   const text = cleanQuery(location.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').replace(/\bremote\b/gi, ' '));
   if (streetAddress.test(text)) return [placeMap(text, 'Job location')];
-  const pairs = [...text.matchAll(cityState)].map((match) => `${match[1].trim()}, ${match[2]}${match[3] ?? ''}`);
-  if (pairs.length) return unique(pairs).slice(0, MAX_MAPS).map((query) => placeMap(query, 'Job location'));
-  // "Plano" on its own is the metroplex city, not Plano, Illinois.
-  const city = northTexasCity.exec(text);
-  if (city) return [placeMap(`${city[0]}, TX`, 'Job location')];
+  const pairs = cityStates(location);
+  if (pairs.length) return pairs.slice(0, MAX_MAPS).map((query) => placeMap(query, 'Job location'));
   if (text.includes(',') && /[A-Za-z]/.test(text)) return [placeMap(text, 'Job location')];
   return [];
 }
@@ -189,7 +232,7 @@ export function officeLocations(bodies: string[]): MapPlace[] {
       // The city is read after the street, so "West Virginia Avenue" is never a locality.
       const street = streetAddress.exec(query)!;
       const place = new RegExp(cityState.source).exec(query.slice(street.index + street[0].length));
-      const locality = place ? `${place[1].toLowerCase()},${STATE_CODE.get(place[2]) ?? place[2]}` : '';
+      const locality = place ? `${place[1].toLowerCase()},${stateCode(place[2])}` : '';
       const identity = `${street[0].toLowerCase().replace(/[.,]/g, '')}|${locality}`;
       const spellings = offices.get(identity) ?? new Map<string, number>();
       spellings.set(query, (spellings.get(query) ?? 0) + 1);
