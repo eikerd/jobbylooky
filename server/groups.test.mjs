@@ -84,6 +84,12 @@ test('a repeat from the same recruiter of a passed posting finds the pitch passe
   // Same title and location stand in for a reworded subject.
   assert.equal(passedOriginal([passed], rep('c', { subject: 'Immediate hiring: Angular developer' })).id, 'a');
 });
+test('the same text for a different stated client or city is a different opening, never a repeat', () => {
+  const passed = rep('a', { status: 'Passed', company: 'Fidelity', location: 'Dallas, TX' });
+  assert.equal(passedOriginal([passed], rep('c', { subject: 'RE: Angular developer', company: 'Toyota', location: 'Dallas, TX' })), null);
+  assert.equal(passedOriginal([passed], rep('d', { subject: 'RE: Angular developer', company: 'Fidelity', location: 'Austin, TX' })), null);
+  assert.equal(passedOriginal([passed], rep('e', { subject: 'RE: Angular developer', company: 'Fidelity', location: 'Dallas, TX' })).id, 'a');
+});
 test('a repeat is only sure from the same sender, with the same posting and nearly all the same text', () => {
   const passed = rep('a', { status: 'Passed' });
   const half = requirements.split('. ').slice(0, 2).join('. ') + '. Lead the migration of legacy Java services to Kotlin microservices on Kubernetes with Kafka event streaming and Terraform managed infrastructure across three regions.';

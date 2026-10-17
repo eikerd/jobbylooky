@@ -90,7 +90,6 @@ function wholeWords(selection: Selection, range: Range) {
     .kind.neutral { background: var(--neutral-mark); color: var(--neutral-ink); }
     .kind.purple { background: var(--purple-mark); color: var(--purple-ink); }
     .kind.pink { background: var(--pink-mark); color: var(--pink-ink); }
-    .kind.delete { background: var(--delete-mark); color: var(--delete-ink); }
     .note { margin: 8px 0 0; font-size: 14px; color: var(--soft); }
     .note.error { color: var(--bad); }
     .cancel {

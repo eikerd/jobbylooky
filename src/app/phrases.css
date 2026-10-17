@@ -14,7 +14,6 @@
 .phrase.neutral { color: var(--neutral-ink); }
 .phrase.purple { color: var(--purple-ink); }
 .phrase.pink { color: var(--pink-ink); }
-.phrase.delete { color: var(--delete-ink); }
 .phrase .reason-icon { background: transparent; color: inherit; }
 .phrase-count { font-weight: 700; color: var(--ink-strong); min-width: 2ch; text-align: right; }
 .phrase-pitches { padding: 0 0 8px 22px !important; }

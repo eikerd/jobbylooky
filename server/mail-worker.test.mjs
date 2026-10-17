@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readWorker } from './mail-worker.mjs';
+import { DatabaseSync } from 'node:sqlite';
+import { readWorker, countPhraseMail } from './mail-worker.mjs';
 const response = (objects) => ({
   ok: true,
   async json() {
@@ -115,16 +116,51 @@ test('watched senders are read whatever the subject; strangers still need a job 
   assert.match(sent.sql, /instr\(lower\(senderEmail\), \?\) > 0/);
   assert.equal(sent.args.some((arg) => arg.value === 'not-an-address'), false);
 });
-test('delete phrases widen the query, and non-job mail carrying one comes back marked phraseOnly', async () => {
+test('delete phrases widen the query by word, so wrapped or double-spaced mail still comes back phraseOnly', async () => {
   let sent;
   const results = await readWorker('http://example.test', async (url, options) => {
     sent = JSON.parse(options.body).requests[0].stmt;
     if (sent.sql.startsWith('PRAGMA')) return response([{ name: 'messageId' }, { name: 'mailThreadId' }]);
     return response([
-      { messageId: 'z', subject: 'Weekly digest', senderEmail: 'news@example.com', receivedAt: 1789685000, rawBody: 'Click to Unsubscribe  from jobs', mailThreadId: 'z' },
+      { messageId: 'z', subject: 'Weekly digest', senderEmail: 'news@example.com', receivedAt: 1789685000, rawBody: 'Click to Unsubscribe\n  from jobs', mailThreadId: 'z' },
     ]);
   }, { deletePhrases: ['Unsubscribe  from jobs'] });
   assert.deepEqual(results.map((row) => [row.id, row.phraseOnly]), [['z', true]]);
-  assert.match(sent.sql, /instr\(replace\(replace\(replace\(lower\(rawBody\), char\(13\), ' '\), char\(10\), ' '\), char\(9\), ' '\), \?\) > 0/);
-  assert.equal(sent.args.filter((arg) => arg.value === 'unsubscribe from jobs').length, 2);
+  assert.match(sent.sql, /instr\(lower\(rawBody\), \?\) > 0 AND instr\(lower\(rawBody\), \?\) > 0/);
+  // Three words, once for the subject and once for the body.
+  assert.deepEqual(sent.args.slice(-6).map((arg) => arg.value), ['unsubscribe', 'from', 'jobs', 'unsubscribe', 'from', 'jobs']);
+});
+test('a delete phrase preview counts the window\'s mail that really matches, subject and body apart', async () => {
+  let sent;
+  const result = await countPhraseMail('http://example.test', 'C2C  only', async (url, options) => {
+    sent = JSON.parse(options.body).requests[0].stmt;
+    return response([
+      { subject: 'Java role', rawBody: 'Rate: C2C\nonly.' },
+      { subject: 'Newsletter', rawBody: 'c2c-only-list' },
+      { subject: 'C2C only', rawBody: '' },
+    ]);
+  });
+  assert.deepEqual(result, { emails: 2, days: 60 });
+  assert.deepEqual(sent.args.slice(1).map((arg) => arg.value), ['c2c', 'only', 'c2c', 'only']);
+  assert.match(sent.sql, /receivedAt > \?/);
+});
+test('the delete-phrase query, run on a real SQLite mail log, keeps wrapped matches and drops strangers', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE "budget-lens_mail_messages" (messageId TEXT, subject TEXT, senderEmail TEXT, receivedAt INTEGER, rawBody TEXT, mailThreadId TEXT, bodyTruncated INTEGER)');
+  const now = Math.floor(Date.now() / 1000);
+  const insert = db.prepare('INSERT INTO "budget-lens_mail_messages" VALUES (?, ?, ?, ?, ?, ?, 0)');
+  insert.run('wrapped', 'Weekly digest', 'news@example.com', now - 60, 'Click to unsubscribe\r\n   from\tjobs', 'wrapped');
+  insert.run('scattered', 'Weekly digest', 'news@example.com', now - 50, 'from the desk: jobs to unsubscribe', 'scattered');
+  insert.run('lunch', 'Lunch?', 'friend@example.com', now - 40, 'hi', 'lunch');
+  const libsql = async (url, options) => {
+    const { sql, args } = JSON.parse(options.body).requests[0].stmt;
+    const statement = db.prepare(sql);
+    const rows = statement.all(...args.map((arg) => (arg.type === 'integer' ? Number(arg.value) : arg.value)));
+    const cols = rows.length ? Object.keys(rows[0]) : statement.columns().map((col) => col.name);
+    return response(rows.map((row) => Object.fromEntries(cols.map((col) => [col, row[col]]))));
+  };
+  const results = await readWorker('http://example.test', libsql, { deletePhrases: ['unsubscribe from jobs'] });
+  // The prefilter lets both digests through; only the store's whole-phrase test would delete "scattered".
+  assert.deepEqual(results.map((row) => row.id).sort(), ['scattered', 'wrapped']);
+  assert.deepEqual(await countPhraseMail('http://example.test', 'unsubscribe from jobs', libsql), { emails: 1, days: 60 });
 });

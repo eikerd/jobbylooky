@@ -498,7 +498,7 @@ const later = '2099-01-01T12:00:00.000Z';
 test('a delete phrase passes newly synced mail that carries it, and queues its Gmail delete', () =>
   withStore((store) => {
     store.import([{ ...message, id: 'old@x', threadId: 'told', body: 'C2C only, no W2.' }], { synced: true });
-    store.addPhrase({ phrase: 'C2C  only', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'C2C  only' });
     store.import([{ ...message, id: 'd@x', threadId: 'td', body: 'Rate: C2C\nonly, please.', receivedAt: later }], { synced: true });
     const deleted = store.snapshot().opportunities.find((row) => row.id.endsWith(':td'));
     assert.equal(deleted.status, 'Passed');
@@ -508,19 +508,25 @@ test('a delete phrase passes newly synced mail that carries it, and queues its G
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':told')).status, 'New');
     store.import([{ ...message, id: 'p@x', threadId: 'tpaste', body: 'C2C only.', receivedAt: later }]);
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':tpaste')).status, 'New');
-    assert.deepEqual(store.deletePhrases(), ['C2C only']);
+    assert.deepEqual(store.deletePhrases().map((row) => row.phrase), ['C2C only']);
+    // A delete phrase never highlights or scores: it is no tracked phrase.
+    assert.equal(deleted.reasons.some((reason) => reason.phrase === 'C2C only'), false);
   }));
-test('a delete phrase is two to four words', () =>
+test('delete phrases are their own list: two to four words, never a tracked phrase', () =>
   withStore((store) => {
-    assert.throws(() => store.addPhrase({ phrase: 'Java', kind: 'delete' }), /2 to 4 words/);
-    assert.throws(() => store.addPhrase({ phrase: 'one two three four five', kind: 'delete' }), /2 to 4 words/);
-    store.addPhrase({ phrase: 'Java', kind: 'negative' });
-    store.addPhrase({ phrase: 'must be local', kind: 'delete' });
-    assert.ok(store.phrases().find((row) => row.kind === 'delete').addedAt);
-  }));
+    assert.throws(() => store.addDeletePhrase({ phrase: 'Java' }), /2 to 4 words/);
+    assert.throws(() => store.addDeletePhrase({ phrase: 'one two three four five' }), /2 to 4 words/);
+    assert.throws(() => store.addPhrase({ phrase: 'must be local', kind: 'delete' }), /negative, positive/);
+    store.addDeletePhrase({ phrase: 'must be local' });
+    assert.throws(() => store.addDeletePhrase({ phrase: 'Must  be LOCAL' }), /already on the list/);
+    assert.ok(store.deletePhrases()[0].addedAt);
+    assert.equal(store.phrases().some((row) => row.phrase === 'must be local'), false);
+    store.removeDeletePhrase(store.deletePhrases()[0].id);
+    assert.deepEqual(store.deletePhrases(), []);
+  }));;
 test('non-job mail read for a delete phrase is kept as a passed row only when the phrase really matches', () =>
   withStore((store) => {
-    store.addPhrase({ phrase: 'unsubscribe from jobs', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'unsubscribe from jobs' });
     store.import([
       { ...message, id: 'n1@x', threadId: 'tn1', subject: 'Weekly digest', body: 'Click to unsubscribe from jobs.', receivedAt: later, phraseOnly: true },
       { ...message, id: 'n2@x', threadId: 'tn2', subject: 'Weekly digest', body: 'unsubscribe-from-jobs-list', receivedAt: later, phraseOnly: true },
@@ -531,7 +537,7 @@ test('non-job mail read for a delete phrase is kept as a passed row only when th
   }));
 test('a delete phrase passes new mail in an untouched thread, never one the owner engaged with', () =>
   withStore((store) => {
-    store.addPhrase({ phrase: 'onsite five days', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'onsite five days' });
     store.import([{ ...message, id: 'e1@x', threadId: 'te', receivedAt: later }], { synced: true });
     store.import([{ ...message, id: 'e2@x', threadId: 'te', body: 'Now onsite five days.', receivedAt: '2099-01-02T12:00:00.000Z' }], { synced: true });
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':te')).status, 'Passed');
@@ -543,7 +549,7 @@ test('a delete phrase passes new mail in an untouched thread, never one the owne
   }));
 test('non-job phrase mail in a thread that already has a row is left alone, never a second row', () =>
   withStore((store) => {
-    store.addPhrase({ phrase: 'unsubscribe from jobs', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'unsubscribe from jobs' });
     store.import([{ ...message, id: 'j1@x', threadId: 'tj', receivedAt: later }], { synced: true });
     store.import([{ ...message, id: 'j2@x', threadId: 'tj', from: 'other@x.example', subject: 'Digest', body: 'unsubscribe from jobs', receivedAt: '2099-01-02T12:00:00.000Z', phraseOnly: true }], { synced: true });
     const rows = store.snapshot().opportunities.filter((row) => row.id.endsWith(':tj'));
@@ -553,7 +559,7 @@ test('non-job phrase mail in a thread that already has a row is left alone, neve
 test('a delete phrase never trashes a thread that began before the phrase, or one the owner noted', () =>
   withStore((store) => {
     store.import([{ ...message, id: 'o1@x', threadId: 'to' }], { synced: true });
-    store.addPhrase({ phrase: 'C2C only', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'C2C only' });
     store.import([{ ...message, id: 'o2@x', threadId: 'to', body: 'C2C only.', receivedAt: later }], { synced: true });
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':to')).status, 'New');
     store.import([{ ...message, id: 'n1@x', threadId: 'tn', receivedAt: later }], { synced: true });
@@ -564,13 +570,13 @@ test('a delete phrase never trashes a thread that began before the phrase, or on
   }));
 test('a delete phrase is matched in the subject or the body, never across the two', () =>
   withStore((store) => {
-    store.addPhrase({ phrase: 'Remote Required', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'Remote Required' });
     store.import([{ ...message, id: 'b1@x', threadId: 'tb1', subject: 'Angular Developer Remote', body: 'Required: Angular', receivedAt: later }], { synced: true });
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':tb1')).status, 'New');
   }));
 test('passing an automatically undone pitch by hand drops the automatic marker; undoing keeps it as a guard', () =>
   withStore((store) => {
-    store.addPhrase({ phrase: 'C2C only', kind: 'delete' });
+    store.addDeletePhrase({ phrase: 'C2C only' });
     store.import([{ ...message, id: 'u1@x', threadId: 'tu', body: 'C2C only.', receivedAt: later }], { synced: true });
     const id = store.snapshot().opportunities.find((row) => row.id.endsWith(':tu')).id;
     store.update(id, { status: 'New' });
@@ -579,6 +585,25 @@ test('passing an automatically undone pitch by hand drops the automatic marker; 
     assert.equal(store.snapshot().opportunities.find((row) => row.id === id).status, 'New');
     const passed = store.update(id, { status: 'Passed' });
     assert.equal('deletedBy' in passed, false);
+  }));
+test('a would-be delete phrase reports how many pitches here it matches, and is validated like a save', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'v1@x', threadId: 'tv1', body: 'C2C only please' }, { ...message, id: 'v2@x', threadId: 'tv2' }]);
+    assert.deepEqual(store.deletePhrasePreview({ phrase: ' c2c   ONLY ' }), { phrase: 'c2c ONLY', pitches: 1 });
+    assert.throws(() => store.deletePhrasePreview({ phrase: 'C2C' }), /2 to 4 words/);
+    // Previewing saves nothing.
+    assert.deepEqual(store.deletePhrases(), []);
+  }));
+test('later phrase-only mail in a thread already deleted for a phrase joins that row and its delete', () =>
+  withStore((store) => {
+    store.addDeletePhrase({ phrase: 'unsubscribe from jobs' });
+    const digest = { ...message, threadId: 'tdig', from: 'news@x.example', subject: 'Digest', body: 'unsubscribe from jobs', phraseOnly: true };
+    store.import([{ ...digest, id: 'g1@x', receivedAt: later }], { synced: true });
+    store.import([{ ...digest, id: 'g2@x', receivedAt: '2099-01-02T12:00:00.000Z' }], { synced: true });
+    const rows = store.snapshot().opportunities.filter((row) => row.id.endsWith(':tdig'));
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].messageIds, ['g1@x', 'g2@x']);
+    assert.equal(rows[0].trashPending, true);
   }));
 
 const job = 'Requirements:\nDesign Angular applications with advanced dependency injection and accessible reusable components. Build complex data visualizations using custom rendering strategies and high volume streaming data. Maintain thorough end to end integration coverage for distributed workflows and complex enterprise permissions.';

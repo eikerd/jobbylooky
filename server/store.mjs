@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS, DELETE_PHRASE_WORDS, deletePhraseMatch } from './screen.mjs';
+import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS } from './screen.mjs';
+import { carriesPhrase, cleanDeletePhrase, deletePhraseMatch } from './delete-phrases.mjs';
 import { groupOpportunities, passedOriginal } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
@@ -193,14 +194,23 @@ export function createStore(directory) {
         // Not job mail, read only because it carries a delete phrase: kept as a passed row, so its
         // Gmail delete is queued and retried like any other, and the owner can see what went.
         if (message.phraseOnly) {
-          // Non-job mail in a thread that already has a row is the owner's job thread: left alone.
-          const threaded = next.opportunities.some((row) => row.id === id || row.messageIds.includes(message.threadId));
-          if (known || threaded || !synced) continue;
-          const row = newRow(message, id);
-          if (passByPhrase(next.trackedPhrases, row, message)) {
-            next.opportunities.push(row);
-            added++;
+          if (known || !synced) continue;
+          const threadRow = next.opportunities.find((row) => row.id === id || row.messageIds.includes(message.threadId));
+          // A thread that already holds a job pitch is the owner's: its non-job mail is left alone.
+          if (threadRow && !threadRow.phraseOnly) continue;
+          const hit = deletePhraseMatch(next.deletePhrases, message);
+          if (!hit) continue;
+          if (threadRow) {
+            // A later email in a thread already deleted for a phrase joins that row, and its delete.
+            threadRow.messageIds.push(message.id);
+            threadRow.history = [...(threadRow.history ?? []), { id: message.id, receivedAt: message.receivedAt, from: message.from }];
+            Object.assign(threadRow, { status: 'Passed', trashPending: true });
+            continue;
           }
+          const row = { ...newRow(message, id), phraseOnly: true };
+          passByPhrase(next.deletePhrases, row, message);
+          next.opportunities.push(row);
+          added++;
           continue;
         }
         // Read only because the sender is watched, and not an answer: e.g. older non-job mail.
@@ -259,7 +269,7 @@ export function createStore(directory) {
           if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
           else if (synced && !engaged) {
             const first = (existing.history ?? []).map((item) => item.receivedAt).sort()[0] ?? existing.receivedAt;
-            passByPhrase(next.trackedPhrases, existing, message, first < message.receivedAt ? first : message.receivedAt);
+            passByPhrase(next.deletePhrases, existing, message, first < message.receivedAt ? first : message.receivedAt);
           }
         } else {
           const row = newRow(message, id);
@@ -267,7 +277,7 @@ export function createStore(directory) {
           const rule = synced ? liveRejection(next.rejectRules, row, budget) : null;
           // Pending before any delete starts, like a Pass from the page, so a failed delete is retried.
           if (rule) Object.assign(row, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
-          else if (synced && !passByPhrase(next.trackedPhrases, row, message)) passRepeat(next.opportunities, row);
+          else if (synced && !passByPhrase(next.deletePhrases, row, message)) passRepeat(next.opportunities, row);
           next.opportunities.push(row);
           added++;
         }
@@ -293,8 +303,28 @@ export function createStore(directory) {
       commit(next);
       return passed.map((row) => row.id);
     },
-    /** Delete phrases; the mail sync reads any mail that carries one, job mail or not. */
-    deletePhrases: () => state.trackedPhrases.filter((row) => row.kind === 'delete').map((row) => row.phrase),
+    /** Delete phrases, kept apart from the tracked ones; the mail sync reads any mail that carries one. */
+    deletePhrases: () => structuredClone(state.deletePhrases ?? []),
+    /** How many pitches here a would-be delete phrase matches, shown before it is saved. */
+    deletePhrasePreview(input) {
+      const phrase = cleanDeletePhrase(input);
+      return { phrase, pitches: state.opportunities.filter((row) => carriesPhrase(phrase, row)).length };
+    },
+    addDeletePhrase(input) {
+      const phrase = cleanDeletePhrase(input);
+      const list = state.deletePhrases ?? [];
+      if (list.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
+        throw Object.assign(new Error('That delete phrase is already on the list.'), { status: 409 });
+      // It dates itself: it deletes mail that arrives from now on, never what is already here.
+      commit({ ...state, deletePhrases: [...list, { id: randomUUID(), phrase, addedAt: new Date().toISOString() }] });
+      return structuredClone(state.deletePhrases);
+    },
+    removeDeletePhrase(id) {
+      if (!(state.deletePhrases ?? []).some((row) => row.id === id))
+        throw Object.assign(new Error('Delete phrase not found.'), { status: 404 });
+      commit({ ...state, deletePhrases: state.deletePhrases.filter((row) => row.id !== id) });
+      return structuredClone(state.deletePhrases);
+    },
     /** Addresses the owner has really written to; the mail sync reads all of their mail. */
     watchedSenders: () => [
       ...new Set(state.opportunities.flatMap((row) => (row.replies ?? []).filter((reply) => !reply.preview).map((reply) => reply.to))),
@@ -362,15 +392,10 @@ export function createStore(directory) {
         throw Object.assign(new Error('A phrase must be 2–100 characters.'), { status: 400 });
       const kind = input.kind ?? 'negative';
       if (!PHRASE_KINDS.includes(kind))
-        throw Object.assign(new Error('A phrase is negative, positive, neutral, purple, pink or delete.'), { status: 400 });
-      const words = phrase.split(' ').length;
-      if (kind === 'delete' && (words < DELETE_PHRASE_WORDS.min || words > DELETE_PHRASE_WORDS.max))
-        throw Object.assign(new Error(`A delete phrase is ${DELETE_PHRASE_WORDS.min} to ${DELETE_PHRASE_WORDS.max} words.`), { status: 400 });
+        throw Object.assign(new Error('A phrase is negative, positive, neutral, purple or pink.'), { status: 400 });
       if (state.trackedPhrases.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
         throw Object.assign(new Error('That phrase is already tracked.'), { status: 409 });
-      // A delete phrase dates itself: it deletes mail that arrives from now on, never what is already here.
-      const added = kind === 'delete' ? { id: randomUUID(), phrase, kind, addedAt: new Date().toISOString() } : { id: randomUUID(), phrase, kind };
-      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, added] }));
+      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase, kind }] }));
       return structuredClone(state.trackedPhrases);
     },
     phraseColors: () => ({ ...DEFAULT_PHRASE_COLORS, ...state.phraseColors }),

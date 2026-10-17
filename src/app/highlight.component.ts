@@ -14,7 +14,6 @@ import type { TrackedPhrase } from './models';
     .tracked.neutral { background: var(--neutral-mark); color: var(--neutral-ink); }
     .tracked.purple { background: var(--purple-mark); color: var(--purple-ink); }
     .tracked.pink { background: var(--pink-mark); color: var(--pink-ink); }
-    .tracked.delete { background: var(--delete-mark); color: var(--delete-ink); }
     .tracked strong { font-weight: 700; }
   `],
 })

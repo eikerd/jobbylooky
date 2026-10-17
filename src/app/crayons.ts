@@ -23,7 +23,6 @@ export const DEFAULT_PHRASE_COLORS: Record<PhraseKind, string> = {
   neutral: '#ffff00',
   purple: '#cc66ff',
   pink: '#ff6fcf',
-  delete: '#800000',
 };
 
 type Rgb = [number, number, number];

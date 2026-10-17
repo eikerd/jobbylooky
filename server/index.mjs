@@ -5,7 +5,7 @@ import { resolve, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { createStore } from './store.mjs';
-import { readWorker } from './mail-worker.mjs';
+import { readWorker, countPhraseMail } from './mail-worker.mjs';
 import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
@@ -44,7 +44,7 @@ async function sync() {
   syncing = true;
   try {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
-    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases() });
+    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases().map((row) => row.phrase) });
     const added = store.import(messages, { synced: true });
     store.sweepRepeats();
     trashAutoPassed();
@@ -259,6 +259,17 @@ export const server = createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/phrases') return json(200, store.phrases());
+    if (req.method === 'GET' && url.pathname === '/api/delete-phrases') return json(200, store.deletePhrases());
+    // Before a delete phrase is saved: how much mail it would have caught. The mail log is optional.
+    if (req.method === 'GET' && url.pathname === '/api/delete-phrases/preview') {
+      const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') });
+      if (!workerUrl) return json(200, { ...preview, emails: null, days: null });
+      try {
+        return json(200, { ...preview, ...(await countPhraseMail(workerUrl, preview.phrase)) });
+      } catch (error) {
+        return json(200, { ...preview, emails: null, days: null, mailError: error.message });
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/reject-rules') return json(200, store.rejectRules());
     if (req.method === 'GET' && url.pathname === '/api/phrase-colors') return json(200, store.phraseColors());
     if (req.method === 'GET' && url.pathname === '/api/resume') {
@@ -301,6 +312,8 @@ export const server = createServer(async (req, res) => {
     }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/reject-rules/'))
       return json(200, store.removeRejectRule(decodeURIComponent(url.pathname.slice('/api/reject-rules/'.length))));
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/delete-phrases/'))
+      return json(200, store.removeDeletePhrase(decodeURIComponent(url.pathname.slice('/api/delete-phrases/'.length))));
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/phrases/'))
       return json(200, store.removePhrase(decodeURIComponent(url.pathname.slice('/api/phrases/'.length))));
     if (['POST', 'PATCH'].includes(req.method)) {
@@ -308,6 +321,8 @@ export const server = createServer(async (req, res) => {
         return json(415, { error: 'JSON content is required.' });
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
+      if (req.method === 'POST' && url.pathname === '/api/delete-phrases')
+        return json(201, store.addDeletePhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/reject-rules')
         return json(201, store.addRejectRule(await body(req)));
       if (req.method === 'PATCH' && url.pathname.startsWith('/api/reject-rules/'))

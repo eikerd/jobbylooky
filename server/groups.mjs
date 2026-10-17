@@ -39,6 +39,9 @@ function sure(a, b) {
   const from = sender(a.row.from);
   if (!from || from !== sender(b.row.from)) return null;
   if (multiRole(a.row) || multiRole(b.row)) return null;
+  // A different stated client or city is a different opening, however alike the text reads.
+  if (a.company && b.company && a.company !== b.company) return null;
+  if (a.location && b.location && a.location !== b.location) return null;
   const subject = subjectKey(a.row.subject);
   const title = normalize(a.row.title || '');
   const titled = title && title === normalize(b.row.title || '') && a.location && a.location === b.location;
