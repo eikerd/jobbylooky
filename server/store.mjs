@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
-import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS } from './screen.mjs';
+import { screen as screenMessage, isOpportunity, STATUSES, DEFAULT_TRACKED_PHRASES, PHRASE_KINDS, DEFAULT_PHRASE_COLORS, DELETE_PHRASE_WORDS, deletePhraseMatch } from './screen.mjs';
 import { groupOpportunities, passedOriginal } from './groups.mjs';
 import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
@@ -44,6 +44,17 @@ function passRepeat(rows, row) {
   const original = passedOriginal(rows, row);
   if (!original) return false;
   Object.assign(row, { status: 'Passed', trashPending: true, repeatOf: { id: original.id, receivedAt: original.receivedAt, at: new Date().toISOString() } });
+  return true;
+}
+
+/**
+ * Passes `row` when the email carries one of the owner's delete phrases, pending its Gmail delete.
+ * The owner, 2026-10-16: "If they're in the email, immediate deletion."
+ */
+function passByPhrase(phrases, row, message) {
+  const hit = deletePhraseMatch(phrases, message);
+  if (!hit) return false;
+  Object.assign(row, { status: 'Passed', trashPending: true, deletedBy: { id: hit.id, phrase: hit.phrase, at: new Date().toISOString() } });
   return true;
 }
 
@@ -178,6 +189,17 @@ export function createStore(directory) {
           added++;
           continue;
         }
+        // Not job mail, read only because it carries a delete phrase: kept as a passed row, so its
+        // Gmail delete is queued and retried like any other, and the owner can see what went.
+        if (message.phraseOnly) {
+          if (known || !synced) continue;
+          const row = newRow(message, id);
+          if (passByPhrase(next.trackedPhrases, row, message)) {
+            next.opportunities.push(row);
+            added++;
+          }
+          continue;
+        }
         // Read only because the sender is watched, and not an answer: e.g. older non-job mail.
         if (message.watchedOnly && !known) continue;
         const existing = next.opportunities.find((row) => row.messageIds.includes(message.id)) ?? next.opportunities.find(
@@ -227,13 +249,14 @@ export function createStore(directory) {
           const engaged = existing.status !== 'New' || existing.replies?.some((reply) => !reply.preview);
           const rule = synced && !engaged ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }, budget) : null;
           if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
+          else if (synced && !engaged) passByPhrase(next.trackedPhrases, existing, message);
         } else {
           const row = newRow(message, id);
           // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
           const rule = synced ? liveRejection(next.rejectRules, row, budget) : null;
           // Pending before any delete starts, like a Pass from the page, so a failed delete is retried.
           if (rule) Object.assign(row, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
-          else if (synced) passRepeat(next.opportunities, row);
+          else if (synced && !passByPhrase(next.trackedPhrases, row, message)) passRepeat(next.opportunities, row);
           next.opportunities.push(row);
           added++;
         }
@@ -259,6 +282,8 @@ export function createStore(directory) {
       commit(next);
       return passed.map((row) => row.id);
     },
+    /** Delete phrases; the mail sync reads any mail that carries one, job mail or not. */
+    deletePhrases: () => state.trackedPhrases.filter((row) => row.kind === 'delete').map((row) => row.phrase),
     /** Addresses the owner has really written to; the mail sync reads all of their mail. */
     watchedSenders: () => [
       ...new Set(state.opportunities.flatMap((row) => (row.replies ?? []).filter((reply) => !reply.preview).map((reply) => reply.to))),
@@ -326,10 +351,15 @@ export function createStore(directory) {
         throw Object.assign(new Error('A phrase must be 2–100 characters.'), { status: 400 });
       const kind = input.kind ?? 'negative';
       if (!PHRASE_KINDS.includes(kind))
-        throw Object.assign(new Error('A phrase is negative, positive, neutral, purple or pink.'), { status: 400 });
+        throw Object.assign(new Error('A phrase is negative, positive, neutral, purple, pink or delete.'), { status: 400 });
+      const words = phrase.split(' ').length;
+      if (kind === 'delete' && (words < DELETE_PHRASE_WORDS.min || words > DELETE_PHRASE_WORDS.max))
+        throw Object.assign(new Error(`A delete phrase is ${DELETE_PHRASE_WORDS.min} to ${DELETE_PHRASE_WORDS.max} words.`), { status: 400 });
       if (state.trackedPhrases.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
         throw Object.assign(new Error('That phrase is already tracked.'), { status: 409 });
-      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, { id: randomUUID(), phrase, kind }] }));
+      // A delete phrase dates itself: it deletes mail that arrives from now on, never what is already here.
+      const added = kind === 'delete' ? { id: randomUUID(), phrase, kind, addedAt: new Date().toISOString() } : { id: randomUUID(), phrase, kind };
+      commit(rescreen({ ...state, trackedPhrases: [...state.trackedPhrases, added] }));
       return structuredClone(state.trackedPhrases);
     },
     phraseColors: () => ({ ...DEFAULT_PHRASE_COLORS, ...state.phraseColors }),

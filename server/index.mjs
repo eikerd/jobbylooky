@@ -44,7 +44,7 @@ async function sync() {
   syncing = true;
   try {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
-    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders() });
+    const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases() });
     const added = store.import(messages, { synced: true });
     store.sweepRepeats();
     trashAutoPassed();
@@ -83,7 +83,7 @@ function passEndedJobs() {
   return passed;
 }
 /**
- * Mail a live reject rule passed, or a repeat of a job already passed, goes to Gmail Trash like a
+ * Mail a live reject rule or a delete phrase passed, or a repeat of a job already passed, goes to Gmail Trash like a
  * Pass from the page. The store marks it pending as it passes it, so a crash or a Gmail failure is
  * retried on the next sync. No page waits on these deletes, so a failure is kept here and shown in
  * the connection banner.
@@ -91,9 +91,9 @@ function passEndedJobs() {
 const autoTrashFailures = new Map();
 function trashAutoPassed() {
   for (const row of store.snapshot().opportunities) {
-    if (row.status !== 'Passed' || !(row.rejectedBy || row.repeatOf) || !row.trashPending || !gmailIds(row.messageIds).length) continue;
+    if (row.status !== 'Passed' || !(row.rejectedBy || row.repeatOf || row.deletedBy) || !row.trashPending || !gmailIds(row.messageIds).length) continue;
     void passTrash.enqueue(row.id).then((outcome) => {
-      if (outcome?.trashError) autoTrashFailures.set(row.id, { title: row.title, rule: Boolean(row.rejectedBy) });
+      if (outcome?.trashError) autoTrashFailures.set(row.id, { title: row.title, rule: Boolean(row.rejectedBy), phrase: row.deletedBy?.phrase });
       else autoTrashFailures.delete(row.id);
     });
   }
@@ -104,8 +104,8 @@ function autoTrashError() {
   const failed = [...autoTrashFailures].filter(([id]) => pending.has(id)).map(([, failure]) => failure);
   if (!failed.length) return '';
   const more = failed.length > 1 ? ` and ${failed.length - 1} more` : '';
-  const by = failed[0].rule ? 'A reject rule' : 'Jobbylooky';
-  const why = failed[0].rule ? '' : ' as a repeat of a job you passed';
+  const by = failed[0].rule ? 'A reject rule' : failed[0].phrase ? `The delete phrase "${failed[0].phrase}"` : 'Jobbylooky';
+  const why = failed[0].rule || failed[0].phrase ? '' : ' as a repeat of a job you passed';
   return `${by} passed "${failed[0].title}"${more}${why}, but Gmail did not delete it. It retries on every mail check.`;
 }
 function schedule() {

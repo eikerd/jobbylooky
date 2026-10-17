@@ -34,3 +34,4 @@ time { font-size:13px; font-weight:400; color:var(--muted); }
 @media (max-width:1000px) { .profile-workspace { grid-template-columns:minmax(230px,.85fr) minmax(300px,1.2fr); } .profile-detail { padding:18px 20px; } }
 @media (max-width:800px) { .profile-workspace { grid-template-columns:minmax(220px,.85fr) minmax(280px,1fr); height:calc(100dvh - 210px); } }
 @media (max-width:620px) { .profile-workspace { display:block; height:auto; min-height:0; } .profile-list { max-height:300px; border-right:0; border-bottom:1px solid var(--line); } .profile-detail { overflow:visible; padding:18px 16px; } }
+.job-heading h4 app-convo-heat { margin-right: 6px; }

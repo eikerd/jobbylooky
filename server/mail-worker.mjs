@@ -8,10 +8,15 @@ const SUBJECT_PREFILTER = OPPORTUNITY_TERMS.map(() => 'lower(subject) LIKE ?').j
 /**
  * `watch` lists addresses the owner has replied to: their mail is read whatever
  * its subject, so an answer like "the client is Fidelity" is not filtered out.
+ * `deletePhrases` are the owner's delete phrases: mail carrying one is read even when it is not
+ * job mail, so the store can pass it and Gmail can delete it.
  */
-export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
+export async function readWorker(url, fetcher = fetch, { watch = [], deletePhrases = [] } = {}) {
   const watched = [...new Set(watch.map((value) => String(value).toLowerCase()).filter((value) => /^[^\s<>]+@[^\s<>]+$/.test(value)))];
   const senderFilter = watched.map(() => 'instr(lower(senderEmail), ?) > 0').join(' OR ');
+  // A prefilter only, on single-spaced text; the store's whole-word match makes the decision.
+  const phrases = [...new Set(deletePhrases.map((value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase()).filter(Boolean))];
+  const phraseFilter = phrases.map(() => '(instr(lower(subject), ?) > 0 OR instr(lower(rawBody), ?) > 0)').join(' OR ');
   async function query(sql, args = []) {
     const response = await fetcher(`${url.replace(/\/$/, '')}/v2/pipeline`, {
       method: 'POST',
@@ -47,7 +52,7 @@ export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
     const sql = `SELECT messageId, subject, senderEmail, receivedAt, rawBody, ${threadColumn}, ${truncatedColumn}
       FROM "budget-lens_mail_messages"
       WHERE (receivedAt > ? OR (receivedAt = ? AND messageId > ?))
-        AND ((${SUBJECT_PREFILTER})${senderFilter ? ` OR ${senderFilter}` : ''})
+        AND ((${SUBJECT_PREFILTER})${senderFilter ? ` OR ${senderFilter}` : ''}${phraseFilter ? ` OR ${phraseFilter}` : ''})
       ORDER BY receivedAt, messageId LIMIT 100`;
     page = await query(sql, [
       { type: 'integer', value: String(cursorTime) },
@@ -55,6 +60,7 @@ export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
       { type: 'text', value: cursorId },
       ...OPPORTUNITY_TERMS.map((term) => ({ type: 'text', value: `%${term.toLowerCase()}%` })),
       ...watched.map((value) => ({ type: 'text', value })),
+      ...phrases.flatMap((value) => [{ type: 'text', value }, { type: 'text', value }]),
     ]);
     for (const row of page) {
       const message = {
@@ -74,6 +80,7 @@ export async function readWorker(url, fetcher = fetch, { watch = [] } = {}) {
       // Mail read only because its sender is watched; the store keeps it only if it is an answer.
       if (isOpportunity(message)) messages.push(message);
       else if (watched.includes(address(message.from))) messages.push({ ...message, watchedOnly: true });
+      else if (phrases.length) messages.push({ ...message, phraseOnly: true });
       cursorTime = Number(row.receivedAt);
       cursorId = row.messageId;
     }

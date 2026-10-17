@@ -626,6 +626,7 @@ textarea {
 .fit-tags .neutral { background: var(--neutral-soft); color: var(--neutral-ink); }
 .fit-tags .purple { background: var(--purple-soft); color: var(--purple-ink); }
 .fit-tags .pink { background: var(--pink-soft); color: var(--pink-ink); }
+.fit-tags .delete { background: var(--delete-soft); color: var(--delete-ink); }
 .decisions { flex-wrap: wrap; }
 .received-detail { gap: 5px 16px; margin: 0; }
 .decisions { gap: 6px; }

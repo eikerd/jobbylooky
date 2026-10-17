@@ -131,6 +131,7 @@
             <option value="neutral">• Neutral</option>
             <option value="purple">• Purple</option>
             <option value="pink">• Pink</option>
+            <option value="delete">🗑 Delete</option>
           </select>
           <button class="button primary" type="submit" [disabled]="busy() || phraseDraft.trim().length < 2">Track</button>
         </form>
@@ -172,9 +173,9 @@
     } @else if (directoryMode() === 'rules') {
       <app-rules [rows]="opportunities()" [rules]="rejectRules()" [busy]="busy()" (save)="saveRule($event)" (setMode)="setRuleMode($event)" (remove)="removeRule($event)" (openPitch)="openProfilePitch($event)" />
     } @else if (directoryMode() === 'postings') {
-      <app-postings [rows]="opportunities()" (openPitch)="openProfilePitch($event)" />
+      <app-postings [rows]="opportunities()" [heat]="heatByPitch()" (openPitch)="openProfilePitch($event)" />
     } @else if (profileMode(); as mode) {
-      <app-profiles [groups]="jobGroups()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
+      <app-profiles [groups]="jobGroups()" [heat]="heatByPitch()" [mode]="mode" [focusId]="profileFocus()" (openPitch)="openProfilePitch($event)" (openRecruiter)="openDirectory('recruiters', $event)" (openCompany)="openDirectory('companies', $event)" />
     } @else {
       <div class="workspace">
         <section class="queue" aria-label="Opportunities">
@@ -192,12 +193,13 @@
               [class.full-time]="row.employmentType === 'Full-time'"
               [class.convo-waiting]="conversation(group.pitches) === 'waiting'"
               [class.convo-live]="conversation(group.pitches) === 'answered'"
+              [attr.data-heat]="heatByPitch().get(row.id)?.level"
               [class.selected]="selectedGroup()?.id === group.id"
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
               (click)="open(row, true)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><app-convo-heat [heat]="heatByPitch().get(row.id)" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong><app-age [at]="row.receivedAt" /></strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -218,6 +220,9 @@
                   }
                   @if (row.status === 'Passed' && row.rejectedBy) {
                     <span class="rejected-by" [attr.title]="'Passed by the rule ' + row.rejectedBy.name">Rule: {{ row.rejectedBy.name }}</span>
+                  }
+                  @if (row.status === 'Passed' && row.deletedBy) {
+                    <span class="rejected-by" [attr.title]="'Deleted by the phrase “' + row.deletedBy.phrase + '”'">🗑 {{ row.deletedBy.phrase }}</span>
                   }
                   @if (row.status === 'Passed' && row.repeatOf) {
                     <span class="rejected-by" [attr.title]="'Repeats the ' + (row.repeatOf.receivedAt | date: 'MMM d') + ' pitch you passed'">Repeat</span>
@@ -319,6 +324,9 @@
             @if (row.autoPassed && row.status === 'Passed') {
               <p class="auto-passed">Passed automatically {{ row.autoPassed.at | date: 'MMM d' }} (<app-age [at]="row.autoPassed.at" />): {{ autoPassedReason(row) }}.</p>
             }
+            @if (row.deletedBy && row.status === 'Passed') {
+              <p class="auto-passed">Deleted automatically {{ row.deletedBy.at | date: 'MMM d' }} (<app-age [at]="row.deletedBy.at" />): it contains your delete phrase “{{ row.deletedBy.phrase }}”.</p>
+            }
             @if (row.repeatOf && row.status === 'Passed') {
               <p class="auto-passed">Passed automatically {{ row.repeatOf.at | date: 'MMM d' }} (<app-age [at]="row.repeatOf.at" />): it repeats the {{ row.repeatOf.receivedAt | date: 'MMM d' }} pitch you passed.</p>
             }
@@ -353,7 +361,7 @@
                         @for (item of related(); track item.id) {
                           <tr [class.selected]="item.pitch.id === selectedId()" [class.full-time]="item.pitch.employmentType === 'Full-time'" (click)="busy() || open(item.pitch)">
                             <td><app-age [at]="item.receivedAt" />@if (isDate(item.receivedAt)) { · <time [attr.datetime]="item.receivedAt">{{ item.receivedAt | date: 'MMM d' }}</time>}</td>
-                            <td><button type="button" class="related-sender" [attr.aria-current]="item.pitch.id === selectedId() || null" (click)="$event.stopPropagation(); open(item.pitch)" [disabled]="busy()"><app-source-icon [from]="item.from" /><span>{{ item.from }}</span></button></td>
+                            <td><button type="button" class="related-sender" [attr.aria-current]="item.pitch.id === selectedId() || null" (click)="$event.stopPropagation(); open(item.pitch)" [disabled]="busy()"><app-source-icon [from]="item.from" /><app-convo-heat [heat]="pitchHeat(item.pitch)" /><span>{{ item.from }}</span></button></td>
                             <td>
                               @if (item.pitch.pay; as pay) {
                                 <strong>{{ money(pay.min) }}{{ pay.max !== null ? '–' + money(pay.max) : '' }}</strong> / {{ pay.period }}

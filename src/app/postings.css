@@ -18,3 +18,4 @@ tbody tr:last-child td { border-bottom: 0; }
 .state.open { background: var(--accent-soft); color: var(--accent-ink); }
 .state.closed, .state.dead { background: var(--bad-soft); color: var(--bad); }
 .postings-empty { color: var(--soft); }
+.job app-convo-heat { margin-right: 6px; }

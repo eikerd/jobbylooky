@@ -1,18 +1,21 @@
 import { Component, computed, input, output, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Age } from './age.component';
+import { ConvoHeat } from './convo-heat.component';
+import type { ConversationHeat } from './conversation';
 import type { Opportunity } from './models';
 import { postingRows, sortPostings, type PostingColumn } from './link-state';
 
 /** Every job posting the link sweep has read, to see how long jobs stay up. */
 @Component({
   selector: 'app-postings',
-  imports: [DatePipe, Age],
+  imports: [DatePipe, Age, ConvoHeat],
   templateUrl: './postings.html',
   styleUrl: './postings.css',
 })
 export class Postings {
   readonly rows = input.required<Opportunity[]>();
+  readonly heat = input<ReadonlyMap<string, ConversationHeat>>(new Map());
   readonly openPitch = output<string>();
   readonly columns: { key: PostingColumn; label: string }[] = [
     { key: 'title', label: 'Job' },

@@ -20,6 +20,15 @@
 .opportunity.convo-live { background: var(--convo-live-soft); border-color: var(--convo-live); border-left: 6px solid var(--convo-live); }
 .opportunity.convo-live:hover { background: var(--convo-live-hover); }
 .opportunity.convo-live .row-heading { color: var(--convo-live-ink); }
+/* Heat: the card deepens in its state's colour with every email either way (levels 1–5). */
+.opportunity.convo-waiting { --hue: var(--convo-waiting); }
+.opportunity.convo-live { --hue: var(--convo-live); }
+.opportunity[data-heat='1'] { --heat: 12%; } .opportunity[data-heat='2'] { --heat: 20%; } .opportunity[data-heat='3'] { --heat: 28%; }
+.opportunity[data-heat='4'] { --heat: 36%; } .opportunity[data-heat='5'] { --heat: 45%; }
+.opportunity[data-heat] { background: color-mix(in srgb, var(--hue) var(--heat), var(--card)); }
+.opportunity[data-heat]:hover { background: color-mix(in srgb, var(--hue) calc(var(--heat) + 6%), var(--card)); }
+/* Deep tints take the strong ink, which stays readable where the pink ink would not. */
+.opportunity.convo-live[data-heat='4'] .row-heading, .opportunity.convo-live[data-heat='5'] .row-heading { color: var(--ink-strong); }
 .opportunity.convo-waiting.selected, .opportunity.convo-live.selected { border-left-color: var(--select-edge); box-shadow: 0 0 0 2px var(--select-edge); }
 /* The detail pane's thread wears its card's colour. */
 .reply.convo-waiting, .answer-of.convo-live, .reply.convo-live { border: 0; border-radius: 10px; padding: 14px; }

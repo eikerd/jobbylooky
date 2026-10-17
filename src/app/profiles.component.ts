@@ -3,17 +3,20 @@ import { DatePipe } from '@angular/common';
 import type { JobGroup } from './models';
 import { buildProfiles } from './profiles';
 import { Age } from './age.component';
+import { ConvoHeat } from './convo-heat.component';
+import type { ConversationHeat } from './conversation';
 import { LocationMaps } from './location-maps.component';
 import { officeLocations } from './location-map';
 
 @Component({
   selector:'app-profiles',
-  imports:[DatePipe, LocationMaps, Age],
+  imports:[DatePipe, LocationMaps, Age, ConvoHeat],
   templateUrl:'./profiles.html',
   styleUrl:'./profiles.css',
 })
 export class Profiles {
   readonly groups = input.required<JobGroup[]>();
+  readonly heat = input<ReadonlyMap<string, ConversationHeat>>(new Map());
   readonly mode = input.required<'recruiters'|'companies'>();
   readonly focusId = input('');
   readonly openPitch = output<string>();

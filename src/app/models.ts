@@ -35,6 +35,8 @@ export interface Opportunity {
   linkChecks?: LinkCheck[];
   /** Set when the sweep passed the pitch because its postings had all closed. */
   autoPassed?: { at: string; reason: 'closed' | 'dead' };
+  /** Set when it arrived carrying one of the owner's delete phrases. */
+  deletedBy?: { id: string; phrase: string; at: string };
   /** Set when it arrived as the same posting, from the same recruiter, as a pitch already passed. */
   repeatOf?: { id: string; receivedAt: string; at: string };
 }
@@ -92,7 +94,7 @@ export interface JobGroup {
     timeline:{id:string;pitchId:string;from:string;receivedAt:string;gapDays:number|null}[];
   };
 }
-export type PhraseKind = 'negative' | 'positive' | 'neutral' | 'purple' | 'pink';
+export type PhraseKind = 'negative' | 'positive' | 'neutral' | 'purple' | 'pink' | 'delete';
 export type RuleField = 'any' | 'subject' | 'body';
 export type RuleMode = 'test' | 'live';
 /** An owner-written regex; mirrors server/reject-rules.mjs. Only a live rule passes mail. */

@@ -493,6 +493,55 @@ test('a live rule also passes a new email merged into an existing thread, unless
     assert.equal(store.snapshot().opportunities.find((item) => item.id === kept.id).status, 'Pursue');
   }));
 
+// Delete phrases date themselves to now, so mail in these tests arrives later than that.
+const later = '2099-01-01T12:00:00.000Z';
+test('a delete phrase passes newly synced mail that carries it, and queues its Gmail delete', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'old@x', threadId: 'told', body: 'C2C only, no W2.' }], { synced: true });
+    store.addPhrase({ phrase: 'C2C  only', kind: 'delete' });
+    store.import([{ ...message, id: 'd@x', threadId: 'td', body: 'Rate: C2C\nonly, please.', receivedAt: later }], { synced: true });
+    const deleted = store.snapshot().opportunities.find((row) => row.id.endsWith(':td'));
+    assert.equal(deleted.status, 'Passed');
+    assert.equal(deleted.trashPending, true);
+    assert.equal(deleted.deletedBy.phrase, 'C2C only');
+    // New mail only: what was already here, and a pasted email, stay the owner's to judge.
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':told')).status, 'New');
+    store.import([{ ...message, id: 'p@x', threadId: 'tpaste', body: 'C2C only.', receivedAt: later }]);
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':tpaste')).status, 'New');
+    assert.deepEqual(store.deletePhrases(), ['C2C only']);
+  }));
+test('a delete phrase is two to four words', () =>
+  withStore((store) => {
+    assert.throws(() => store.addPhrase({ phrase: 'Java', kind: 'delete' }), /2 to 4 words/);
+    assert.throws(() => store.addPhrase({ phrase: 'one two three four five', kind: 'delete' }), /2 to 4 words/);
+    store.addPhrase({ phrase: 'Java', kind: 'negative' });
+    store.addPhrase({ phrase: 'must be local', kind: 'delete' });
+    assert.ok(store.phrases().find((row) => row.kind === 'delete').addedAt);
+  }));
+test('non-job mail read for a delete phrase is kept as a passed row only when the phrase really matches', () =>
+  withStore((store) => {
+    store.addPhrase({ phrase: 'unsubscribe from jobs', kind: 'delete' });
+    store.import([
+      { ...message, id: 'n1@x', threadId: 'tn1', subject: 'Weekly digest', body: 'Click to unsubscribe from jobs.', receivedAt: later, phraseOnly: true },
+      { ...message, id: 'n2@x', threadId: 'tn2', subject: 'Weekly digest', body: 'unsubscribe-from-jobs-list', receivedAt: later, phraseOnly: true },
+    ], { synced: true });
+    const rows = store.snapshot().opportunities;
+    assert.equal(rows.find((row) => row.id.endsWith(':tn1')).deletedBy.phrase, 'unsubscribe from jobs');
+    assert.equal(rows.some((row) => row.id.endsWith(':tn2')), false);
+  }));
+test('a delete phrase passes new mail in an untouched thread, never one the owner engaged with', () =>
+  withStore((store) => {
+    store.addPhrase({ phrase: 'onsite five days', kind: 'delete' });
+    store.import([{ ...message, id: 'e1@x', threadId: 'te', receivedAt: later }], { synced: true });
+    store.import([{ ...message, id: 'e2@x', threadId: 'te', body: 'Now onsite five days.', receivedAt: '2099-01-02T12:00:00.000Z' }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':te')).status, 'Passed');
+    store.import([{ ...message, id: 'k1@x', threadId: 'tk', receivedAt: later }], { synced: true });
+    const kept = store.snapshot().opportunities.find((row) => row.id.endsWith(':tk'));
+    store.update(kept.id, { status: 'Pursue' });
+    store.import([{ ...message, id: 'k2@x', threadId: 'tk', body: 'Now onsite five days.', receivedAt: '2099-01-02T12:00:00.000Z' }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id === kept.id).status, 'Pursue');
+  }));
+
 const job = 'Requirements:\nDesign Angular applications with advanced dependency injection and accessible reusable components. Build complex data visualizations using custom rendering strategies and high volume streaming data. Maintain thorough end to end integration coverage for distributed workflows and complex enterprise permissions.';
 const pitchMail = (n, extra = {}) => ({ ...message, id: `p${n}@x`, threadId: `tp${n}`, subject: 'Sr. Full Stack Engineer || Mountain View, CA', from: 'Shobhit <shobhit@tanisha.example>', body: job, receivedAt: `2026-10-0${n}T12:00:00.000Z`, ...extra });
 const rowOf = (store, n) => store.snapshot().opportunities.find((row) => row.id.endsWith(`:tp${n}`));

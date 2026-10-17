@@ -4,7 +4,9 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageText, daysSince } from './age';
 import { Age } from './age.component';
-import { conversationState, planDecision, type GroupDecision } from './conversation';
+import { conversationHeat, conversationState, planDecision, type ConversationHeat, type GroupDecision } from './conversation';
+import { interactions } from './interactions';
+import { ConvoHeat } from './convo-heat.component';
 import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
 import { formatEmailBody, urlRows } from './email-body';
@@ -38,7 +40,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Rules, Age, InteractionPills, ConvoHeat],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
@@ -51,6 +53,16 @@ export class App implements OnDestroy {
   readonly statuses = ['New', 'Pursue', 'Maybe', 'Applied', 'Interviewing', 'Offer', 'Passed'];
   readonly jobGroups = signal<JobGroup[]>([]);
   readonly opportunities = computed(() => this.jobGroups().flatMap(group => group.pitches));
+  /** Each pitch's job conversation heat, counted once per change rather than on every render. */
+  readonly heatByPitch = computed(() => {
+    const all = this.opportunities();
+    const heat = new Map<string, ConversationHeat>();
+    for (const group of this.jobGroups()) {
+      const found = conversationHeat(conversationState(group.pitches), interactions(group.pitches, all));
+      if (found) for (const pitch of group.pitches) heat.set(pitch.id, found);
+    }
+    return heat;
+  });
   readonly linking = signal(false);
   linkTarget = '';
   readonly folder = signal<Folder>('Inbox');
@@ -62,11 +74,11 @@ export class App implements OnDestroy {
     return mode === 'recruiters' || mode === 'companies' ? mode : null;
   });
   readonly phrases = signal<TrackedPhrase[]>([]);
-  readonly phraseKinds: PhraseKind[] = ['negative', 'positive', 'neutral', 'purple', 'pink'];
-  readonly phraseKindLabels: Record<PhraseKind, string> = { negative: 'Negative', positive: 'Positive', neutral: 'Neutral', purple: 'Purple', pink: 'Pink' };
+  readonly phraseKinds: PhraseKind[] = ['negative', 'positive', 'neutral', 'purple', 'pink', 'delete'];
+  readonly phraseKindLabels: Record<PhraseKind, string> = { negative: 'Negative', positive: 'Positive', neutral: 'Neutral', purple: 'Purple', pink: 'Pink', delete: 'Delete' };
   readonly phraseColors = signal<Record<PhraseKind, string>>(DEFAULT_PHRASE_COLORS);
   readonly phraseStyle = computed(() => phraseColorStyle(this.phraseColors()));
-  readonly phraseKindMarks: Record<PhraseKind, string> = { negative: '×', positive: '✓', neutral: '•', purple: '•', pink: '•' };
+  readonly phraseKindMarks: Record<PhraseKind, string> = { negative: '×', positive: '✓', neutral: '•', purple: '•', pink: '•', delete: '🗑' };
   readonly openPhraseId = signal('');
   /** Pitches per phrase id, from the reasons the server recorded, newest first. */
   readonly phraseMatches = computed(() => {
@@ -977,6 +989,10 @@ export class App implements OnDestroy {
   /** Orange while the owner waits on an answer, bright pink once they have written back. */
   conversation(pitches: readonly Opportunity[]) {
     return conversationState(pitches);
+  }
+  /** One pitch's own heat, for the same-job grid where its rows differ. */
+  pitchHeat(pitch: Opportunity) {
+    return conversationHeat(conversationState([pitch]), interactions([pitch], this.opportunities()));
   }
   /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
   ageWords(date: string) {

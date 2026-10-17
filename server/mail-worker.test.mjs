@@ -115,3 +115,16 @@ test('watched senders are read whatever the subject; strangers still need a job 
   assert.match(sent.sql, /instr\(lower\(senderEmail\), \?\) > 0/);
   assert.equal(sent.args.some((arg) => arg.value === 'not-an-address'), false);
 });
+test('delete phrases widen the query, and non-job mail carrying one comes back marked phraseOnly', async () => {
+  let sent;
+  const results = await readWorker('http://example.test', async (url, options) => {
+    sent = JSON.parse(options.body).requests[0].stmt;
+    if (sent.sql.startsWith('PRAGMA')) return response([{ name: 'messageId' }, { name: 'mailThreadId' }]);
+    return response([
+      { messageId: 'z', subject: 'Weekly digest', senderEmail: 'news@example.com', receivedAt: 1789685000, rawBody: 'Click to Unsubscribe  from jobs', mailThreadId: 'z' },
+    ]);
+  }, { deletePhrases: ['Unsubscribe  from jobs'] });
+  assert.deepEqual(results.map((row) => [row.id, row.phraseOnly]), [['z', true]]);
+  assert.match(sent.sql, /instr\(lower\(rawBody\), \?\) > 0/);
+  assert.equal(sent.args.filter((arg) => arg.value === 'unsubscribe from jobs').length, 2);
+});

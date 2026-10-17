@@ -49,11 +49,13 @@ export function emailText(body, isHtml = false) {
 
 /** Owner-maintained phrases; seeded once, then edited in the Phrases tab. */
 export const DEFAULT_TRACKED_PHRASES = ['Backend Java Engineer', 'Java Engineer'];
-export const PHRASE_KINDS = ['negative', 'positive', 'neutral', 'purple', 'pink'];
+export const PHRASE_KINDS = ['negative', 'positive', 'neutral', 'purple', 'pink', 'delete'];
 /** Highlight-only kinds: coloured in the text, never a verdict on the fit. */
 export const HIGHLIGHT_KINDS = ['neutral', 'purple', 'pink'];
 /** Crayon each kind is painted with until the owner picks another (Salmon, Flora, Lemon, Lavender, Carnation). */
-export const DEFAULT_PHRASE_COLORS = { negative: '#ff6666', positive: '#66ff66', neutral: '#ffff00', purple: '#cc66ff', pink: '#ff6fcf' };
+export const DEFAULT_PHRASE_COLORS = { negative: '#ff6666', positive: '#66ff66', neutral: '#ffff00', purple: '#cc66ff', pink: '#ff6fcf', delete: '#800000' };
+/** A delete phrase is two to four words: one word alone would trash too much mail. */
+export const DELETE_PHRASE_WORDS = { min: 2, max: 4 };
 
 /** Case-insensitive whole-word match that tolerates any whitespace between words. */
 export function phrasePattern(phrase) {
@@ -77,6 +79,19 @@ function trackedPhraseReasons(text, trackedPhrases) {
     const verdict = HIGHLIGHT_KINDS.includes(kind) ? 'check' : kind === 'positive' ? 'pass' : 'fail';
     return [{ kind: verdict, tone: kind, label: phrase, text: `Tracked phrase: “${phrase}”.`, evidence, phrase }];
   });
+}
+
+/**
+ * The first delete phrase in the email's subject or body, or null. Only phrases added before the
+ * email arrived count: a new phrase never reaches back into mail the owner already had.
+ */
+export function deletePhraseMatch(trackedPhrases, message) {
+  const text = `${message.subject ?? ''}\n${plainText(String(message.body ?? ''), message.isHtml)}`;
+  return (
+    (trackedPhrases ?? []).map(asTracked).find(
+      (row) => row.kind === 'delete' && (!row.addedAt || row.addedAt <= message.receivedAt) && phrasePattern(row.phrase).test(text),
+    ) ?? null
+  );
 }
 
 export function screen(message, trackedPhrases = []) {
