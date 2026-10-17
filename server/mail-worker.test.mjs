@@ -125,6 +125,6 @@ test('delete phrases widen the query, and non-job mail carrying one comes back m
     ]);
   }, { deletePhrases: ['Unsubscribe  from jobs'] });
   assert.deepEqual(results.map((row) => [row.id, row.phraseOnly]), [['z', true]]);
-  assert.match(sent.sql, /instr\(lower\(rawBody\), \?\) > 0/);
+  assert.match(sent.sql, /instr\(replace\(replace\(replace\(lower\(rawBody\), char\(13\), ' '\), char\(10\), ' '\), char\(9\), ' '\), \?\) > 0/);
   assert.equal(sent.args.filter((arg) => arg.value === 'unsubscribe from jobs').length, 2);
 });

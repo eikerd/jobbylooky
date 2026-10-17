@@ -82,14 +82,18 @@ function trackedPhraseReasons(text, trackedPhrases) {
 }
 
 /**
- * The first delete phrase in the email's subject or body, or null. Only phrases added before the
- * email arrived count: a new phrase never reaches back into mail the owner already had.
+ * The first delete phrase in the email's subject or body, or null. Only phrases added before
+ * `since` (the email, or the first email of its thread) count: a new phrase never reaches back
+ * into mail the owner already had. Subject and body are read apart, so a phrase never spans them.
  */
-export function deletePhraseMatch(trackedPhrases, message) {
-  const text = `${message.subject ?? ''}\n${plainText(String(message.body ?? ''), message.isHtml)}`;
+export function deletePhraseMatch(trackedPhrases, message, since = message.receivedAt) {
+  const texts = [String(message.subject ?? ''), plainText(String(message.body ?? ''), message.isHtml)];
   return (
     (trackedPhrases ?? []).map(asTracked).find(
-      (row) => row.kind === 'delete' && (!row.addedAt || row.addedAt <= message.receivedAt) && phrasePattern(row.phrase).test(text),
+      (row) =>
+        row.kind === 'delete' &&
+        (!row.addedAt || row.addedAt <= since) &&
+        texts.some((text) => phrasePattern(row.phrase).test(text)),
     ) ?? null
   );
 }

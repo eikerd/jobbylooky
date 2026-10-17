@@ -16,7 +16,9 @@ export async function readWorker(url, fetcher = fetch, { watch = [], deletePhras
   const senderFilter = watched.map(() => 'instr(lower(senderEmail), ?) > 0').join(' OR ');
   // A prefilter only, on single-spaced text; the store's whole-word match makes the decision.
   const phrases = [...new Set(deletePhrases.map((value) => String(value).replace(/\s+/g, ' ').trim().toLowerCase()).filter(Boolean))];
-  const phraseFilter = phrases.map(() => '(instr(lower(subject), ?) > 0 OR instr(lower(rawBody), ?) > 0)').join(' OR ');
+  // Line breaks and tabs read as spaces, so a phrase wrapped across a line still comes through.
+  const flat = (column) => `replace(replace(replace(lower(${column}), char(13), ' '), char(10), ' '), char(9), ' ')`;
+  const phraseFilter = phrases.map(() => `(instr(${flat('subject')}, ?) > 0 OR instr(${flat('rawBody')}, ?) > 0)`).join(' OR ');
   async function query(sql, args = []) {
     const response = await fetcher(`${url.replace(/\/$/, '')}/v2/pipeline`, {
       method: 'POST',

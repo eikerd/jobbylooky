@@ -58,7 +58,9 @@ export class App implements OnDestroy {
     const all = this.opportunities();
     const heat = new Map<string, ConversationHeat>();
     for (const group of this.jobGroups()) {
-      const found = conversationHeat(conversationState(group.pitches), interactions(group.pitches, all));
+      // Most jobs have no conversation: only those pay for following their emails.
+      const state = conversationState(group.pitches);
+      const found = state && conversationHeat(state, interactions(group.pitches, all));
       if (found) for (const pitch of group.pitches) heat.set(pitch.id, found);
     }
     return heat;
@@ -992,7 +994,8 @@ export class App implements OnDestroy {
   }
   /** One pitch's own heat, for the same-job grid where its rows differ. */
   pitchHeat(pitch: Opportunity) {
-    return conversationHeat(conversationState([pitch]), interactions([pitch], this.opportunities()));
+    const state = conversationState([pitch]);
+    return state && conversationHeat(state, interactions([pitch], this.opportunities()));
   }
   /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
   ageWords(date: string) {

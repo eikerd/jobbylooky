@@ -51,8 +51,9 @@ function passRepeat(rows, row) {
  * Passes `row` when the email carries one of the owner's delete phrases, pending its Gmail delete.
  * The owner, 2026-10-16: "If they're in the email, immediate deletion."
  */
-function passByPhrase(phrases, row, message) {
-  const hit = deletePhraseMatch(phrases, message);
+function passByPhrase(phrases, row, message, since = message.receivedAt) {
+  // `since` is the thread's first email: a phrase added after it would reach back into older mail.
+  const hit = deletePhraseMatch(phrases, message, since);
   if (!hit) return false;
   Object.assign(row, { status: 'Passed', trashPending: true, deletedBy: { id: hit.id, phrase: hit.phrase, at: new Date().toISOString() } });
   return true;
@@ -192,7 +193,9 @@ export function createStore(directory) {
         // Not job mail, read only because it carries a delete phrase: kept as a passed row, so its
         // Gmail delete is queued and retried like any other, and the owner can see what went.
         if (message.phraseOnly) {
-          if (known || !synced) continue;
+          // Non-job mail in a thread that already has a row is the owner's job thread: left alone.
+          const threaded = next.opportunities.some((row) => row.id === id || row.messageIds.includes(message.threadId));
+          if (known || threaded || !synced) continue;
           const row = newRow(message, id);
           if (passByPhrase(next.trackedPhrases, row, message)) {
             next.opportunities.push(row);
@@ -246,10 +249,18 @@ export function createStore(directory) {
           );
           // New mail in a known thread meets the live rules too, judged on its own text. A rule never
           // overrides the owner: only an untouched New row with no reply from the owner is passed.
-          const engaged = existing.status !== 'New' || existing.replies?.some((reply) => !reply.preview);
+          // A note, a next step, a follow-up date, or undoing an automatic pass all count as touching it.
+          const engaged =
+            existing.status !== 'New' ||
+            existing.replies?.some((reply) => !reply.preview) ||
+            Boolean(existing.notes || existing.nextAction || existing.followUp) ||
+            Boolean(existing.rejectedBy || existing.repeatOf || existing.deletedBy);
           const rule = synced && !engaged ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }, budget) : null;
           if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
-          else if (synced && !engaged) passByPhrase(next.trackedPhrases, existing, message);
+          else if (synced && !engaged) {
+            const first = (existing.history ?? []).map((item) => item.receivedAt).sort()[0] ?? existing.receivedAt;
+            passByPhrase(next.trackedPhrases, existing, message, first < message.receivedAt ? first : message.receivedAt);
+          }
         } else {
           const row = newRow(message, id);
           // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
@@ -397,6 +408,12 @@ export function createStore(directory) {
             new Date(value).toISOString().slice(0, 10) !== value)
         )
           throw Object.assign(new Error('Invalid follow-up date.'), { status: 400 });
+        // The owner passing it themselves makes it their pass: an automatic one no longer explains it.
+        if (key === 'status' && value === 'Passed' && row.status !== 'Passed') {
+          delete row.rejectedBy;
+          delete row.repeatOf;
+          delete row.deletedBy;
+        }
         row[key] = value;
       }
       commit(next);
