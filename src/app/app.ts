@@ -658,7 +658,9 @@ export class App implements OnDestroy {
     }
     if (await this.changeDeletePhrases(() => this.request<DeletePhrase[]>('delete-phrases', 'POST', { phrase }))) {
       this.deletePhraseDraft = '';
-      this.toast(`Deleting new mail with “${phrase}”`);
+      this.toast(`Deleting mail with “${phrase}”`);
+      // The pitches it passed leave the Inbox now, not at the next background refresh.
+      void this.refresh();
     }
   }
   removeDeletePhrase(row: DeletePhrase) {

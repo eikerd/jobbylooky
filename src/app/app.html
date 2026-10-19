@@ -625,11 +625,11 @@
   @if (deleteCheck(); as check) {
     <h2 id="delete-check-title">Delete mail with “{{ check.phrase }}”?</h2>
     @if (check.emails !== null) {
-      <p>It is in <strong>{{ check.emails }}</strong> {{ check.emails === 1 ? 'email' : 'emails' }} from the last {{ check.days }} days, and <strong>{{ check.pitches }}</strong> {{ check.pitches === 1 ? 'pitch' : 'pitches' }} here.</p>
+      <p>It is in <strong>{{ check.emails }}</strong> {{ check.emails === 1 ? 'email' : 'emails' }} from the last {{ check.days }} days, and <strong>{{ check.pitches }}</strong> New {{ check.pitches === 1 ? 'pitch' : 'pitches' }} here.</p>
     } @else {
-      <p>It is in <strong>{{ check.pitches }}</strong> {{ check.pitches === 1 ? 'pitch' : 'pitches' }} here. The mail log could not be read, so the rest of your mail is not counted.</p>
+      <p>It is in <strong>{{ check.pitches }}</strong> New {{ check.pitches === 1 ? 'pitch' : 'pitches' }} here. The mail log could not be read, so the rest of your mail is not counted.</p>
     }
-    <p>From now on, new emails with it go to Gmail Trash. Mail you already have stays.</p>
+    <p>They go to Gmail Trash now, and new emails with it as they arrive. Pitches you have acted on stay.</p>
     <div class="decision-actions">
       <button type="button" class="button primary" (click)="answerDeleteCheck(true)">Add delete phrase</button>
       <button type="button" class="button secondary" autofocus (click)="answerDeleteCheck(false)">Cancel</button>

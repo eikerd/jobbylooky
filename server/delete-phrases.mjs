@@ -25,9 +25,9 @@ export function carriesPhrase(phrase, { subject, body, isHtml = false }) {
 }
 
 /**
- * The first delete phrase the email carries, or null. Only phrases added before `since` (the email,
- * or the first email of its thread) count: a new phrase never reaches back into mail already here.
+ * The first delete phrase the email carries, or null. Every phrase counts, whenever it was added: the
+ * owner, 2026-10-19, "setting these should trigger a re-scan of the current emails too".
  */
-export function deletePhraseMatch(deletePhrases, message, since = message.receivedAt) {
-  return (deletePhrases ?? []).find((row) => (!row.addedAt || row.addedAt <= since) && carriesPhrase(row.phrase, message)) ?? null;
+export function deletePhraseMatch(deletePhrases, message) {
+  return (deletePhrases ?? []).find((row) => carriesPhrase(row.phrase, message)) ?? null;
 }
