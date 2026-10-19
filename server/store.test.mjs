@@ -726,3 +726,16 @@ test('non-job mail already in the mail log is passed for a phrase saved after it
     store.import([{ ...message, id: 'a1@x', threadId: 'ta1', subject: 'Digest', body: 'unsubscribe from jobs', receivedAt: '2000-01-01T00:00:00.000Z', phraseOnly: true }], { synced: true });
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta1')).trashPending, true);
   }));
+test('a delete phrase never passes a pitch the owner decided on outside the store', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'x1@x', threadId: 'tx1', body: 'C2C only.' }, { ...message, id: 'x2@x', threadId: 'tx2', body: 'C2C only.' }], { synced: true });
+    const id = (n) => store.snapshot().opportunities.find((row) => row.id.endsWith(`:tx${n}`)).id;
+    const kept = new Set([id(1)]);
+    assert.equal(store.deletePhrasePreview({ phrase: 'C2C only' }, kept).pitches, 1);
+    store.addDeletePhrase({ phrase: 'C2C only' }, kept);
+    assert.equal(store.snapshot().opportunities.find((row) => row.id === id(1)).status, 'New');
+    assert.equal(store.snapshot().opportunities.find((row) => row.id === id(2)).status, 'Passed');
+    // Later mail in the kept thread does not pass it either.
+    store.import([{ ...message, id: 'x3@x', threadId: 'tx1', body: 'Still C2C only.', receivedAt: later }], { synced: true, exclude: kept });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id === id(1)).status, 'New');
+  }));

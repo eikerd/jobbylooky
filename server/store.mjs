@@ -71,7 +71,7 @@ const engaged = (row) =>
   Boolean(row.rejectedBy || row.repeatOf || row.deletedBy);
 
 /** A pitch a delete phrase may pass from the mail already here: synced, untouched, and no answer to the owner. */
-const sweepable = (row) => row.source !== 'manual' && !row.respondsTo && !engaged(row);
+const sweepable = (row, exclude = new Set()) => row.source !== 'manual' && !row.respondsTo && !engaged(row) && !exclude.has(row.id);
 
 // Once a reply has gone out, a later message in the thread from someone else is their answer.
 // The owner chose: badge the row and move New to Maybe; Pursue moves to Maybe too unless I sent
@@ -149,12 +149,14 @@ export function createStore(directory) {
    * Passes every untouched New pitch here that carries a delete phrase not yet run over the mail
    * already here, pending its Gmail delete; each phrase is run once, marked `sweptAt`. Afterwards
    * each arrival is checked as it is imported, so a pitch the owner moves back to New stays.
+   * `exclude`: pitches the owner decided on outside this store (kept after a closed-posting pass, or
+   * phoned about), which the store cannot see.
    */
-function sweepDeletePhrases() {
+  function sweepDeletePhrases(exclude = new Set()) {
     const fresh = (state.deletePhrases ?? []).filter((row) => !row.sweptAt);
     if (!fresh.length) return [];
     const next = structuredClone(state);
-    const passed = next.opportunities.filter((row) => sweepable(row) && passByPhrase(fresh, row, row));
+    const passed = next.opportunities.filter((row) => sweepable(row, exclude) && passByPhrase(fresh, row, row));
     const at = new Date().toISOString();
     next.deletePhrases = next.deletePhrases.map((row) => (row.sweptAt ? row : { ...row, sweptAt: at }));
     commit(next);
@@ -183,7 +185,8 @@ function sweepDeletePhrases() {
       commit(next);
       return groupOpportunities(next.opportunities, next.groupAssignments);
     },
-    import(messages, { synced = false, account = null } = {}) {
+    // `exclude`: pitches the owner decided on outside this store, never passed by a delete phrase.
+    import(messages, { synced = false, account = null, exclude = new Set() } = {}) {
       const next = structuredClone(state);
       let added = 0;
       // One regex budget for the whole batch, so slow live rules cannot stall the server per email.
@@ -293,7 +296,7 @@ function sweepDeletePhrases() {
           const touched = engaged(existing);
           const rule = synced && !touched ? liveRejection(next.rejectRules, { subject: message.subject, body: screen(message).body }, budget) : null;
           if (rule) Object.assign(existing, { status: 'Passed', trashPending: true, rejectedBy: { id: rule.id, name: rule.name, at: new Date().toISOString() } });
-          else if (synced && !touched) passByPhrase(next.deletePhrases, existing, message);
+          else if (synced && sweepable(existing, exclude)) passByPhrase(next.deletePhrases, existing, message);
         } else {
           const row = newRow(message, id);
           // Only mail arriving from the worker is auto-rejected: never a pasted email or the seed file.
@@ -333,18 +336,18 @@ function sweepDeletePhrases() {
     /** Delete phrases, kept apart from the tracked ones; the mail sync reads any mail that carries one. */
     deletePhrases: () => structuredClone(state.deletePhrases ?? []),
     /** How many pitches here a would-be delete phrase would pass, shown before it is saved. */
-    deletePhrasePreview(input) {
+    deletePhrasePreview(input, exclude = new Set()) {
       const phrase = cleanDeletePhrase(input);
-      return { phrase, pitches: state.opportunities.filter((row) => sweepable(row) && carriesPhrase(phrase, row)).length };
+      return { phrase, pitches: state.opportunities.filter((row) => sweepable(row, exclude) && carriesPhrase(phrase, row)).length };
     },
     /** Saved, then run over the mail already here at once (the owner, 2026-10-19). */
-    addDeletePhrase(input) {
+    addDeletePhrase(input, exclude = new Set()) {
       const phrase = cleanDeletePhrase(input);
       const list = state.deletePhrases ?? [];
       if (list.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
         throw Object.assign(new Error('That delete phrase is already on the list.'), { status: 409 });
       commit({ ...state, deletePhrases: [...list, { id: randomUUID(), phrase, addedAt: new Date().toISOString() }] });
-      sweepDeletePhrases();
+      sweepDeletePhrases(exclude);
       return structuredClone(state.deletePhrases);
     },
     sweepDeletePhrases,

@@ -39,20 +39,31 @@ const intervalMs = 60 * 1000;
 let syncing = false;
 let syncError = '';
 let nextCheck = null;
+// A check asked for while one runs (a delete phrase saved mid-check) runs once that one ends.
+let syncAgain = false;
+/** A pitch the owner kept after an automatic pass, or one with a voicemail, is theirs to decide. */
+const ownedPitches = () =>
+  new Set(
+    voicemails.attach(store.snapshot().opportunities)
+      .filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id) || row.voicemails?.length)
+      .map((row) => row.id),
+  );
+function syncSoon() {
+  if (!workerUrl) return;
+  if (syncing) syncAgain = true;
+  else void sync().catch(() => {});
+}
 async function sync() {
   if (syncing) throw Object.assign(new Error('A mail check is already running.'), { status: 409 });
   syncing = true;
   try {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
     const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases().map((row) => row.phrase) });
-    const added = store.import(messages, { synced: true });
-    // A pitch the owner kept after an automatic pass, or one with a voicemail, is theirs to decide.
-    const owned = voicemails.attach(store.snapshot().opportunities)
-      .filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id) || row.voicemails?.length)
-      .map((row) => row.id);
-    store.sweepRepeats(new Set(owned));
+    const added = store.import(messages, { synced: true, exclude: ownedPitches() });
+    const owned = ownedPitches();
+    store.sweepRepeats(owned);
     // A phrase saved before phrases reached back into the mail already here is run over it once.
-    store.sweepDeletePhrases();
+    store.sweepDeletePhrases(owned);
     trashAutoPassed();
     syncError = '';
     return added;
@@ -61,6 +72,10 @@ async function sync() {
     throw error;
   } finally {
     syncing = false;
+    if (syncAgain) {
+      syncAgain = false;
+      void sync().catch(() => {});
+    }
   }
 }
 /**
@@ -269,7 +284,7 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/clients') return json(200, store.clients());
     // Before a delete phrase is saved: how much mail it would have caught. The mail log is optional.
     if (req.method === 'GET' && url.pathname === '/api/delete-phrases/preview') {
-      const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') });
+      const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') }, ownedPitches());
       if (!workerUrl) return json(200, { ...preview, emails: null, days: null });
       try {
         return json(200, { ...preview, ...(await countPhraseMail(workerUrl, preview.phrase)) });
@@ -331,11 +346,11 @@ export const server = createServer(async (req, res) => {
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/delete-phrases') {
-        const phrases = store.addDeletePhrase(await body(req));
+        const phrases = store.addDeletePhrase(await body(req), ownedPitches());
         // Pitches it passed go to Gmail Trash now, and a mail check reads the rest of the mail log
-        // for it, non-job mail included. A check already running reads the new phrase next time.
+        // for it, non-job mail included.
         trashAutoPassed();
-        if (workerUrl) void sync().catch(() => {});
+        syncSoon();
         return json(201, phrases);
       }
       if (req.method === 'POST' && url.pathname === '/api/clients')
