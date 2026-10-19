@@ -51,6 +51,8 @@ async function sync() {
       .filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id) || row.voicemails?.length)
       .map((row) => row.id);
     store.sweepRepeats(new Set(owned));
+    // A phrase saved before phrases reached back into the mail already here is run over it once.
+    store.sweepDeletePhrases();
     trashAutoPassed();
     syncError = '';
     return added;
@@ -328,8 +330,14 @@ export const server = createServer(async (req, res) => {
         return json(415, { error: 'JSON content is required.' });
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
-      if (req.method === 'POST' && url.pathname === '/api/delete-phrases')
-        return json(201, store.addDeletePhrase(await body(req)));
+      if (req.method === 'POST' && url.pathname === '/api/delete-phrases') {
+        const phrases = store.addDeletePhrase(await body(req));
+        // Pitches it passed go to Gmail Trash now, and a mail check reads the rest of the mail log
+        // for it, non-job mail included. A check already running reads the new phrase next time.
+        trashAutoPassed();
+        if (workerUrl) void sync().catch(() => {});
+        return json(201, phrases);
+      }
       if (req.method === 'POST' && url.pathname === '/api/clients')
         return json(201, store.addClient(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/reject-rules')

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from './store.mjs';
@@ -493,7 +493,7 @@ test('a live rule also passes a new email merged into an existing thread, unless
     assert.equal(store.snapshot().opportunities.find((item) => item.id === kept.id).status, 'Pursue');
   }));
 
-// Delete phrases date themselves to now, so mail in these tests arrives later than that.
+// Mail that arrives after a phrase is saved.
 const later = '2099-01-01T12:00:00.000Z';
 test('a delete phrase passes newly synced mail that carries it, and queues its Gmail delete', () =>
   withStore((store) => {
@@ -504,8 +504,8 @@ test('a delete phrase passes newly synced mail that carries it, and queues its G
     assert.equal(deleted.status, 'Passed');
     assert.equal(deleted.trashPending, true);
     assert.equal(deleted.deletedBy.phrase, 'C2C only');
-    // New mail only: what was already here, and a pasted email, stay the owner's to judge.
-    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':told')).status, 'New');
+    // Mail already here is run over as the phrase is saved; a pasted email stays the owner's to judge.
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':told')).deletedBy.phrase, 'C2C only');
     store.import([{ ...message, id: 'p@x', threadId: 'tpaste', body: 'C2C only.', receivedAt: later }]);
     assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':tpaste')).status, 'New');
     assert.deepEqual(store.deletePhrases().map((row) => row.phrase), ['C2C only']);
@@ -556,12 +556,12 @@ test('non-job phrase mail in a thread that already has a row is left alone, neve
     assert.equal(rows.length, 1);
     assert.equal(rows[0].status, 'New');
   }));
-test('a delete phrase never trashes a thread that began before the phrase, or one the owner noted', () =>
+test('a delete phrase passes later mail in an older untouched thread, never one the owner noted', () =>
   withStore((store) => {
     store.import([{ ...message, id: 'o1@x', threadId: 'to' }], { synced: true });
     store.addDeletePhrase({ phrase: 'C2C only' });
     store.import([{ ...message, id: 'o2@x', threadId: 'to', body: 'C2C only.', receivedAt: later }], { synced: true });
-    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':to')).status, 'New');
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':to')).status, 'Passed');
     store.import([{ ...message, id: 'n1@x', threadId: 'tn', receivedAt: later }], { synced: true });
     const noted = store.snapshot().opportunities.find((row) => row.id.endsWith(':tn'));
     store.update(noted.id, { notes: 'call him tuesday' });
@@ -683,4 +683,46 @@ test('the sweep clears a repeat waiting in the inbox once; one moved back to New
     store.update(rowOf(store, 2).id, { status: 'New' });
     assert.deepEqual(store.sweepRepeats(), []);
     assert.equal(rowOf(store, 2).status, 'New');
+  }));
+
+test('saving a delete phrase passes the untouched New pitches already here, never one the owner touched', () =>
+  withStore((store) => {
+    const pitch = (n, extra = {}) => ({ ...message, id: `s${n}@x`, threadId: `ts${n}`, body: 'Rate: C2C only.', ...extra });
+    store.import([pitch(1), pitch(2), pitch(3), pitch(4), pitch(5, { body: 'W2 only.' })], { synced: true });
+    store.import([{ ...pitch(6), source: 'manual', account: '' }]);
+    const id = (n) => store.snapshot().opportunities.find((row) => row.id.endsWith(`:ts${n}`)).id;
+    const rowOf = (n) => store.snapshot().opportunities.find((row) => row.id === id(n));
+    store.update(id(2), { status: 'Maybe' });
+    store.update(id(3), { notes: 'call him' });
+    assert.equal(store.deletePhrasePreview({ phrase: 'C2C only' }).pitches, 2);
+    store.addDeletePhrase({ phrase: 'C2C only' });
+    assert.equal(rowOf(1).status, 'Passed');
+    assert.equal(rowOf(1).trashPending, true);
+    assert.equal(rowOf(1).deletedBy.phrase, 'C2C only');
+    assert.equal(rowOf(4).status, 'Passed');
+    // A decision, a note, other text, and a pasted email are left alone.
+    assert.deepEqual([2, 3, 5, 6].map((n) => rowOf(n).status), ['Maybe', 'New', 'New', 'New']);
+    assert.ok(store.deletePhrases()[0].sweptAt);
+    // Moved back to New by the owner: a later sweep never passes it again.
+    store.update(id(1), { status: 'New' });
+    assert.deepEqual(store.sweepDeletePhrases(), []);
+    assert.equal(rowOf(1).status, 'New');
+  }));
+test('a delete phrase saved before phrases reached back is run over the mail here once', () =>
+  withStore((store, dir) => {
+    store.import([{ ...message, id: 'l1@x', threadId: 'tl1', body: 'C2C only.' }], { synced: true });
+    const path = join(dir, 'opportunities.json');
+    const saved = JSON.parse(readFileSync(path, 'utf8'));
+    saved.deletePhrases = [{ id: 'old', phrase: 'C2C only', addedAt: '2099-01-01T00:00:00.000Z' }];
+    writeFileSync(path, JSON.stringify(saved));
+    const reopened = createStore(dir);
+    assert.equal(reopened.sweepDeletePhrases().length, 1);
+    assert.equal(reopened.snapshot().opportunities[0].deletedBy.id, 'old');
+    assert.deepEqual(reopened.sweepDeletePhrases(), []);
+  }));
+test('non-job mail already in the mail log is passed for a phrase saved after it arrived', () =>
+  withStore((store) => {
+    store.addDeletePhrase({ phrase: 'unsubscribe from jobs' });
+    store.import([{ ...message, id: 'a1@x', threadId: 'ta1', subject: 'Digest', body: 'unsubscribe from jobs', receivedAt: '2000-01-01T00:00:00.000Z', phraseOnly: true }], { synced: true });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id.endsWith(':ta1')).trashPending, true);
   }));
