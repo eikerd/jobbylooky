@@ -739,3 +739,15 @@ test('a delete phrase never passes a pitch the owner decided on outside the stor
     store.import([{ ...message, id: 'x3@x', threadId: 'tx1', body: 'Still C2C only.', receivedAt: later }], { synced: true, exclude: kept });
     assert.equal(store.snapshot().opportunities.find((row) => row.id === id(1)).status, 'New');
   }));
+test('a delete phrase hidden by a truncated body passes the pitch once the full body is restored', () =>
+  withStore((store) => {
+    const stub = { ...message, id: 'r1@x', threadId: 'tr', body: 'Required: Angular', truncated: true };
+    store.import([stub], { synced: true });
+    store.addDeletePhrase({ phrase: 'C2C only' });
+    const id = store.snapshot().opportunities.find((row) => row.id.endsWith(':tr')).id;
+    assert.equal(store.snapshot().opportunities.find((row) => row.id === id).status, 'New');
+    store.import([{ ...stub, body: 'Required: Angular and TypeScript. Rate: C2C only.', truncated: false }], { synced: true });
+    const row = store.snapshot().opportunities.find((item) => item.id === id);
+    assert.equal(row.status, 'Passed');
+    assert.equal(row.deletedBy.phrase, 'C2C only');
+  }));

@@ -274,8 +274,11 @@ export function createStore(directory) {
           // A later replay may restore a formerly truncated body. Never replace
           // the full Gmail seed with the worker's older 1 KB stub.
           const incoming = screen(message);
-          if (incoming.body.length > existing.body.length) Object.assign(existing, incoming);
-          else Object.assign(existing, screen({ ...existing, isHtml: false }));
+          if (incoming.body.length > existing.body.length) {
+            Object.assign(existing, incoming);
+            // The restored text may carry a delete phrase the truncated copy hid from its sweep.
+            if (synced && sweepable(existing, exclude)) passByPhrase(next.deletePhrases, existing, message);
+          } else Object.assign(existing, screen({ ...existing, isHtml: false }));
           continue;
         }
         if (existing) {
