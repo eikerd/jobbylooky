@@ -59,11 +59,9 @@ async function sync() {
   try {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
     const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases().map((row) => row.phrase) });
+    // Also runs each delete phrase not yet swept over the mail already here.
     const added = store.import(messages, { synced: true, exclude: ownedPitches() });
-    const owned = ownedPitches();
-    store.sweepRepeats(owned);
-    // A phrase saved before phrases reached back into the mail already here is run over it once.
-    store.sweepDeletePhrases(owned);
+    store.sweepRepeats(ownedPitches());
     trashAutoPassed();
     syncError = '';
     return added;

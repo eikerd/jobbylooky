@@ -702,10 +702,12 @@ test('saving a delete phrase passes the untouched New pitches already here, neve
     assert.equal(rowOf(4).status, 'Passed');
     // A decision, a note, other text, and a pasted email are left alone.
     assert.deepEqual([2, 3, 5, 6].map((n) => rowOf(n).status), ['Maybe', 'New', 'New', 'New']);
+    // The next mail check replays the mail here and marks the phrase swept.
+    store.import([pitch(1), pitch(4)], { synced: true });
     assert.ok(store.deletePhrases()[0].sweptAt);
-    // Moved back to New by the owner: a later sweep never passes it again.
+    // Moved back to New by the owner: later checks never pass it again.
     store.update(id(1), { status: 'New' });
-    assert.deepEqual(store.sweepDeletePhrases(), []);
+    store.import([pitch(1)], { synced: true });
     assert.equal(rowOf(1).status, 'New');
   }));
 test('a delete phrase saved before phrases reached back is run over the mail here once', () =>
@@ -716,9 +718,9 @@ test('a delete phrase saved before phrases reached back is run over the mail her
     saved.deletePhrases = [{ id: 'old', phrase: 'C2C only', addedAt: '2099-01-01T00:00:00.000Z' }];
     writeFileSync(path, JSON.stringify(saved));
     const reopened = createStore(dir);
-    assert.equal(reopened.sweepDeletePhrases().length, 1);
+    reopened.import([], { synced: true });
     assert.equal(reopened.snapshot().opportunities[0].deletedBy.id, 'old');
-    assert.deepEqual(reopened.sweepDeletePhrases(), []);
+    assert.ok(reopened.deletePhrases()[0].sweptAt);
   }));
 test('non-job mail already in the mail log is passed for a phrase saved after it arrived', () =>
   withStore((store) => {
@@ -750,4 +752,19 @@ test('a delete phrase hidden by a truncated body passes the pitch once the full 
     const row = store.snapshot().opportunities.find((item) => item.id === id);
     assert.equal(row.status, 'Passed');
     assert.equal(row.deletedBy.phrase, 'C2C only');
+  }));
+test('a delete phrase in the subject of a later email passes the thread when the mail check replays it', () =>
+  withStore((store) => {
+    const first = { ...message, id: 'ls1@x', threadId: 'tls', subject: 'Angular role' };
+    const second = { ...message, id: 'ls2@x', threadId: 'tls', subject: 'Update: C2C only now', body: 'See above.', receivedAt: '2026-09-18T12:00:00.000Z' };
+    store.import([first, second], { synced: true });
+    store.addDeletePhrase({ phrase: 'C2C only' });
+    const rowOf = () => store.snapshot().opportunities.find((row) => row.id.endsWith(':tls'));
+    // The thread keeps its first subject, so the immediate sweep cannot see it ...
+    assert.equal(rowOf().status, 'New');
+    assert.equal(store.deletePhrases()[0].sweptAt, undefined);
+    // ... but the mail check matches each email on its own.
+    store.import([first, second], { synced: true });
+    assert.equal(rowOf().deletedBy.phrase, 'C2C only');
+    assert.ok(store.deletePhrases()[0].sweptAt);
   }));

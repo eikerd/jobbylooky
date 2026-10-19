@@ -146,22 +146,11 @@ export function createStore(directory) {
   if (storedPhrases !== JSON.stringify(state.trackedPhrases) || JSON.stringify(rescored) !== JSON.stringify(state))
     commit(rescored);
   /**
-   * Passes every untouched New pitch here that carries a delete phrase not yet run over the mail
-   * already here, pending its Gmail delete; each phrase is run once, marked `sweptAt`. Afterwards
-   * each arrival is checked as it is imported, so a pitch the owner moves back to New stays.
+   * Passes every untouched New pitch in `rows` that carries one of `phrases`, pending its Gmail delete.
    * `exclude`: pitches the owner decided on outside this store (kept after a closed-posting pass, or
    * phoned about), which the store cannot see.
    */
-  function sweepDeletePhrases(exclude = new Set()) {
-    const fresh = (state.deletePhrases ?? []).filter((row) => !row.sweptAt);
-    if (!fresh.length) return [];
-    const next = structuredClone(state);
-    const passed = next.opportunities.filter((row) => sweepable(row, exclude) && passByPhrase(fresh, row, row));
-    const at = new Date().toISOString();
-    next.deletePhrases = next.deletePhrases.map((row) => (row.sweptAt ? row : { ...row, sweptAt: at }));
-    commit(next);
-    return passed.map((row) => row.id);
-  }
+  const sweepRows = (rows, phrases, exclude) => rows.filter((row) => sweepable(row, exclude) && passByPhrase(phrases, row, row));
   return {
     snapshot: () => structuredClone(state),
     groups: () => groupOpportunities(structuredClone(state.opportunities), state.groupAssignments),
@@ -189,6 +178,12 @@ export function createStore(directory) {
     import(messages, { synced = false, account = null, exclude = new Set() } = {}) {
       const next = structuredClone(state);
       let added = 0;
+      // Delete phrases not yet run over the mail already here. A stored thread keeps only its first
+      // subject, so each known email is matched on its own as the mail check replays it; the phrase
+      // is marked swept only once that has happened. Afterwards each arrival is checked as it comes,
+      // so a pitch the owner moves back to New stays.
+      const fresh = synced ? (next.deletePhrases ?? []).filter((row) => !row.sweptAt) : [];
+      if (fresh.length) sweepRows(next.opportunities, fresh, exclude);
       // One regex budget for the whole batch, so slow live rules cannot stall the server per email.
       const budget = ruleBudget();
       const newRow = (message, id) => ({
@@ -274,11 +269,11 @@ export function createStore(directory) {
           // A later replay may restore a formerly truncated body. Never replace
           // the full Gmail seed with the worker's older 1 KB stub.
           const incoming = screen(message);
-          if (incoming.body.length > existing.body.length) {
-            Object.assign(existing, incoming);
-            // The restored text may carry a delete phrase the truncated copy hid from its sweep.
-            if (synced && sweepable(existing, exclude)) passByPhrase(next.deletePhrases, existing, message);
-          } else Object.assign(existing, screen({ ...existing, isHtml: false }));
+          const restored = incoming.body.length > existing.body.length;
+          if (restored) Object.assign(existing, incoming);
+          else Object.assign(existing, screen({ ...existing, isHtml: false }));
+          // Restored text may carry any phrase its truncated copy hid; otherwise only a new phrase is news.
+          if (synced && sweepable(existing, exclude)) passByPhrase(restored ? next.deletePhrases : fresh, existing, message);
           continue;
         }
         if (existing) {
@@ -310,6 +305,11 @@ export function createStore(directory) {
           next.opportunities.push(row);
           added++;
         }
+      }
+      if (fresh.length) {
+        const swept = new Set(fresh.map((row) => row.id));
+        const at = new Date().toISOString();
+        next.deletePhrases = next.deletePhrases.map((row) => (swept.has(row.id) ? { ...row, sweptAt: at } : row));
       }
       if (synced) next.lastSync = new Date().toISOString();
       else next.importedAt = new Date().toISOString();
@@ -343,17 +343,21 @@ export function createStore(directory) {
       const phrase = cleanDeletePhrase(input);
       return { phrase, pitches: state.opportunities.filter((row) => sweepable(row, exclude) && carriesPhrase(phrase, row)).length };
     },
-    /** Saved, then run over the mail already here at once (the owner, 2026-10-19). */
+    /**
+     * Saved, then run over the pitches here at once (the owner, 2026-10-19); the next mail check runs it
+     * over each email already here, which catches a later email's subject.
+     */
     addDeletePhrase(input, exclude = new Set()) {
       const phrase = cleanDeletePhrase(input);
       const list = state.deletePhrases ?? [];
       if (list.some((row) => row.phrase.toLowerCase() === phrase.toLowerCase()))
         throw Object.assign(new Error('That delete phrase is already on the list.'), { status: 409 });
-      commit({ ...state, deletePhrases: [...list, { id: randomUUID(), phrase, addedAt: new Date().toISOString() }] });
-      sweepDeletePhrases(exclude);
+      const added = { id: randomUUID(), phrase, addedAt: new Date().toISOString() };
+      const next = { ...structuredClone(state), deletePhrases: [...list, added] };
+      sweepRows(next.opportunities, [added], exclude);
+      commit(next);
       return structuredClone(state.deletePhrases);
     },
-    sweepDeletePhrases,
     removeDeletePhrase(id) {
       if (!(state.deletePhrases ?? []).some((row) => row.id === id))
         throw Object.assign(new Error('Delete phrase not found.'), { status: 404 });
