@@ -512,10 +512,13 @@ test('a delete phrase passes newly synced mail that carries it, and queues its G
     // A delete phrase never highlights or scores: it is no tracked phrase.
     assert.equal(deleted.reasons.some((reason) => reason.phrase === 'C2C only'), false);
   }));
-test('delete phrases are their own list: two to four words, never a tracked phrase', () =>
+test('delete phrases are their own list: any number of words, never a tracked phrase', () =>
   withStore((store) => {
-    assert.throws(() => store.addDeletePhrase({ phrase: 'Java' }), /2 to 4 words/);
-    assert.throws(() => store.addDeletePhrase({ phrase: 'one two three four five' }), /2 to 4 words/);
+    assert.throws(() => store.addDeletePhrase({ phrase: ' x ' }), /2–100 characters/);
+    store.addDeletePhrase({ phrase: 'JPMorganChase' });
+    store.addDeletePhrase({ phrase: 'one two three four five six' });
+    store.removeDeletePhrase(store.deletePhrases().find((row) => row.phrase === 'JPMorganChase').id);
+    store.removeDeletePhrase(store.deletePhrases()[0].id);
     assert.throws(() => store.addPhrase({ phrase: 'must be local', kind: 'delete' }), /negative, positive/);
     store.addDeletePhrase({ phrase: 'must be local' });
     assert.throws(() => store.addDeletePhrase({ phrase: 'Must  be LOCAL' }), /already on the list/);
@@ -590,7 +593,7 @@ test('a would-be delete phrase reports how many pitches here it matches, and is 
   withStore((store) => {
     store.import([{ ...message, id: 'v1@x', threadId: 'tv1', body: 'C2C only please' }, { ...message, id: 'v2@x', threadId: 'tv2' }]);
     assert.deepEqual(store.deletePhrasePreview({ phrase: ' c2c   ONLY ' }), { phrase: 'c2c ONLY', pitches: 1 });
-    assert.throws(() => store.deletePhrasePreview({ phrase: 'C2C' }), /2 to 4 words/);
+    assert.throws(() => store.deletePhrasePreview({ phrase: 'C' }), /2–100 characters/);
     // Previewing saves nothing.
     assert.deepEqual(store.deletePhrases(), []);
   }));

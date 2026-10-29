@@ -3,18 +3,15 @@
 // highlight or score anything: an email that carries one is passed and moved to Gmail Trash.
 import { plainText, phrasePattern } from './screen.mjs';
 
-/** Two to four words: one word alone would trash too much mail. */
-export const DELETE_PHRASE_WORDS = { min: 2, max: 4 };
-
 const invalid = (message) => Object.assign(new Error(message), { status: 400 });
 
-/** A delete phrase as stored, from untrusted input: single-spaced, two to four words. */
+/**
+ * A delete phrase as stored, from untrusted input: single-spaced, any number of words (the owner,
+ * 2026-10-29: "I don't need a 2-4-word limit for these. They can be anything.").
+ */
 export function cleanDeletePhrase(input) {
   const phrase = typeof input?.phrase === 'string' ? input.phrase.replace(/\s+/g, ' ').trim() : '';
   if (phrase.length < 2 || phrase.length > 100) throw invalid('A phrase must be 2–100 characters.');
-  const words = phrase.split(' ').length;
-  if (words < DELETE_PHRASE_WORDS.min || words > DELETE_PHRASE_WORDS.max)
-    throw invalid(`A delete phrase is ${DELETE_PHRASE_WORDS.min} to ${DELETE_PHRASE_WORDS.max} words.`);
   return phrase;
 }
 
