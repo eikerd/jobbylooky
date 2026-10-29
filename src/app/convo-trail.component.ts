@@ -1,7 +1,8 @@
 import { Component, computed, input } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Age } from './age.component';
-import { interactions, type Step } from './interactions';
+import { ageText, daysSince } from './age';
+import { interactions, type ConversationIndex, type Step } from './interactions';
 import type { Opportunity } from './models';
 
 /** Longer trails keep the opening step and the newest ones. */
@@ -61,15 +62,22 @@ const what = (step: Step) =>
 })
 export class ConvoTrail {
   readonly pitches = input.required<Opportunity[]>();
-  /** Every pitch on the page, so an answer filed as its own row is found. */
-  readonly all = input.required<Opportunity[]>();
+  /** Every pitch on the page, indexed once for all cards, so an answer filed as its own row is found. */
+  readonly all = input.required<ConversationIndex>();
   readonly summary = computed(() => interactions(this.pitches(), this.all()));
   /** The steps to draw; null stands for the hidden middle of a long trail. */
   readonly shown = computed<(Step | null)[]>(() => {
     const trail = this.summary().trail;
     return trail.length <= SHOWN ? trail : [trail[0], null, ...trail.slice(-(SHOWN - 1))];
   });
-  readonly label = computed(() => this.summary().trail.map(what).join(', then '));
+  /** The steps, then what the age chip shows: how long since the last one, and whether it is their move. */
+  readonly label = computed(() => {
+    const trail = this.summary().trail;
+    const last = trail.at(-1);
+    if (!last) return '';
+    const since = `last contact ${ageText(daysSince(last.at))}`;
+    return `${trail.map(what).join(', then ')}; ${since}${last.way === 'out' ? ', waiting on them' : ''}`;
+  });
   readonly SHOWN = SHOWN;
   readonly glyphs = glyphs;
   readonly what = what;

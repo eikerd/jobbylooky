@@ -273,7 +273,7 @@
                   </span>
                 }
               </span>
-              <app-convo-trail [pitches]="group.pitches" [all]="opportunities()" />
+              <app-convo-trail [pitches]="group.pitches" [all]="conversationIndex()" />
               @if (group.history.occurrences > 1) {
                 <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} (<app-age [at]="group.history.firstSeen" />) · {{ group.history.spanDays }}-day span</span>
               }

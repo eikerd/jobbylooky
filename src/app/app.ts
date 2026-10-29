@@ -5,7 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ageText, daysSince } from './age';
 import { Age } from './age.component';
 import { conversationHeat, conversationState, planDecision, type ConversationHeat, type GroupDecision } from './conversation';
-import { interactions } from './interactions';
+import { conversationIndex, interactions } from './interactions';
 import { ConvoHeat } from './convo-heat.component';
 import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
@@ -56,8 +56,10 @@ export class App implements OnDestroy {
   readonly jobGroups = signal<JobGroup[]>([]);
   readonly opportunities = computed(() => this.jobGroups().flatMap(group => group.pitches));
   /** Each pitch's job conversation heat, counted once per change rather than on every render. */
+  /** Every pitch indexed for following conversations, built once per change and shared by every card. */
+  readonly conversationIndex = computed(() => conversationIndex(this.opportunities()));
   readonly heatByPitch = computed(() => {
-    const all = this.opportunities();
+    const all = this.conversationIndex();
     const heat = new Map<string, ConversationHeat>();
     for (const group of this.jobGroups()) {
       // Most jobs have no conversation: only those pay for following their emails.
@@ -1106,7 +1108,7 @@ export class App implements OnDestroy {
   /** One pitch's own heat, for the same-job grid where its rows differ. */
   pitchHeat(pitch: Opportunity) {
     const state = conversationState([pitch]);
-    return state && conversationHeat(state, interactions([pitch], this.opportunities()));
+    return state && conversationHeat(state, interactions([pitch], this.conversationIndex()));
   }
   /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
   ageWords(date: string) {

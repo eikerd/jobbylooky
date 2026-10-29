@@ -198,7 +198,7 @@ h1 {
   background: var(--hover);
 }
 /* Cards stay white; the open one gets a heavy black frame (the owner, 2026-10-29). */
-.opportunity.selected, .opportunity.selected:hover { background: var(--card); border-color: var(--selected-frame); box-shadow: 0 0 0 3px var(--selected-frame); }
+.queue-item .opportunity.selected, .queue-item .opportunity.selected:hover { background: var(--card); border-color: var(--selected-frame); box-shadow: 0 0 0 3px var(--selected-frame); }
 .fit {
   display: inline-flex;
   font-size: 13px;

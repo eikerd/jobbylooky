@@ -50,29 +50,39 @@ const messagesOf = (row: Pitch): Message[] =>
   row.history?.length ? row.history : row.messageIds.map((id) => ({ id, receivedAt: row.receivedAt, from: row.from }));
 const latest = (moments: string[]) => moments.reduce((last, at) => (at > last ? at : last), '') || null;
 
+/** Every pitch by id, and the answer rows filed under the pitch each responds to: built once per page, shared by every card. */
+export interface ConversationIndex {
+  byId: Map<string, Pitch>;
+  answers: Map<string, Pitch[]>;
+}
+
+export function conversationIndex(all: readonly Pitch[]): ConversationIndex {
+  const answers = new Map<string, Pitch[]>();
+  for (const row of all) if (row.respondsTo) answers.set(row.respondsTo, [...(answers.get(row.respondsTo) ?? []), row]);
+  return { byId: new Map(all.map((row) => [row.id, row])), answers };
+}
+
 /**
  * The job's pitches plus every row joined to them by answers, both ways: an answer to a pitch, an
  * answer to that answer (the owner wrote back on it), and the pitch an answer row responds to.
  */
-function conversation(pitches: readonly Pitch[], all: readonly Pitch[]) {
-  const byId = new Map(all.map((row) => [row.id, row]));
+function conversation(pitches: readonly Pitch[], { byId, answers }: ConversationIndex) {
   const rows = new Map(pitches.map((row) => [row.id, row]));
-  for (let grew = true; grew; ) {
-    grew = false;
-    const parents = [...rows.values()].map((row) => (row.respondsTo ? byId.get(row.respondsTo) : undefined));
-    const answers = [...byId.values()].filter((row) => row.respondsTo && rows.has(row.respondsTo));
-    for (const row of [...parents, ...answers]) {
-      if (!row || rows.has(row.id)) continue;
-      rows.set(row.id, row);
-      grew = true;
+  const queue = [...rows.values()];
+  for (let row = queue.pop(); row; row = queue.pop()) {
+    const parent = row.respondsTo ? byId.get(row.respondsTo) : undefined;
+    for (const next of [...(parent ? [parent] : []), ...(answers.get(row.id) ?? [])]) {
+      if (rows.has(next.id)) continue;
+      rows.set(next.id, next);
+      queue.push(next);
     }
   }
   return [...rows.values()];
 }
 
-/** `all` is every pitch the page has, so answers filed as their own rows are found. */
-export function interactions(pitches: readonly Pitch[], all: readonly Pitch[]): Interactions {
-  const rows = conversation(pitches, all);
+/** `all` is every pitch the page has, or its index, so answers filed as their own rows are found. */
+export function interactions(pitches: readonly Pitch[], all: readonly Pitch[] | ConversationIndex): Interactions {
+  const rows = conversation(pitches, 'byId' in all ? all : conversationIndex(all));
   const sent = rows.flatMap(sentOf).sort((a, b) => a.sentAt.localeCompare(b.sentAt));
   const owner = new Set(sent.map((reply) => address(reply.from)));
 
