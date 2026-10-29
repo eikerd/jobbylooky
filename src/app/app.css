@@ -197,10 +197,8 @@ h1 {
 .opportunity:hover {
   background: var(--hover);
 }
-.opportunity.selected {
-  background: var(--select);
-  border-left-color: var(--select-edge);
-}
+/* Cards stay white; the open one gets a heavy black frame (the owner, 2026-10-29). */
+.opportunity.selected, .opportunity.selected:hover { background: var(--card); border-color: var(--selected-frame); box-shadow: 0 0 0 3px var(--selected-frame); }
 .fit {
   display: inline-flex;
   font-size: 13px;
@@ -583,7 +581,6 @@ textarea {
 .email-reading { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; min-width:0; }
 .source-title { display:flex; gap:10px; align-items:flex-start; min-width:0; }
 .opportunity.full-time { border-left-color:var(--full-time); }
-.opportunity.full-time.selected { border-left-color:var(--select-edge); }
 .opportunity.full-time .row-heading, .role-title.full-time { color:var(--full-time); }
 /* Tracking links run to hundreds of characters; one clipped line keeps the body readable. */
 .url-line { display:inline-flex; width:100%; vertical-align:bottom; }

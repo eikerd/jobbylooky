@@ -23,7 +23,24 @@ export interface Interactions {
   thread: number;
   /** The newest moment anything passed either way, or null. */
   lastContact: string | null;
+  /** Every step of the back-and-forth, oldest first. */
+  trail: Step[];
 }
+
+/** One step of a conversation: an email the owner sent, their answer, or a call or voicemail from them. */
+export interface Step {
+  kind: 'email' | 'reply' | 'call' | 'voicemail';
+  /** Who moved: the owner (`out`) or them (`in`). */
+  way: 'out' | 'in';
+  at: string;
+  /** A sent email that carried the resume. */
+  resume?: boolean;
+  /** A sent email that asked who the end client is. */
+  client?: boolean;
+}
+
+/** The "Ask end client" draft and the owner's own wording of the same question. */
+const ASKS_CLIENT = /\bend[\s-]+client\b/i;
 
 const address = (value: string) => value.match(/[^\s<>]+@[^\s<>]+/)?.[0]?.toLowerCase() ?? '';
 /** Message-IDs compare without their angle brackets: the worker's copy and the mailer's record differ only there. */
@@ -82,6 +99,11 @@ export function interactions(pitches: readonly Pitch[], all: readonly Pitch[]): 
   const calls = [...voicemails.values()].filter((item) => item.kind === 'live').length;
 
   const replies = [...theirs.values()].sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+  const trail: Step[] = [
+    ...sent.map((reply): Step => ({ kind: 'email', way: 'out', at: reply.sentAt, resume: !!reply.attachment, client: ASKS_CLIENT.test(reply.body) })),
+    ...replies.map((message): Step => ({ kind: 'reply', way: 'in', at: message.receivedAt })),
+    ...[...voicemails.values()].map((item): Step => ({ kind: item.kind === 'live' ? 'call' : 'voicemail', way: 'in', at: item.receivedAt })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
   return {
     sent,
     resume: sent.filter((reply) => reply.attachment),
@@ -94,5 +116,6 @@ export function interactions(pitches: readonly Pitch[], all: readonly Pitch[]): 
       ...replies.map((message) => message.receivedAt),
       ...[...voicemails.values()].map((item) => item.receivedAt),
     ]),
+    trail,
   };
 }

@@ -228,15 +228,12 @@
               type="button"
               class="opportunity"
               [class.full-time]="row.employmentType === 'Full-time'"
-              [class.convo-waiting]="conversation(group.pitches) === 'waiting'"
-              [class.convo-live]="conversation(group.pitches) === 'answered'"
-              [attr.data-heat]="heatByPitch().get(row.id)?.level"
               [class.selected]="selectedGroup()?.id === group.id"
               [attr.aria-pressed]="selectedGroup()?.id === group.id"
               (click)="open(row, true)"
             >
               <span class="row-title">
-                <span class="source-title"><app-source-icon [from]="row.from" /><app-convo-heat [heat]="heatByPitch().get(row.id)" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
+                <span class="source-title"><app-source-icon [from]="row.from" /><span class="row-heading">@if (groupVoicemail(group); as voicemail) {<span class="voicemail-badge" [class.unseen]="voicemail.unseen" role="img" [attr.aria-label]="(voicemail.unseen ? 'New voicemail ' : 'Voicemail ') + (voicemail.receivedAt | date: 'MMM d')">☎</span> }@if (row.respondsTo) {<span class="answer-mark" aria-label="Answer to your reply">↩ </span>}<app-hl [text]="row.title" [phrases]="phrases()" /></span></span>
                 <span class="received">
                   <strong><app-age [at]="row.receivedAt" /></strong>
                   <time [attr.datetime]="row.receivedAt">{{ row.receivedAt | date: 'MMM d, y' }}</time>
@@ -276,7 +273,7 @@
                   </span>
                 }
               </span>
-              @if (folder() === 'Pursuing') {<app-interaction-pills class="row-interactions" [pitches]="group.pitches" [all]="opportunities()" />}
+              <app-convo-trail [pitches]="group.pitches" [all]="opportunities()" />
               @if (group.history.occurrences > 1) {
                 <span class="recurrence">{{ group.history.occurrences }} emails · first seen {{ group.history.firstSeen | date:'MMM d, y' }} (<app-age [at]="group.history.firstSeen" />) · {{ group.history.spanDays }}-day span</span>
               }

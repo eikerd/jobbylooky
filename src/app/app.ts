@@ -22,7 +22,7 @@ import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
 import { Clients, clearClientDraft, hasClientDraft } from './clients.component';
 import { clientLabel, clientsByPitch, fingerprintKey } from './clients';
-import { InteractionPills } from './interaction-pills.component';
+import { ConvoTrail } from './convo-trail.component';
 
 interface Connection {
   configured: boolean;
@@ -42,7 +42,7 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Clients, Rules, Age, InteractionPills, ConvoHeat],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Clients, Rules, Age, ConvoTrail, ConvoHeat],
   templateUrl: './app.html',
   styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.

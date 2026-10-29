@@ -113,3 +113,24 @@ test("the owner's own copy, ingested by the mail worker, is neither their reply 
   assert.deepEqual(result.replies.map((m) => m.id), ['theirs@m']);
   assert.equal(result.thread, 3);
 });
+
+test('the trail runs oldest first and marks the resume and the end-client question', () => {
+  const a = pitch('a', {
+    replies: [
+      reply('2026-10-02T09:00:00Z', { body: 'Could you share who the end client is?' }),
+      reply('2026-10-04T09:00:00Z', { attachment: 'Resume.pdf' }),
+    ],
+    voicemails: [{ id: 'v', kind: 'live', receivedAt: '2026-10-05T09:00:00Z' }],
+  });
+  const answer = pitch('b', { messageIds: ['answer@m'], receivedAt: '2026-10-03T08:00:00Z', respondsTo: 'a' });
+  const { trail } = interactions([a], [a, answer]);
+  assert.deepEqual(
+    trail.map((step) => [step.kind, step.way, !!step.resume, !!step.client]),
+    [
+      ['email', 'out', false, true],
+      ['reply', 'in', false, false],
+      ['email', 'out', true, false],
+      ['call', 'in', false, false],
+    ],
+  );
+});
