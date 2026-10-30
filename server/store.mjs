@@ -150,11 +150,14 @@ export function createStore(directory) {
     commit(rescored);
   // Once: every passed pitch's mail leaves the inbox, including pitches passed before a Pass deleted
   // anything (the owner, 2026-10-30). Each mail check retries until Gmail has none of them left.
+  // Every delete phrase is swept again too, now that a voicemail no longer exempts a pitch; one the
+  // owner moved back to New keeps its deletedBy, so it is not passed a second time.
   if (!state.passedMailSwept)
     commit({
       ...state,
       passedMailSwept: new Date().toISOString(),
       opportunities: state.opportunities.map((row) => (row.status === 'Passed' && row.source !== 'manual' ? { ...row, trashPending: true } : row)),
+      ...(state.deletePhrases && { deletePhrases: state.deletePhrases.map(({ sweptAt, ...row }) => row) }),
     });
   /**
    * Passes every untouched New pitch in `rows` that carries one of `phrases`, pending its Gmail delete.
