@@ -2,13 +2,13 @@ import { Component, ElementRef, OnDestroy, computed, input, signal, viewChild } 
 import { FormsModule } from '@angular/forms';
 import type { DeletePhrase, PhraseKind, TrackedPhrase } from './models';
 import { widenEnd, widenStart } from './phrase-edges';
+import { afterSave, cleanPhrase as clean, onList } from './phrase-modal';
 
 /** The server's limits on a tracked phrase (server/store.mjs addPhrase). */
 const MIN_PHRASE = 2;
 const MAX_PHRASE = 100;
 /** How far above the hovered line the Track button sits, in px. */
 const OFFER_LIFT = 30;
-const clean = (text: string) => text.replace(/\s+/g, ' ').trim();
 
 /**
  * The selection widened at both edges (./phrase-edges). The middle comes from the Selection, not the
@@ -133,15 +133,9 @@ export class SelectionPhrase implements OnDestroy {
   private range: Range | null = null;
   private selected = '';
   private readonly noHover = window.matchMedia('(hover: none)');
-  readonly existing = computed(() => {
-    const phrase = clean(this.draft()).toLowerCase();
-    return this.phrases().find((row) => row.phrase.toLowerCase() === phrase);
-  });
+  readonly existing = computed(() => onList(this.phrases(), this.draft()));
   /** The draft is already a delete phrase. */
-  readonly deleting = computed(() => {
-    const phrase = clean(this.draft()).toLowerCase();
-    return this.deletePhrases().some((row) => row.phrase.toLowerCase() === phrase);
-  });
+  readonly deleting = computed(() => !!onList(this.deletePhrases(), this.draft()));
   private readonly fits = computed(() => {
     const length = clean(this.draft()).length;
     return !this.busy() && length >= MIN_PHRASE && length <= MAX_PHRASE;
@@ -231,26 +225,22 @@ export class SelectionPhrase implements OnDestroy {
   async choose(kind: PhraseKind) {
     if (!this.canSave()) return;
     this.failure.set('');
-    const failure = await this.save()(clean(this.draft()), kind);
-    if (failure === null) {
-      document.getSelection()?.removeAllRanges();
-      this.dialog().nativeElement.close();
-    } else {
-      this.failure.set(failure);
-    }
+    this.settle(await this.save()(clean(this.draft()), kind));
   }
 
   /** The page's own check opens over this modal; cancelling it leaves this one open as it was. */
   async chooseDelete() {
     if (!this.canDelete()) return;
     this.failure.set('');
-    const failure = await this.saveDelete()(clean(this.draft()));
-    if (failure === null) {
-      document.getSelection()?.removeAllRanges();
-      this.dialog().nativeElement.close();
-    } else {
-      this.failure.set(failure);
-    }
+    this.settle(await this.saveDelete()(clean(this.draft())));
+  }
+
+  private settle(answer: string | null) {
+    const { close, failure } = afterSave(answer);
+    this.failure.set(failure);
+    if (!close) return;
+    document.getSelection()?.removeAllRanges();
+    this.dialog().nativeElement.close();
   }
 
   closed() {
