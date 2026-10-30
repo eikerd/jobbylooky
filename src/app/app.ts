@@ -3,6 +3,7 @@ import { mapLocations } from './location-map';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ageText, daysSince } from './age';
+import { phoneText, telHref } from './phone';
 import { Age } from './age.component';
 import { conversationHeat, conversationState, planDecision, type ConversationHeat, type GroupDecision } from './conversation';
 import { conversationIndex, interactions } from './interactions';
@@ -473,16 +474,8 @@ export class App implements OnDestroy {
   audioUrl(voicemail: PitchVoicemail) {
     return new URL(`api/voicemails/${encodeURIComponent(voicemail.id)}/audio`, document.baseURI).href;
   }
-  /** "+15028900699" → "(502) 890-0699"; anything else as stored. */
-  phone(value: string) {
-    const digits = value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
-    return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value || 'Unknown caller';
-  }
-  /** "+15028900699" → "tel:+15028900699", which the Mac hands to FaceTime / iPhone; '' when there is no number to dial. */
-  telHref(value: string) {
-    const digits = value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
-    return digits.length === 10 ? `tel:+1${digits}` : '';
-  }
+  readonly phone = phoneText;
+  readonly telHref = telHref;
   duration(seconds: number) {
     const whole = Math.round(seconds);
     return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
