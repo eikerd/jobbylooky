@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from './store.mjs';
-import { createPassTrash } from './pass-trash.mjs';
+import { awaitingTrash, createPassTrash, trashFailureText } from './pass-trash.mjs';
 
 const message = (n) => ({
   id: `m${n}@recruiter.com`,
@@ -93,7 +93,7 @@ test('a Gmail failure is reported, leaves the pitch pending, and does not stall 
     await tick();
     trasher.release();
     const failed = await queue.outcome(first);
-    assert.match(failed.trashError, /connection reset.*Click Pass again/);
+    assert.match(failed.trashError, /connection reset.*retries on every mail check/);
     assert.equal(failed.trashPending, true);
     trasher.state.fail = null;
     await tick();
@@ -134,3 +134,27 @@ test('preview mode says so instead of claiming the mail is gone', () =>
     const outcome = await queue.enqueue(pass(store, 1));
     assert.equal(outcome.preview, true);
   }));
+
+test('later mail in a thread passed by hand waits for the mail check, not a second Pass', () =>
+  withStore((store) => {
+    store.import([message(1), message(2)]);
+    const id = pass(store, 1);
+    store.settleTrash(id, store.snapshot().opportunities.find((row) => row.id === id).messageIds);
+    assert.deepEqual(awaitingTrash(store.snapshot().opportunities), []);
+    store.import([{ ...message(1), id: 'm1-followup@recruiter.com', receivedAt: '2026-09-20T12:00:00.000Z' }], { synced: true });
+    assert.deepEqual(awaitingTrash(store.snapshot().opportunities).map((row) => row.id), [id]);
+    store.update(id, { status: 'Maybe' });
+    assert.deepEqual(awaitingTrash(store.snapshot().opportunities), [], 'un-passed: never deleted');
+  }));
+test('a pasted pitch has nothing in Gmail to wait for', () => {
+  const pasted = { id: 'p', status: 'Passed', trashPending: true, messageIds: ['3f2b8c1e-9d4a-4f6b-8e2a-1c5d7f9a0b3c'] };
+  assert.deepEqual(awaitingTrash([pasted]), []);
+});
+test('the banner says who passed the email that Gmail would not delete', () => {
+  assert.equal(trashFailureText([]), '');
+  assert.equal(trashFailureText([{ title: 'Java Dev' }]), 'You passed "Java Dev", but Gmail did not delete it. It retries on every mail check.');
+  assert.match(trashFailureText([{ title: 'A', phrase: 'C2C only' }, { title: 'B' }]), /^The delete phrase "C2C only" passed "A" and 1 more, but/);
+  assert.match(trashFailureText([{ title: 'A', repeat: true }]), /^Jobbylooky passed "A" as a repeat of a job you passed,/);
+  assert.match(trashFailureText([{ title: 'A', closed: true }]), /^Jobbylooky passed "A" after its postings closed,/);
+  assert.match(trashFailureText([{ title: 'A', rule: true }]), /^A reject rule passed "A", but/);
+});

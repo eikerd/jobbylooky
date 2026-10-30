@@ -11,7 +11,7 @@ import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
 import { createTrasher, gmailIds } from './gmail-trash.mjs';
 import { createGmailLinker, threadUrl, searchUrl } from './gmail-link.mjs';
-import { createPassTrash } from './pass-trash.mjs';
+import { awaitingTrash, createPassTrash, trashFailureText } from './pass-trash.mjs';
 import { createVoicemails, phoneNumbers, MAX_AUDIO_BYTES } from './voicemails.mjs';
 import { createLinkChecks } from './link-checks.mjs';
 
@@ -102,17 +102,23 @@ function passEndedJobs() {
   return passed;
 }
 /**
- * Mail a live reject rule or a delete phrase passed, or a repeat of a job already passed, goes to Gmail Trash like a
- * Pass from the page. The store marks it pending as it passes it, so a crash or a Gmail failure is
- * retried on the next sync. No page waits on these deletes, so a failure is kept here and shown in
- * the connection banner.
+ * Every passed pitch still pending its Gmail delete goes to Gmail Trash: what a live reject rule, a
+ * delete phrase or a repeat passed, a Pass from the page whose delete failed or was cut off, and later
+ * mail in a thread already passed. The store marks each pending as it passes it, so a crash or a Gmail
+ * failure is retried on the next sync. A failure is kept here and shown in the connection banner.
  */
 const autoTrashFailures = new Map();
 function trashAutoPassed() {
-  for (const row of store.snapshot().opportunities) {
-    if (row.status !== 'Passed' || !(row.rejectedBy || row.repeatOf || row.deletedBy) || !row.trashPending || !gmailIds(row.messageIds).length) continue;
+  for (const row of awaitingTrash(store.snapshot().opportunities)) {
     void passTrash.enqueue(row.id).then((outcome) => {
-      if (outcome?.trashError) autoTrashFailures.set(row.id, { title: row.title, rule: Boolean(row.rejectedBy), phrase: row.deletedBy?.phrase });
+      if (outcome?.trashError)
+        autoTrashFailures.set(row.id, {
+          title: row.title,
+          rule: Boolean(row.rejectedBy),
+          phrase: row.deletedBy?.phrase,
+          repeat: Boolean(row.repeatOf),
+          closed: linkChecks.wasAutoPassed(row.id) && !linkChecks.wasKept(row.id),
+        });
       else autoTrashFailures.delete(row.id);
     });
   }
@@ -120,12 +126,7 @@ function trashAutoPassed() {
 function autoTrashError() {
   // Un-passed, or deleted by a later Pass, since it failed: no longer ours to report.
   const pending = new Set(store.snapshot().opportunities.filter((row) => row.status === 'Passed' && row.trashPending).map((row) => row.id));
-  const failed = [...autoTrashFailures].filter(([id]) => pending.has(id)).map(([, failure]) => failure);
-  if (!failed.length) return '';
-  const more = failed.length > 1 ? ` and ${failed.length - 1} more` : '';
-  const by = failed[0].rule ? 'A reject rule' : failed[0].phrase ? `The delete phrase "${failed[0].phrase}"` : 'Jobbylooky';
-  const why = failed[0].rule || failed[0].phrase ? '' : ' as a repeat of a job you passed';
-  return `${by} passed "${failed[0].title}"${more}${why}, but Gmail did not delete it. It retries on every mail check.`;
+  return trashFailureText([...autoTrashFailures].filter(([id]) => pending.has(id)).map(([, failure]) => failure));
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -328,7 +329,7 @@ export const server = createServer(async (req, res) => {
       const row = store.snapshot().opportunities.find((item) => item.id === id);
       if (!row) return json(404, { error: 'Opportunity not found.' });
       // Nothing queued: the server restarted mid-delete, or the outcome was already collected.
-      return json(200, row.trashPending ? { ...row, trashError: 'Gmail did not finish deleting this email. Click Pass again to retry.' } : { ...row, trashed: 0, skipped: true });
+      return json(200, row.trashPending ? { ...row, trashError: 'Gmail did not finish deleting this email. It retries on every mail check.' } : { ...row, trashed: 0, skipped: true });
     }
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/reject-rules/'))
       return json(200, store.removeRejectRule(decodeURIComponent(url.pathname.slice('/api/reject-rules/'.length))));
@@ -407,7 +408,7 @@ export const server = createServer(async (req, res) => {
           return json(200, decorate([row])[0]);
         // Passing deletes the pitch's emails from the Gmail inbox. The decision is saved now and
         // the delete is queued; the page collects its outcome from GET …/trash. A Gmail failure
-        // is reported, never hidden, and the next Pass retries it. Pending is written before
+        // is reported, never hidden, and every mail check retries it. Pending is written before
         // IMAP starts, so a crash mid-delete still leaves a retry.
         const pending = store.setTrashPending(id, true);
         passTrash.enqueue(id);
