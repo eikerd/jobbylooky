@@ -117,7 +117,7 @@ function trashAutoPassed() {
           rule: Boolean(row.rejectedBy),
           phrase: row.deletedBy?.phrase,
           repeat: Boolean(row.repeatOf),
-          closed: linkChecks.wasAutoPassed(row.id),
+          closed: linkChecks.wasAutoPassed(row.id) && !linkChecks.wasKept(row.id),
         });
       else autoTrashFailures.delete(row.id);
     });
