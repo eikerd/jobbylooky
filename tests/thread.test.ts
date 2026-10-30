@@ -108,3 +108,10 @@ test('newest first: the newest branch on top, each pitch at the foot of its bran
   assert.deepEqual(shown.turn, thread.turn);
   assert.equal(thread.branches[0].nodes[0].kind, 'pitch');
 });
+
+test('newest first: an older pitch answered later sits above a newer pitch gone quiet', () => {
+  const a = pitch('a', { receivedAt: '2026-10-25T13:02:00Z', replies: [reply('2026-10-29T09:00:00Z')] });
+  const b = pitch('c', { receivedAt: '2026-10-26T20:30:00Z', replies: [reply('2026-10-27T09:00:00Z')] });
+  const shown = newestFirst(threadOf([a, b], [a, b], now)!);
+  assert.deepEqual(shown.branches.map((item) => item.nodes.at(-1)!.key), ['row:a', 'row:c']);
+});
