@@ -452,7 +452,7 @@
                   <article class="voicemail">
                     <p class="voicemail-meta">
                       <time [attr.datetime]="voicemail.receivedAt">{{ voicemail.receivedAt | date: 'MMM d, h:mm a' }}</time> <app-age [at]="voicemail.receivedAt" />
-                      <span>{{ phone(voicemail.from) }}</span>
+                      @if (telHref(voicemail.from); as tel) {<a class="voicemail-phone" [href]="tel">{{ phone(voicemail.from) }}</a>} @else {<span>{{ phone(voicemail.from) }}</span>}
                       <span>{{ duration(voicemail.durationSeconds) }}</span>
                       @if (voicemail.matchedBy === 'name') {<span class="likely">likely match</span>}
                     </p>
