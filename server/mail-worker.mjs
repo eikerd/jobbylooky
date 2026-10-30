@@ -12,7 +12,8 @@ const SUBJECT_PREFILTER = [
 const PREFILTER_ARGS = [
   ...PREFILTER_TERMS.map((term) => ({ type: 'text', value: `%${term.toLowerCase()}%` })),
   ...RECRUITER_DOMAINS.flatMap((domain) =>
-    [`%@${domain}`, `%.${domain}`].map((value) => ({ type: 'text', value })),
+    // Anywhere in the field, so "Alice <alice@kforce.com>" passes; isOpportunity() checks the domain.
+    [`%@${domain}%`, `%.${domain}%`].map((value) => ({ type: 'text', value })),
   ),
 ];
 // How far back the mail log is read, in days.

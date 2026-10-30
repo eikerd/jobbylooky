@@ -144,6 +144,25 @@ test('a delete phrase preview counts the window\'s mail that really matches, sub
   assert.deepEqual(sent.args.slice(1).map((arg) => arg.value), ['c2c', 'only', 'c2c', 'only']);
   assert.match(sent.sql, /receivedAt > \?/);
 });
+test('a recruiter domain reaches the reader with or without a display name; strangers need more than a role', async () => {
+  const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE "budget-lens_mail_messages" (messageId TEXT, subject TEXT, senderEmail TEXT, receivedAt INTEGER, rawBody TEXT, mailThreadId TEXT, bodyTruncated INTEGER)');
+  const now = Math.floor(Date.now() / 1000);
+  const insert = db.prepare('INSERT INTO "budget-lens_mail_messages" VALUES (?, ?, ?, ?, ?, ?, 0)');
+  insert.run('bare', 'Automation Test Lead', 'alice@kforce.com', now - 60, '', 'bare');
+  insert.run('named', 'Automation Test Lead', 'Alice <alice@Kforce.com>', now - 50, '', 'named');
+  insert.run('lookalike', 'Automation Test Lead', 'bob@kforce.com.example', now - 45, '', 'lookalike');
+  insert.run('stranger', 'Automation Test Lead', 'friend@example.com', now - 40, '', 'stranger');
+  const libsql = async (url, options) => {
+    const { sql, args } = JSON.parse(options.body).requests[0].stmt;
+    const statement = db.prepare(sql);
+    const rows = statement.all(...args.map((arg) => (arg.type === 'integer' ? Number(arg.value) : arg.value)));
+    const cols = rows.length ? Object.keys(rows[0]) : statement.columns().map((col) => col.name);
+    return response(rows.map((row) => Object.fromEntries(cols.map((col) => [col, row[col]]))));
+  };
+  const results = await readWorker('http://example.test', libsql);
+  assert.deepEqual(results.map((row) => row.id).sort(), ['bare', 'named']);
+});
 test('the delete-phrase query, run on a real SQLite mail log, keeps wrapped matches and drops strangers', async () => {
   const db = new DatabaseSync(':memory:');
   db.exec('CREATE TABLE "budget-lens_mail_messages" (messageId TEXT, subject TEXT, senderEmail TEXT, receivedAt INTEGER, rawBody TEXT, mailThreadId TEXT, bodyTruncated INTEGER)');
