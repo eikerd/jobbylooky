@@ -69,3 +69,32 @@ test('a voicemail tied to several pitches hangs once, under the newest pitch bef
   const early = pitch('c', { receivedAt: '2026-10-21T10:00:00Z', voicemails: [vm] });
   assert.equal(threadOf([early], [early], now)!.branches[0].nodes[1].gap, 'they called 20 h 49 m earlier');
 });
+
+test('the pitch is dated by its first email from them, not the owner copy that moved receivedAt', () => {
+  const a = pitch('a', {
+    receivedAt: '2026-10-02T09:00:01Z',
+    replies: [reply('2026-10-02T09:00:00Z')],
+    history: [
+      { id: 'a@m', receivedAt: '2026-10-01T09:00:00Z', from: 'Dayakar K <dayakar@rapidit.com>' },
+      { id: 'copy@m', receivedAt: '2026-10-02T09:00:01Z', from: 'me@gmail.com' },
+    ],
+  });
+  const nodes = threadOf([a], [a], now)!.branches[0].nodes;
+  assert.equal(nodes[0].at, '2026-10-01T09:00:00Z');
+  assert.equal(nodes[1].gap, 'you answered 1 day later');
+});
+
+test('a preview reply shows, marked, but opens no conversation and counts for nothing', () => {
+  const only = pitch('a', { replies: [reply('2026-10-29T15:00:00Z', { preview: true })] });
+  const thread = threadOf([only], [only], now)!;
+  assert.equal(thread.branches[0].nodes[1].preview, true);
+  assert.equal(thread.branches[0].nodes[1].gap, 'preview written 46 m later, not sent');
+  assert.equal(thread.branches[0].tip, null);
+  assert.equal(thread.turn, null);
+  assert.equal(thread.emails, 1);
+  // Between real steps it does not interrupt the gap or move the tip.
+  const mixed = pitch('b', { replies: [reply('2026-10-29T15:00:00Z', { preview: true }), reply('2026-10-29T16:14:00Z')] });
+  const branch = threadOf([mixed], [mixed], now)!.branches[0];
+  assert.equal(branch.nodes[2].gap, 'you answered 2 h later');
+  assert.deepEqual(branch.tip, { yours: false, since: '4 h 18 m' });
+});

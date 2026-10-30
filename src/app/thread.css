@@ -13,6 +13,7 @@
   background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--ink); font: inherit; cursor: pointer; }
 .node:hover:not(:disabled) { background: var(--hover); }
 .node:disabled { cursor: default; color: var(--ink); }
+.node.preview { border-style: dashed; opacity: .8; }
 .node.current { background: var(--select); border-color: var(--select-edge); box-shadow: inset 3px 0 var(--select-edge); }
 .dot { grid-row: span 2; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; box-sizing: border-box;
   border: 2px solid var(--ink-strong); background: var(--card); font-size: 12px; font-weight: 800; color: var(--ink-strong); }

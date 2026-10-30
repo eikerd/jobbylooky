@@ -21,6 +21,8 @@ export interface ThreadNode {
   voicemail?: PitchVoicemail;
   resume?: boolean;
   client?: boolean;
+  /** A reply recorded in preview mode and never sent: shown, but no part of the conversation. */
+  preview?: boolean;
   /** How the gap from the node above reads: "you answered 3 h 36 m later". Empty on a root. */
   gap: string;
 }
@@ -36,7 +38,7 @@ export interface Thread {
   branches: ThreadBranch[];
   emails: number;
   calls: number;
-  /** Whose move it is across the whole job, from its newest step. */
+  /** Whose move it is across the whole job, from its newest step; null when only previews were written. */
   turn: { yours: boolean; since: string } | null;
 }
 
@@ -79,6 +81,7 @@ export function elapsed(fromIso: string, toIso: string | Date): string {
 function gap(above: ThreadNode, node: ThreadNode) {
   // A call the sweep tied to this pitch can predate it: say so rather than "0 m later".
   const when = node.at < above.at ? `${elapsed(node.at, above.at)} earlier` : `${elapsed(above.at, node.at)} later`;
+  if (node.preview) return `preview written ${when}, not sent`;
   if (node.way === 'out') return `you ${above.way === 'in' ? 'answered' : 'wrote again'} ${when}`;
   if (node.kind === 'call') return `they called ${when}`;
   if (node.kind === 'voicemail') return `they left a voicemail ${when}`;
@@ -93,21 +96,26 @@ function family(root: Row, answers: ConversationIndex['answers']) {
 }
 
 function branch(root: Row, rows: Row[], calls: Map<string, string>, now: Date): ThreadBranch {
-  const sent = rows.flatMap((row) => (row.replies ?? []).filter((reply) => !reply.preview));
-  const owner = new Set(sent.map((reply) => address(reply.from)));
+  const replies = rows.flatMap((row) => row.replies ?? []);
+  const owner = new Set(replies.filter((reply) => !reply.preview).map((reply) => address(reply.from)));
+  // The store moves a row's receivedAt to its newest merged message, which can be the owner's own ingested
+  // copy; a row is dated by its first email from them instead.
+  const first = (row: Row) =>
+    (row.history ?? []).filter((message) => !owner.has(address(message.from))).sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))[0];
   const steps: ThreadNode[] = [];
   const seen = new Set<string>();
 
-  for (const reply of sent)
+  for (const reply of replies)
     steps.push({ key: `sent:${reply.id}`, kind: 'email', way: 'out', at: reply.sentAt, who: 'You', snippet: snippet(reply.body), sent: reply,
-      resume: !!reply.attachment, client: ASKS_CLIENT.test(reply.body), gap: '' });
+      resume: !!reply.attachment, client: ASKS_CLIENT.test(reply.body), preview: !!reply.preview, gap: '' });
 
   for (const row of rows) {
     if (row !== root) {
-      // An answer row is one node: its own email, opened as a row.
-      for (const message of row.history ?? []) seen.add(message.id);
-      for (const id of row.messageIds) seen.add(id);
-      steps.push({ key: `row:${row.id}`, kind: 'reply', way: 'in', at: row.receivedAt, who: name(row.from), snippet: snippet(row.body), rowId: row.id, gap: '' });
+      // An answer row is one node: its first email from them, opened as a row.
+      const answer = first(row);
+      if (answer) seen.add(answer.id);
+      else for (const id of row.messageIds) seen.add(id);
+      steps.push({ key: `row:${row.id}`, kind: 'reply', way: 'in', at: answer?.receivedAt ?? row.receivedAt, who: name(row.from), snippet: snippet(row.body), rowId: row.id, gap: '' });
     }
     // Later mail in a thread the owner wrote on, not filed as its own row: theirs, with no body of its own.
     const firstSent = (row.replies ?? []).filter((reply) => !reply.preview).map((reply) => reply.sentAt).sort()[0];
@@ -126,10 +134,15 @@ function branch(root: Row, rows: Row[], calls: Map<string, string>, now: Date): 
   }
 
   steps.sort((a, b) => a.at.localeCompare(b.at));
-  const nodes: ThreadNode[] = [{ key: `row:${root.id}`, kind: 'pitch', way: 'in', at: root.receivedAt, who: name(root.from), snippet: snippet(root.body), rowId: root.id, gap: '' }];
-  for (const step of steps) nodes.push({ ...step, gap: gap(nodes.at(-1)!, step) });
-  const last = nodes.at(-1)!;
-  return { nodes, tip: nodes.length > 1 ? { yours: last.way === 'in', since: elapsed(last.at, now) } : null };
+  const nodes: ThreadNode[] = [{ key: `row:${root.id}`, kind: 'pitch', way: 'in', at: first(root)?.receivedAt ?? root.receivedAt, who: name(root.from),
+    snippet: snippet(root.body), rowId: root.id, gap: '' }];
+  // Gaps and the tip read from the conversation; a preview between two steps does not interrupt it.
+  let above = nodes[0];
+  for (const step of steps) {
+    nodes.push({ ...step, gap: gap(above, step) });
+    if (!step.preview) above = step;
+  }
+  return { nodes, tip: above !== nodes[0] ? { yours: above.way === 'in', since: elapsed(above.at, now) } : null };
 }
 
 /**
@@ -152,14 +165,16 @@ export function threadOf(pitches: readonly Row[], all: readonly Row[] | Conversa
     for (const voicemail of rows.flatMap((row) => row.voicemails ?? []))
       if (!calls.has(voicemail.id) || root.receivedAt <= voicemail.receivedAt) calls.set(voicemail.id, root.id);
   const branches = families.map(({ root, rows }) => branch(root, rows, calls, now));
-  if (!branches.some((item) => item.tip)) return null;
-  const nodes = branches.flatMap((item) => item.nodes);
-  const talked = branches.filter((item) => item.tip).map((item) => item.nodes.at(-1)!);
-  const newest = talked.reduce((a, b) => (b.at > a.at ? b : a));
+  // A preview-only thread still shows, so a recorded preview can be read; it opens no conversation.
+  if (branches.every((item) => item.nodes.length === 1)) return null;
+  const nodes = branches.flatMap((item) => item.nodes).filter((node) => !node.preview);
+  const voice = nodes.filter((node) => node.kind === 'call' || node.kind === 'voicemail').length;
+  const talked = branches.flatMap((item) => (item.tip ? [{ ...item.tip, at: item.nodes.filter((node) => !node.preview).at(-1)!.at }] : []));
+  const newest = talked.length ? talked.reduce((a, b) => (b.at > a.at ? b : a)) : null;
   return {
     branches,
-    emails: nodes.filter((node) => node.kind !== 'call' && node.kind !== 'voicemail').length,
-    calls: nodes.length - nodes.filter((node) => node.kind !== 'call' && node.kind !== 'voicemail').length,
-    turn: { yours: newest.way === 'in', since: elapsed(newest.at, now) },
+    emails: nodes.length - voice,
+    calls: voice,
+    turn: newest && { yours: newest.yours, since: newest.since },
   };
 }

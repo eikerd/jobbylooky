@@ -475,10 +475,10 @@
                     @for (node of branch.nodes; track node.key) {
                       <li [class.root]="$first">
                         @if (node.gap) {<p class="gap">↓ {{ node.gap }}</p>}
-                        <button type="button" class="node" [class.current]="node.rowId === row.id" [attr.aria-current]="node.rowId === row.id || null"
+                        <button type="button" class="node" [class.preview]="node.preview" [class.current]="node.rowId === row.id" [attr.aria-current]="node.rowId === row.id || null"
                           [attr.aria-expanded]="node.rowId ? null : openNodeKey() === node.key" [disabled]="busy() || (!node.rowId && !node.sent && !node.voicemail)" (click)="openNode(node)">
                           <span class="dot" [class.in]="node.way === 'in'" [class.pitch]="node.kind === 'pitch'" aria-hidden="true">{{ node.kind === 'pitch' ? '✉' : node.kind === 'call' ? '☎' : node.kind === 'voicemail' ? '🎙' : '↩' }}</span>
-                          <span class="who"><span class="name">{{ node.who }}@if (node.kind === 'pitch' || node.kind === 'call' || node.kind === 'voicemail') {<small> · {{ node.kind }}</small>}</span>@if (node.resume) {<span class="chip" role="img" aria-label="resume attached" title="Resume attached">📄</span>}@if (node.client) {<span class="chip" role="img" aria-label="asked the end client" title="Asked who the end client is">🏢?</span>}</span>
+                          <span class="who"><span class="name">{{ node.who }}@if (node.kind === 'pitch' || node.kind === 'call' || node.kind === 'voicemail') {<small> · {{ node.kind }}</small>}@if (node.preview) {<small> · preview, not sent</small>}</span>@if (node.resume) {<span class="chip" role="img" aria-label="resume attached" title="Resume attached">📄</span>}@if (node.client) {<span class="chip" role="img" aria-label="asked the end client" title="Asked who the end client is">🏢?</span>}</span>
                           <span class="when"><app-age [at]="node.at" /><time [attr.datetime]="node.at">{{ node.at | date: 'MMM d, h:mm a' }}</time></span>
                           @if (node.snippet) {<span class="snippet">{{ node.snippet }}</span>}
                         </button>
