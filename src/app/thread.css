@@ -1,4 +1,4 @@
-/* The detail pane's thread as a tree (the owner, 2026-10-29): each pitch a root, the back-and-forth under it.
+/* The detail pane's thread as a tree (the owner, 2026-10-29), newest at the top (2026-10-30): each pitch a root at its branch's foot.
    The owner's emails wear a white outlined dot, theirs green, the pitch a dashed one; the open email is highlighted. */
 .thread { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
 .thread-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -7,7 +7,7 @@
 .turn.yours, .tip.yours { color: var(--heat-hot); }
 .branch { list-style: none; margin: 0 0 12px; padding: 0; }
 .branch > li:not(.root) { margin-left: 13px; padding-left: 16px; border-left: 2px solid var(--line-strong); }
-.branch > li.tip { padding-top: 4px; padding-bottom: 2px; }
+.branch > li.tip { padding-top: 2px; padding-bottom: 4px; }
 .gap { margin: 0; padding: 4px 0; font-size: 12px; font-weight: 700; color: var(--muted); }
 .node { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; text-align: left;
   background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--ink); font: inherit; cursor: pointer; }

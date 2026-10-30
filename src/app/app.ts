@@ -7,7 +7,7 @@ import { phoneText, telHref } from './phone';
 import { Age } from './age.component';
 import { conversationHeat, conversationState, planDecision, type ConversationHeat, type GroupDecision } from './conversation';
 import { conversationIndex, interactions } from './interactions';
-import { quoteStart, threadOf, type ThreadNode } from './thread';
+import { newestFirst, quoteStart, threadOf, type ThreadNode } from './thread';
 import { ConvoHeat } from './convo-heat.component';
 import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
@@ -324,10 +324,11 @@ export class App implements OnDestroy {
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  /** The open job's thread as a tree, or null when nobody wrote either way. */
+  /** The open job's thread as a tree, newest first, or null when nobody wrote either way. */
   readonly thread = computed(() => {
     const row = this.selected();
-    return row ? threadOf(this.selectedGroup()?.pitches ?? [row], this.conversationIndex()) : null;
+    const thread = row && threadOf(this.selectedGroup()?.pitches ?? [row], this.conversationIndex());
+    return thread ? newestFirst(thread) : null;
   });
   /** Where the open email's quoted history starts; folded, since those emails are nodes in the thread. */
   readonly quoteAt = computed(() => (this.thread() ? quoteStart(this.selected()?.body ?? '') : -1));

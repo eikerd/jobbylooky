@@ -178,3 +178,8 @@ export function threadOf(pitches: readonly Row[], all: readonly Row[] | Conversa
     turn: newest && { yours: newest.yours, since: newest.since },
   };
 }
+
+/** The thread as it reads on screen, newest at the top (the owner, 2026-10-30): the newest branch first, the pitch at its foot. */
+export function newestFirst(thread: Thread): Thread {
+  return { ...thread, branches: thread.branches.map((item) => ({ ...item, nodes: [...item.nodes].reverse() })).reverse() };
+}
