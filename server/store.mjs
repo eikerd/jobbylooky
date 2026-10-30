@@ -278,7 +278,7 @@ export function createStore(directory) {
         }
         if (existing) {
           existing.messageIds.push(message.id);
-          // New mail on a passed pitch is still in the inbox: the next Pass deletes it too.
+          // New mail on a passed pitch is still in the inbox: the next mail check deletes it too.
           if (existing.status === 'Passed') existing.trashPending = true;
           noteReplyBack(existing, message);
           // Re-evaluate the accumulated thread without discarding the user's decision or notes.
@@ -410,7 +410,7 @@ export function createStore(directory) {
     /**
      * Gmail finished deleting `trashedIds`. Pending clears only when that batch covered every
      * Message-ID the pitch has now: mail synced while IMAP ran is still in the inbox, so it stays
-     * pending and the next Pass deletes it.
+     * pending and the next mail check deletes it.
      */
     settleTrash(id, trashedIds) {
       const row = state.opportunities.find((item) => item.id === id);

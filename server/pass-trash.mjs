@@ -1,5 +1,25 @@
+import { gmailIds } from './gmail-trash.mjs';
+
 // How long a finished delete's outcome waits for the page to collect it.
 const KEEP_OUTCOME_MS = 10 * 60 * 1000;
+
+/**
+ * Passed pitches whose Gmail delete has not finished, however they were passed: a delete that
+ * failed or was cut off by a restart, or later mail in a thread already passed. Every mail check
+ * retries them, so no email waits on the owner clicking Pass a second time.
+ */
+export const awaitingTrash = (rows) =>
+  rows.filter((row) => row.status === 'Passed' && row.trashPending && gmailIds(row.messageIds).length);
+
+/** The connection banner's line for deletes that keep failing; '' when none do. */
+export function trashFailureText(failed) {
+  if (!failed.length) return '';
+  const [first] = failed;
+  const more = failed.length > 1 ? ` and ${failed.length - 1} more` : '';
+  const by = first.rule ? 'A reject rule' : first.phrase ? `The delete phrase "${first.phrase}"` : first.repeat || first.closed ? 'Jobbylooky' : 'You';
+  const why = first.repeat ? ' as a repeat of a job you passed' : first.closed ? ' after its postings closed' : '';
+  return `${by} passed "${first.title}"${more}${why}, but Gmail did not delete it. It retries on every mail check.`;
+}
 
 /**
  * Deletes passed pitches' emails from Gmail one pitch at a time, after the Pass is saved.
@@ -17,7 +37,7 @@ export function createPassTrash({ store, trasher, keepMs = KEEP_OUTCOME_MS }) {
     const row = current(id);
     // Un-passed (or already deleted by an earlier job) while it waited: nothing to do.
     if (!row || row.status !== 'Passed' || !row.trashPending) return { ...row, trashed: 0, skipped: true };
-    const retry = 'Click Pass again to retry.';
+    const retry = 'It retries on every mail check.';
     if (!trasher) return { ...row, trashError: `Gmail is not set up: SMTP_USER and SMTP_PASS are missing. ${retry}` };
     const batch = [...row.messageIds];
     let trashed, preview;
@@ -38,7 +58,7 @@ export function createPassTrash({ store, trasher, keepMs = KEEP_OUTCOME_MS }) {
       if (unfinished.has(id)) return jobs.get(id);
       const job = tail
         .then(() => run(id))
-        .catch((error) => ({ id, trashError: `Gmail delete failed: ${error.message}. Click Pass again to retry.` }));
+        .catch((error) => ({ id, trashError: `Gmail delete failed: ${error.message}. It retries on every mail check.` }));
       tail = job;
       jobs.set(id, job);
       unfinished.add(id);
