@@ -1,9 +1,21 @@
-import { isOpportunity, OPPORTUNITY_TERMS } from './screen.mjs';
+import { isOpportunity, OPPORTUNITY_TERMS, CONTEXT_TERMS, RECRUITER_DOMAINS } from './screen.mjs';
 import { carriesPhrase } from './delete-phrases.mjs';
 import { address } from './mailer.mjs';
 
-// Never stricter than isOpportunity(), which makes the final decision.
-const SUBJECT_PREFILTER = OPPORTUNITY_TERMS.map(() => 'lower(subject) LIKE ?').join(' OR ');
+// Never stricter than isOpportunity(), which makes the final decision: a subject naming only a
+// role or stack needs a context term or a recruiter sender, so those stand in for the role terms.
+const PREFILTER_TERMS = [...OPPORTUNITY_TERMS, ...CONTEXT_TERMS];
+const SUBJECT_PREFILTER = [
+  ...PREFILTER_TERMS.map(() => 'lower(subject) LIKE ?'),
+  ...RECRUITER_DOMAINS.map(() => '(lower(senderEmail) LIKE ? OR lower(senderEmail) LIKE ?)'),
+].join(' OR ');
+const PREFILTER_ARGS = [
+  ...PREFILTER_TERMS.map((term) => ({ type: 'text', value: `%${term.toLowerCase()}%` })),
+  ...RECRUITER_DOMAINS.flatMap((domain) =>
+    // Anywhere in the field, so "Alice <alice@kforce.com>" passes; isOpportunity() checks the domain.
+    [`%@${domain}%`, `%.${domain}%`].map((value) => ({ type: 'text', value })),
+  ),
+];
 // How far back the mail log is read, in days.
 const WINDOW_DAYS = 60;
 const phraseWords = (value) => [...new Set(String(value).toLowerCase().split(/\s+/).filter(Boolean))];
@@ -93,7 +105,7 @@ export async function readWorker(url, fetcher = fetch, { watch = [], deletePhras
       { type: 'integer', value: String(cursorTime) },
       { type: 'integer', value: String(cursorTime) },
       { type: 'text', value: cursorId },
-      ...OPPORTUNITY_TERMS.map((term) => ({ type: 'text', value: `%${term.toLowerCase()}%` })),
+      ...PREFILTER_ARGS,
       ...watched.map((value) => ({ type: 'text', value })),
       ...phrases.flatMap((filter) => filter.args),
     ]);

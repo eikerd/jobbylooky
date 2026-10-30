@@ -395,18 +395,62 @@ export function screen(message, trackedPhrases = []) {
   };
 }
 
-/** Subject terms that mark a pitch. The mail-worker SQL prefilter is built from this list. */
+/** Subject terms that mark a pitch on their own. */
 export const OPPORTUNITY_TERMS = [
   'developer', 'engineer', 'hiring', 'recruit', 'job', 'opportunity', 'opening', 'position',
   'UI lead', 'frontend lead',
 ];
-const opportunityPattern = new RegExp(`\\b(?:${OPPORTUNITY_TERMS.join('|')})\\b`, 'i');
+// A role or stack in the subject: a pitch only beside a context term or from a known recruiter.
+const TITLE_TERMS = [
+  'dev', 'engineering', 'architect', 'lead', 'manager', 'analyst', 'designer', 'consultant',
+  'administrator', 'specialist', 'technologist', 'programmer', 'scrum master', 'product owner',
+  'sde', 'sdet', 'qa', 'tester', 'automation', 'devops', 'sre', 'ux', 'ui', 'frontend', 'front-end',
+  'front end', 'full stack', 'full-stack', 'fullstack', 'fse', 'angular', 'react', 'react.js',
+  'reactjs', 'java', '.net', 'node', 'node.js', 'python', 'typescript', 'javascript', 'aws', 'azure',
+  'gcp', 'cloud', 'ai', 'data', 'coach', 'representative',
+];
+// How recruiters phrase the engagement: "W2 role", "Remote", "Urgent need", "Location:".
+export const CONTEXT_TERMS = [
+  'role', 'roles', 'w2', 'c2c', '1099', 'contract', 'contractor', 'fulltime', 'full time',
+  'full-time', 'onsite', 'on-site', 'hybrid', 'remote', 'telecommute', 'requirement', 'urgent',
+  'immediate', 'location:', 'locals', 'local to', 'jd', 'looking for', 'interview',
+];
+/** Sender domains that only send recruiting mail, mirroring the owner's Gmail WORK OPPORTUNITY filter. */
+export const RECRUITER_DOMAINS = [
+  'rekruiteasy.com', 'nityo.co', 'nityo.com', 'nityo.net', 'randstadusa.com', 'actalentservices.com',
+  'artech.com', 'selectgroup.com', 'foundhuman.com', 'camdenkelly.com', 'fortitudesys.com',
+  'mytimehiring.com', 'spectraforce.com', 'egen.solutions', 'idctechnologies.com', 'teksystems.com',
+  'softworldinc.com', 'aerotek.com', 'infinity-cs.com', 'tanishasystems.com', 'matrixres.com',
+  'irissoftware.com', 'tansoncorp.com', 'stiersol.com', 'envisiontechsol.net', 'envisiontechsol.com',
+  'kaygen.com', 'marstechnominds.com', 'noblesoft.com', 'empowerprofessionals.com', 'corevance.com',
+  'clifyx.com', 'anviktek.com', 'natsoft.us', 'rapiditinc.com', 'excelonsolutions.com',
+  'charterglobal.com', 'tekgence.com', 'vsgbusinesssolutions.com', 'inficaretech.com',
+  'networkpedia.com', 'primusglobal.com', 'ustechsolutionsinc.com', 'hirekeyz.com', 'clevanoollc.com',
+  'logicplanet.com', 'eitprofessionals.com', 'vsoftdigital.com', 'longfinch.com', 'dexian.com',
+  'spruceinfotech.com', 'avtechsol.com', 'jscsolution.com', 'apetan.com', 'kforce.com',
+  'tekshapers.com', 'vdartinc.com', 'centillionz.com', 'bhsg.com', 'tmvus.com', 'match.indeed.com',
+  'user.dice.com', 'intersourcesinc.com', 'radiants.com', 'smartitframe.com', 'vaspiretech.com',
+  'solutionit.com', 'stellentit.com', 'prideveterans.com', 'tekintegral.com', 'vestaf.com',
+];
+// Letters and digits only bound a term: "Developer_US" and "Engineer_-" still match.
+const termPattern = (terms) =>
+  new RegExp(`(?<![a-z0-9])(?:${terms.map((term) => term.replace(/[.+]/g, '\\$&')).join('|')})(?![a-z0-9])`, 'i');
+const opportunityPattern = termPattern(OPPORTUNITY_TERMS);
+const titlePattern = termPattern(TITLE_TERMS);
+const contextPattern = termPattern(CONTEXT_TERMS);
+
+export function fromRecruiter(from) {
+  const domain = String(from).toLowerCase().match(/@([a-z0-9.-]+)/)?.[1] ?? '';
+  return RECRUITER_DOMAINS.some((known) => domain === known || domain.endsWith(`.${known}`));
+}
 
 export function isOpportunity(message) {
+  const subject = message.subject;
   return (
-    opportunityPattern.test(message.subject) &&
+    (opportunityPattern.test(subject) ||
+      (titlePattern.test(subject) && (contextPattern.test(subject) || fromRecruiter(message.from)))) &&
     !/\b(?:birthday|impressions|posts got|project available to import|webinar|newsletter|monthly build|hello developer|developer program|subscription|just hired|insights:|hired roles near you)\b/i.test(
-      message.subject,
+      subject,
     )
   );
 }
