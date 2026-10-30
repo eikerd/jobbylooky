@@ -478,6 +478,11 @@ export class App implements OnDestroy {
     const digits = value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
     return digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : value || 'Unknown caller';
   }
+  /** "+15028900699" → "tel:+15028900699", which the Mac hands to FaceTime / iPhone; '' when there is no number to dial. */
+  telHref(value: string) {
+    const digits = value.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+    return digits.length === 10 ? `tel:+1${digits}` : '';
+  }
   duration(seconds: number) {
     const whole = Math.round(seconds);
     return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
