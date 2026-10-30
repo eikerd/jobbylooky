@@ -48,6 +48,12 @@ const ownedPitches = () =>
       .filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id) || row.voicemails?.length)
       .map((row) => row.id),
   );
+/**
+ * The pitches a delete phrase leaves alone. A voicemail does not save one (the owner, 2026-10-30:
+ * "I don't care if they have a voicemail, many wrong matches leave vmails").
+ */
+const phraseExempt = () =>
+  new Set(store.snapshot().opportunities.filter((row) => linkChecks.wasKept(row.id) || linkChecks.wasAutoPassed(row.id)).map((row) => row.id));
 function syncSoon() {
   if (!workerUrl) return;
   if (syncing) syncAgain = true;
@@ -60,7 +66,7 @@ async function sync() {
     // Anyone the owner has written to is watched, so their answer arrives whatever its subject.
     const messages = await readWorker(workerUrl, fetch, { watch: store.watchedSenders(), deletePhrases: store.deletePhrases().map((row) => row.phrase) });
     // Also runs each delete phrase not yet swept over the mail already here.
-    const added = store.import(messages, { synced: true, exclude: ownedPitches() });
+    const added = store.import(messages, { synced: true, exclude: phraseExempt() });
     store.sweepRepeats(ownedPitches());
     trashAutoPassed();
     syncError = '';
@@ -283,7 +289,7 @@ export const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/clients') return json(200, store.clients());
     // Before a delete phrase is saved: how much mail it would have caught. The mail log is optional.
     if (req.method === 'GET' && url.pathname === '/api/delete-phrases/preview') {
-      const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') }, ownedPitches());
+      const preview = store.deletePhrasePreview({ phrase: url.searchParams.get('phrase') }, phraseExempt());
       if (!workerUrl) return json(200, { ...preview, emails: null, days: null });
       try {
         return json(200, { ...preview, ...(await countPhraseMail(workerUrl, preview.phrase)) });
@@ -345,7 +351,7 @@ export const server = createServer(async (req, res) => {
       if (req.method === 'POST' && url.pathname === '/api/phrases')
         return json(201, store.addPhrase(await body(req)));
       if (req.method === 'POST' && url.pathname === '/api/delete-phrases') {
-        const phrases = store.addDeletePhrase(await body(req), ownedPitches());
+        const phrases = store.addDeletePhrase(await body(req), phraseExempt());
         // Pitches it passed go to Gmail Trash now, and a mail check reads the rest of the mail log
         // for it, non-job mail included.
         trashAutoPassed();
