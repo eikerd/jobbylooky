@@ -4,23 +4,9 @@
 .reply textarea { width: 100%; box-sizing: border-box; font-size: 15px; }
 .reply-actions { display: flex; gap: 8px; }
 .reply-to, .sent-meta, .reply-off { font-size: 13px; color: var(--soft); margin: 0; }
-.reply-back { font-size: 14px; font-weight: 700; color: var(--accent-ink); margin: 0 0 8px; }
-.sent-reply { border-left: 3px solid var(--line-strong); padding-left: 10px; margin-bottom: 10px; }
-.sent-reply pre { font-size: 14px; margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; }
 .replied { color: var(--accent-ink); font-weight: 700; }
-.answer-of { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; display: grid; gap: 8px; justify-items: start; }
-.answer-of p { margin: 0; font-size: 14px; font-weight: 700; color: var(--accent-ink); }
-.answer-of .email-reading { justify-self: stretch; border-left: 3px solid var(--line-strong); padding-left: 10px; }
 .link-button { background: none; border: 0; padding: 0; color: var(--accent-ink); font: inherit; text-decoration: underline; cursor: pointer; text-align: left; }
 .answer-mark { color: var(--accent-ink); }
-
-/* The detail pane matches the trail: the reply section holds the owner's emails, so it stays neutral; their answer is green. */
-.reply.convo-waiting, .answer-of.convo-live, .reply.convo-live { border: 0; border-radius: 10px; padding: 14px; }
-.reply.convo-waiting, .reply.convo-live { background: var(--side); }
-.answer-of.convo-live { background: var(--accent-soft); }
-.reply.convo-waiting .sent-reply, .reply.convo-live .sent-reply { border-left-color: var(--ink-strong); }
-.answer-of.convo-live .email-reading { border-left-color: var(--accent); }
-.reply.convo-live .reply-back, .answer-of.convo-live p { color: var(--accent-ink); }
 
 /* A card a live reject rule passed names the rule. */
 .rejected-by { font-size: 12px; font-weight: 800; padding: 1px 8px; border-radius: 999px; background: var(--bad-soft); color: var(--bad); }

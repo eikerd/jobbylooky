@@ -464,31 +464,53 @@
                 }
               </section>
             }
-            @if (original(); as first) {
-              <section class="answer-of convo-live" aria-label="Original pitch">
-                <p>↩ Answer to <button type="button" class="link-button" (click)="openProfilePitch(first.id)">{{ first.title }}</button></p>
-                <button class="button secondary" type="button" [attr.aria-expanded]="showOriginal()" (click)="showOriginal.set(!showOriginal())">
-                  {{ showOriginal() ? 'Hide original email' : 'View original email' }}
-                </button>
-                @if (showOriginal()) {
-                  <ng-container *ngTemplateOutlet="bodyBlocks; context: { $implicit: originalBlocks() }" />
+            @if (thread(); as t) {
+              <section class="thread" aria-labelledby="thread-title">
+                <div class="thread-head">
+                  <h3 id="thread-title">Thread · {{ t.emails }} {{ t.emails === 1 ? 'email' : 'emails' }}@if (t.calls) { · {{ t.calls }} {{ t.calls === 1 ? 'call' : 'calls' }}}</h3>
+                  @if (t.turn; as turn) {<span class="turn" [class.yours]="turn.yours">{{ turn.yours ? '⏳ Your move' : 'Their move' }} · {{ turn.since }}</span>}
+                </div>
+                @for (branch of t.branches; track branch.nodes[0].key) {
+                  <ol class="branch">
+                    @for (node of branch.nodes; track node.key) {
+                      <li [class.root]="$first">
+                        @if (node.gap) {<p class="gap">↓ {{ node.gap }}</p>}
+                        <button type="button" class="node" [class.current]="node.rowId === row.id" [attr.aria-current]="node.rowId === row.id || null"
+                          [attr.aria-expanded]="node.rowId ? null : openNodeKey() === node.key" [disabled]="busy() || (!node.rowId && !node.sent && !node.voicemail)" (click)="openNode(node)">
+                          <span class="dot" [class.in]="node.way === 'in'" [class.pitch]="node.kind === 'pitch'" aria-hidden="true">{{ node.kind === 'pitch' ? '✉' : node.kind === 'call' ? '☎' : node.kind === 'voicemail' ? '🎙' : '↩' }}</span>
+                          <span class="who"><span class="name">{{ node.who }}@if (node.kind === 'pitch' || node.kind === 'call' || node.kind === 'voicemail') {<small> · {{ node.kind }}</small>}</span>@if (node.resume) {<span class="chip" role="img" aria-label="resume attached" title="Resume attached">📄</span>}@if (node.client) {<span class="chip" role="img" aria-label="asked the end client" title="Asked who the end client is">🏢?</span>}</span>
+                          <span class="when"><app-age [at]="node.at" /><time [attr.datetime]="node.at">{{ node.at | date: 'MMM d, h:mm a' }}</time></span>
+                          @if (node.snippet) {<span class="snippet">{{ node.snippet }}</span>}
+                        </button>
+                        @if (node.rowId === row.id) {
+                          <div class="node-body">
+                            @if (row.truncated) {
+                              <p class="incomplete">The stored email is incomplete. Open in Gmail to read the original.</p>
+                            }
+                            <ng-container *ngTemplateOutlet="bodyBlocks; context: { $implicit: emailBlocks() }" />
+                            @if (quoteAt() > 0) {
+                              <button type="button" class="link-button quoted-toggle" [attr.aria-expanded]="showQuoted()" (click)="showQuoted.set(!showQuoted())">{{ showQuoted() ? 'Hide the quoted earlier emails' : '··· earlier emails hidden, already in the thread above' }}</button>
+                            }
+                          </div>
+                        } @else if (openNodeKey() === node.key) {
+                          @if (node.sent; as sent) {
+                            <div class="node-body">
+                              <p class="sent-meta">To {{ sent.to }}@if (sent.attachment) { · 📎 {{ sent.attachment }}}</p>
+                              <pre>{{ sent.body }}</pre>
+                            </div>
+                          } @else if (node.voicemail; as voicemail) {
+                            <p class="node-body">{{ voicemail.transcript || 'No transcript.' }}</p>
+                          }
+                        }
+                      </li>
+                    }
+                    @if (branch.tip; as tip) {<li class="tip" [class.yours]="tip.yours">{{ tip.yours ? '⏳ waiting on you' : '… no answer yet' }} · {{ tip.since }}</li>}
+                  </ol>
                 }
               </section>
             }
-            @if (row.replyReceivedAt || row.replies?.length || replying() || !connection()?.canReply) {
-            <section class="reply" aria-label="Reply" [class.convo-waiting]="conversation([row]) === 'waiting'" [class.convo-live]="conversation([row]) === 'answered'">
-              @if (row.replyReceivedAt) {
-                <p class="reply-back">↩ They replied {{ row.replyReceivedAt | date: 'MMM d, h:mm a' }} · <app-age [at]="row.replyReceivedAt" /></p>
-              }
-              @for (sent of row.replies ?? []; track sent.id) {
-                <div class="sent-reply">
-                  <p class="sent-meta">You wrote {{ sent.sentAt | date: 'MMM d, h:mm a' }} (<app-age [at]="sent.sentAt" />) to {{ sent.to }}@if (sent.preview) { · preview, not sent}</p>
-                  @if (sent.attachment) {
-                    <p class="sent-meta">📎 {{ sent.attachment }}</p>
-                  }
-                  <pre>{{ sent.body }}</pre>
-                </div>
-              }
+            @if (replying() || !connection()?.canReply) {
+            <section class="reply" aria-label="Reply">
               @if (!connection()?.canReply) {
                 <p class="reply-off">Sending is not set up on this server.</p>
               } @else if (replying()) {
@@ -507,6 +529,7 @@
               }
             </section>
             }
+            @if (!thread()) {
             <section class="email-source" aria-labelledby="email-title">
               <h3 id="email-title">Email body</h3>
               @if (row.truncated) {
@@ -514,6 +537,7 @@
               }
               <ng-container *ngTemplateOutlet="bodyBlocks; context: { $implicit: emailBlocks() }" />
             </section>
+            }
             <form class="tracking" (ngSubmit)="save()">
               <div class="form-row">
                 <label
