@@ -1,0 +1,32 @@
+/* The detail pane's thread as a tree (the owner, 2026-10-29): each pitch a root, the back-and-forth under it.
+   The owner's emails wear a white outlined dot, theirs green, the pitch a dashed one; the open email is highlighted. */
+.thread { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; }
+.thread-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.thread-head h3 { margin: 0; }
+.turn, .tip { font-size: 13px; font-weight: 800; color: var(--soft); }
+.turn.yours, .tip.yours { color: var(--heat-hot); }
+.branch { list-style: none; margin: 0 0 12px; padding: 0; }
+.branch > li:not(.root) { margin-left: 13px; padding-left: 16px; border-left: 2px solid var(--line-strong); }
+.branch > li.tip { padding-top: 4px; padding-bottom: 2px; }
+.gap { margin: 0; padding: 4px 0; font-size: 12px; font-weight: 700; color: var(--muted); }
+.node { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; width: 100%; text-align: left;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--ink); font: inherit; cursor: pointer; }
+.node:hover:not(:disabled) { background: var(--hover); }
+.node:disabled { cursor: default; color: var(--ink); }
+.node.preview { border-style: dashed; opacity: .8; }
+.node.current { background: var(--select); border-color: var(--select-edge); box-shadow: inset 3px 0 var(--select-edge); }
+.dot { grid-row: span 2; display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; box-sizing: border-box;
+  border: 2px solid var(--ink-strong); background: var(--card); font-size: 12px; font-weight: 800; color: var(--ink-strong); }
+.dot.in { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }
+.dot.pitch { border-style: dashed; }
+.who { display: flex; align-items: center; min-width: 0; font-size: 14px; font-weight: 800; color: var(--ink-strong); }
+.name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who small { font-size: 12px; font-weight: 600; color: var(--soft); }
+.chip { flex: none; display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--side); border: 1px solid var(--line); font-size: 11px; font-weight: 700; }
+.when { display: flex; gap: 6px; align-items: baseline; font-size: 12px; white-space: nowrap; }
+.when time { font-size: 12px; }
+.snippet { grid-column: 2 / 4; font-size: 13px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-body { margin: 6px 0 4px; padding: 8px 10px; border-left: 3px solid var(--select-edge); font-size: 14px; }
+.node-body pre { margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; font-size: 14px; }
+p.node-body { white-space: pre-wrap; }
+.quoted-toggle { margin-top: 6px; font-size: 13px; color: var(--soft); }

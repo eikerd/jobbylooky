@@ -5,7 +5,8 @@ import { FormsModule } from '@angular/forms';
 import { ageText, daysSince } from './age';
 import { Age } from './age.component';
 import { conversationHeat, conversationState, planDecision, type ConversationHeat, type GroupDecision } from './conversation';
-import { interactions } from './interactions';
+import { conversationIndex, interactions } from './interactions';
+import { quoteStart, threadOf, type ThreadNode } from './thread';
 import { ConvoHeat } from './convo-heat.component';
 import { Rules, hasRuleDraft, type RuleDraft } from './rules.component';
 import { DEFAULT_RELATED_SORT, RELATED_COLUMNS, nextRelatedSort, relatedRows, sortRelated, type RelatedKey } from './related-grid';
@@ -22,7 +23,7 @@ import { SelectionPhrase } from './selection-phrase.component';
 import { Postings } from './postings.component';
 import { Clients, clearClientDraft, hasClientDraft } from './clients.component';
 import { clientLabel, clientsByPitch, fingerprintKey } from './clients';
-import { InteractionPills } from './interaction-pills.component';
+import { ConvoTrail } from './convo-trail.component';
 
 interface Connection {
   configured: boolean;
@@ -42,9 +43,9 @@ const TRASH_TOASTS: Partial<Record<TrashOutcome, string>> = {
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Clients, Rules, Age, InteractionPills, ConvoHeat],
+  imports: [FormsModule, DatePipe, NgTemplateOutlet, Profiles, SourceIcon, Highlight, PlaceLinks, CrayonPicker, SelectionPhrase, Postings, Clients, Rules, Age, ConvoTrail, ConvoHeat],
   templateUrl: './app.html',
-  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
+  styleUrls: ['./theme.css', './app.css', './groups.css', './phrases.css', './reply.css', './thread.css', './toast.css', './bulk.css', './voicemail.css', './links.css'],
   // Each kind's crayon becomes --<kind>-mark/-soft/-ink, inherited by highlights in every child component.
   host: { '[style]': 'phraseStyle()' },
 })
@@ -56,8 +57,10 @@ export class App implements OnDestroy {
   readonly jobGroups = signal<JobGroup[]>([]);
   readonly opportunities = computed(() => this.jobGroups().flatMap(group => group.pitches));
   /** Each pitch's job conversation heat, counted once per change rather than on every render. */
+  /** Every pitch indexed for following conversations, built once per change and shared by every card. */
+  readonly conversationIndex = computed(() => conversationIndex(this.opportunities()));
   readonly heatByPitch = computed(() => {
-    const all = this.opportunities();
+    const all = this.conversationIndex();
     const heat = new Map<string, ConversationHeat>();
     for (const group of this.jobGroups()) {
       // Most jobs have no conversation: only those pay for following their emails.
@@ -320,18 +323,33 @@ export class App implements OnDestroy {
   readonly selected = computed(() =>
     this.opportunities().find((row) => row.id === this.selectedId()),
   );
-  readonly emailBlocks = computed(() => this.blocks(this.selected()));
-  /** The pitch an answer row replies to, and whether its email is shown under the answer. */
-  readonly original = computed(() => {
-    const id = this.selected()?.respondsTo;
-    return id ? this.opportunities().find((row) => row.id === id) : undefined;
+  /** The open job's thread as a tree, or null when nobody wrote either way. */
+  readonly thread = computed(() => {
+    const row = this.selected();
+    return row ? threadOf(this.selectedGroup()?.pitches ?? [row], this.conversationIndex()) : null;
   });
-  readonly showOriginal = signal(false);
-  readonly originalBlocks = computed(() => (this.showOriginal() ? this.blocks(this.original()) : []));
+  /** Where the open email's quoted history starts; folded, since those emails are nodes in the thread. */
+  readonly quoteAt = computed(() => (this.thread() ? quoteStart(this.selected()?.body ?? '') : -1));
+  readonly showQuoted = signal(false);
+  /** The thread node opened to show the owner's email or a voicemail transcript under it. */
+  readonly openNodeKey = signal('');
+  readonly emailBlocks = computed(() => {
+    const row = this.selected();
+    const at = this.quoteAt();
+    return this.blocks(row, at > 0 && !this.showQuoted() ? row!.body.slice(0, at) : row?.body);
+  });
+  openNode(node: ThreadNode) {
+    const row = node.rowId ? this.opportunities().find((item) => item.id === node.rowId) : undefined;
+    if (row) {
+      if (row.id !== this.selectedId()) this.open(row);
+      return;
+    }
+    this.openNodeKey.set(this.openNodeKey() === node.key ? '' : node.key);
+  }
   /** The email as blocks, each link carrying what the daily link sweep found there. */
-  private blocks(row: Opportunity | undefined) {
+  private blocks(row: Opportunity | undefined, body = row?.body) {
     const checks = new Map((row?.linkChecks ?? []).map((check) => [check.url, check]));
-    return formatEmailBody(row?.body || '').map((block) => ({
+    return formatEmailBody(body || '').map((block) => ({
       ...block,
       rows: urlRows(block.kind === 'text' ? block.text : `${block.label}: ${block.value}`).map((line) =>
         line.kind === 'links' ? { ...line, parts: line.parts.map((part) => ({ ...part, check: part.url ? checks.get(part.text) : undefined })) } : line,
@@ -481,7 +499,8 @@ export class App implements OnDestroy {
     this.linking.set(false);
     this.linkTarget = '';
     this.replying.set(false);
-    this.showOriginal.set(false);
+    this.showQuoted.set(false);
+    this.openNodeKey.set('');
     this.replyDraft = '';
     return true;
   }
@@ -1106,7 +1125,7 @@ export class App implements OnDestroy {
   /** One pitch's own heat, for the same-job grid where its rows differ. */
   pitchHeat(pitch: Opportunity) {
     const state = conversationState([pitch]);
-    return state && conversationHeat(state, interactions([pitch], this.opportunities()));
+    return state && conversationHeat(state, interactions([pitch], this.conversationIndex()));
   }
   /** Plain-text age for spots that cannot hold the coloured one, like a select option. */
   ageWords(date: string) {

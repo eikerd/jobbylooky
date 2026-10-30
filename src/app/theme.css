@@ -20,19 +20,15 @@
   --accent-soft: #dff3e6;
   --select: #fff7d1;
   --select-edge: #a87e00;
+  --selected-frame: #000000;
   --warn: #7a5600;
   --warn-soft: #fff0bf;
   --bad: #a1332a;
   --bad-soft: #fde3df;
   --full-time: #1f5fa8;
-  /* Conversations: orange while waiting on them, bright pink once they answer. */
+  /* The talking-head heat icon on grids: orange while waiting on them, pink once they answer. */
   --convo-waiting: #c95a0c;
-  --convo-waiting-soft: #ffe6cf;
-  --convo-waiting-hover: #ffdabb;
   --convo-live: #e0168a;
-  --convo-live-ink: #a10c62;
-  --convo-live-soft: #ffd0ea;
-  --convo-live-hover: #ffbfe1;
   --mark: #ffe58f;
   /* Age heat: today reads hot, thirty days or older cold; both pass 4.5:1 on the card. */
   --heat-hot: #b3400c;

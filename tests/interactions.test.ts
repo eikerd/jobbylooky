@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { interactions } from '../src/app/interactions.ts';
+import { conversationIndex, interactions } from '../src/app/interactions.ts';
 
 const pitch = (id: string, extra = {}) => ({ id, messageIds: [`${id}@m`], receivedAt: '2026-10-01T10:00:00Z', from: 'Rec <rec@agency.com>', ...extra });
 const reply = (sentAt: string, extra = {}) => ({ id: `r${sentAt}`, to: 'rec@agency.com', from: 'me@gmail.com', subject: '', body: '', sentAt, ...extra });
@@ -112,4 +112,34 @@ test("the owner's own copy, ingested by the mail worker, is neither their reply 
   const result = interactions([a], [a, answer]);
   assert.deepEqual(result.replies.map((m) => m.id), ['theirs@m']);
   assert.equal(result.thread, 3);
+});
+
+test('the trail runs oldest first and marks the resume and the end-client question', () => {
+  const a = pitch('a', {
+    replies: [
+      reply('2026-10-02T09:00:00Z', { body: 'Could you share who the end client is?' }),
+      reply('2026-10-04T09:00:00Z', { attachment: 'Resume.pdf' }),
+    ],
+    voicemails: [{ id: 'v', kind: 'live', receivedAt: '2026-10-05T09:00:00Z' }],
+  });
+  const answer = pitch('b', { messageIds: ['answer@m'], receivedAt: '2026-10-03T08:00:00Z', respondsTo: 'a' });
+  const { trail } = interactions([a], [a, answer]);
+  assert.deepEqual(
+    trail.map((step) => [step.kind, step.way, !!step.resume, !!step.client]),
+    [
+      ['email', 'out', false, true],
+      ['reply', 'in', false, false],
+      ['email', 'out', true, false],
+      ['call', 'in', false, false],
+    ],
+  );
+});
+
+test('a shared index finds the same conversation as the plain list', () => {
+  const a = pitch('a', { replies: [reply('2026-10-02T09:00:00Z')] });
+  const answer = pitch('b', { messageIds: ['answer@m'], receivedAt: '2026-10-03T08:00:00Z', respondsTo: 'a' });
+  const again = pitch('c', { messageIds: ['again@m'], receivedAt: '2026-10-05T08:00:00Z', respondsTo: 'b' });
+  const all = [a, answer, again];
+  assert.deepEqual(interactions([again], conversationIndex(all)), interactions([again], all));
+  assert.deepEqual(interactions([again], all).replies.map((m) => m.id), ['answer@m', 'again@m']);
 });
