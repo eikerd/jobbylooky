@@ -253,6 +253,27 @@ test('obvious social updates and deployment notifications are not opportunities'
   assert.equal(isOpportunity(mail('1 new project available to import', 'Angular')), false);
   assert.equal(isOpportunity(mail('Hiring Angular Developer', 'Remote')), true);
 });
+test('a role or stack beside recruiter phrasing is a pitch without the word developer', () => {
+  assert.equal(isOpportunity(mail('NEW! ANGULAR/MONOREPO LONG TERM W2 CONTRACT ROLE!', '')), true);
+  assert.equal(isOpportunity(mail('Remote Role : Playwright QA Automation Lead', '')), true);
+  assert.equal(isOpportunity(mail('Urgent need: Solutions Architect fully Remote', '')), true);
+  assert.equal(isOpportunity(mail('Role: Product Owner  Location: Atlanta, GA', '')), true);
+});
+test('an underscore after a term does not hide it', () => {
+  assert.equal(isOpportunity(mail('Requirement for Angular Developer_US in Hoboken', '')), true);
+  assert.equal(isOpportunity(mail('Full Stack Tech Lead Engineer_- Atlanta', '')), true);
+});
+test('a known recruiting firm needs only a role in the subject', () => {
+  assert.equal(isOpportunity(mail('Automation Test Lead', '', { from: 'abc-def-ghi@user.dice.com' })), true);
+  assert.equal(isOpportunity(mail('Frontend SDE II @ Slate Auto', '', { from: 'donotreply@match.indeed.com' })), true);
+  assert.equal(isOpportunity(mail('Automation Test Lead', '')), false);
+  assert.equal(isOpportunity(mail('checking in', '', { from: 'someone@bhsg.com' })), false);
+});
+test('product mail that names a stack is not a pitch', () => {
+  assert.equal(isOpportunity(mail('Type what you need, get diagrams (with AI)', '')), false);
+  assert.equal(isOpportunity(mail('[Action may be required] CloudTrail change [AWS Account]', '')), false);
+  assert.equal(isOpportunity(mail('AI sidekick, better location tracking, and more', '')), false);
+});
 test('field labels never consume prose, plurals or role-overview headings', () => {
   const result = screen(
     mail(
