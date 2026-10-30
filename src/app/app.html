@@ -596,7 +596,8 @@
 </div>
 
 <app-selection-phrase [within]="detailPane()?.nativeElement" [phrases]="phrases()" [kinds]="phraseKinds" [labels]="phraseKindLabels"
-  [marks]="phraseKindMarks" [save]="trackSelection" [busy]="busy()" />
+  [marks]="phraseKindMarks" [save]="trackSelection" [deletePhrases]="deletePhrases()" [saveDelete]="deleteSelection"
+  [busy]="busy() || checkingDelete()" />
 
 <dialog #decisionDialog class="decision-dialog" aria-labelledby="decision-title" (close)="decision.set(null)">
   @if (decision(); as plan) {

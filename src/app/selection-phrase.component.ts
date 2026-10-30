@@ -1,6 +1,6 @@
 import { Component, ElementRef, OnDestroy, computed, input, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { PhraseKind, TrackedPhrase } from './models';
+import type { DeletePhrase, PhraseKind, TrackedPhrase } from './models';
 import { widenEnd, widenStart } from './phrase-edges';
 
 /** The server's limits on a tracked phrase (server/store.mjs addPhrase). */
@@ -27,7 +27,7 @@ function wholeWords(selection: Selection, range: Range) {
 
 /**
  * Select text inside `within`, hover the selection, and a Track button appears; it opens a modal
- * holding the selection, where one click tracks it as a phrase of any kind.
+ * holding the selection, where one click tracks it as a phrase of any kind or makes it a delete phrase.
  */
 @Component({
   selector: 'app-selection-phrase',
@@ -54,9 +54,14 @@ function wholeWords(selection: Selection, range: Range) {
           </button>
         }
       </div>
+      <button type="button" class="delete" [disabled]="!canDelete()" (click)="chooseDelete()">🗑 Delete phrase</button>
       @if (existing(); as row) {
         <p class="note">Already tracked as {{ labels()[row.kind] }}.</p>
-      } @else if (failure()) {
+      }
+      @if (deleting()) {
+        <p class="note">Already a delete phrase.</p>
+      }
+      @if (failure()) {
         <p class="note error" role="alert">{{ failure() }}</p>
       }
       <button type="button" class="cancel" (click)="dialog.close()">Cancel</button>
@@ -90,6 +95,11 @@ function wholeWords(selection: Selection, range: Range) {
     .kind.neutral { background: var(--neutral-mark); color: var(--neutral-ink); }
     .kind.purple { background: var(--purple-mark); color: var(--purple-ink); }
     .kind.pink { background: var(--pink-mark); color: var(--pink-ink); }
+    .delete {
+      margin: 12px 8px 0 0; padding: 5px 12px; border: 1.5px solid var(--bad); border-radius: 8px;
+      background: var(--bad-soft); color: var(--bad); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .delete:disabled { opacity: 0.45; cursor: default; }
     .note { margin: 8px 0 0; font-size: 14px; color: var(--soft); }
     .note.error { color: var(--bad); }
     .cancel {
@@ -108,6 +118,9 @@ export class SelectionPhrase implements OnDestroy {
   readonly marks = input.required<Record<PhraseKind, string>>();
   /** Saves the phrase; resolves null once saved, or the reason it was not. */
   readonly save = input.required<(phrase: string, kind: PhraseKind) => Promise<string | null>>();
+  readonly deletePhrases = input<DeletePhrase[]>([]);
+  /** Checks, confirms and saves a delete phrase; resolves null once saved, '' if cancelled, or the reason it was not. */
+  readonly saveDelete = input.required<(phrase: string) => Promise<string | null>>();
   readonly busy = input(false);
 
   readonly maxPhrase = MAX_PHRASE;
@@ -124,10 +137,18 @@ export class SelectionPhrase implements OnDestroy {
     const phrase = clean(this.draft()).toLowerCase();
     return this.phrases().find((row) => row.phrase.toLowerCase() === phrase);
   });
-  readonly canSave = computed(() => {
-    const length = clean(this.draft()).length;
-    return !this.busy() && !this.existing() && length >= MIN_PHRASE && length <= MAX_PHRASE;
+  /** The draft is already a delete phrase. */
+  readonly deleting = computed(() => {
+    const phrase = clean(this.draft()).toLowerCase();
+    return this.deletePhrases().some((row) => row.phrase.toLowerCase() === phrase);
   });
+  private readonly fits = computed(() => {
+    const length = clean(this.draft()).length;
+    return !this.busy() && length >= MIN_PHRASE && length <= MAX_PHRASE;
+  });
+  readonly canSave = computed(() => this.fits() && !this.existing());
+  // A tracked phrase can still become a delete phrase: the two lists are kept apart (server/delete-phrases.mjs).
+  readonly canDelete = computed(() => this.fits() && !this.deleting());
 
   // The pane scrolls inside itself, and scroll events do not bubble, so the listener captures. Without
   // hover (touch) nothing would bring the button back, so it follows the selection once scrolling settles.
@@ -211,6 +232,19 @@ export class SelectionPhrase implements OnDestroy {
     if (!this.canSave()) return;
     this.failure.set('');
     const failure = await this.save()(clean(this.draft()), kind);
+    if (failure === null) {
+      document.getSelection()?.removeAllRanges();
+      this.dialog().nativeElement.close();
+    } else {
+      this.failure.set(failure);
+    }
+  }
+
+  /** The page's own check opens over this modal; cancelling it leaves this one open as it was. */
+  async chooseDelete() {
+    if (!this.canDelete()) return;
+    this.failure.set('');
+    const failure = await this.saveDelete()(clean(this.draft()));
     if (failure === null) {
       document.getSelection()?.removeAllRanges();
       this.dialog().nativeElement.close();

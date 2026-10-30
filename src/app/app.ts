@@ -614,7 +614,7 @@ export class App implements OnDestroy {
   };
   /**
    * A delete phrase is saved only after the owner has seen how much mail it reaches (the owner,
-   * 2026-10-17). Null to go ahead, else why not.
+   * 2026-10-17). Null to go ahead, '' when the owner cancelled, else why not.
    */
   private async checkDeletePhrase(phrase: string): Promise<string | null> {
     let preview: DeletePreview;
@@ -628,7 +628,7 @@ export class App implements OnDestroy {
     this.deleteCheck.set(preview);
     this.deleteCheckDialog()?.nativeElement.showModal();
     const go = await new Promise<boolean>((resolve) => (this.settleDeleteCheck = resolve));
-    return go ? null : 'Not added.';
+    return go ? null : '';
   }
   answerDeleteCheck(go: boolean) {
     const settle = this.settleDeleteCheck;
@@ -663,22 +663,30 @@ export class App implements OnDestroy {
   togglePhrase(id: string) {
     this.openPhraseId.update((open) => (open === id ? '' : id));
   }
-  /** Saved only after the owner has seen how much mail the phrase reaches. */
   async addDeletePhrase() {
     const phrase = this.deletePhraseDraft.trim();
-    if (phrase.length < 2 || this.busy() || this.checkingDelete()) return;
+    if (phrase.length < 2) return;
+    if ((await this.saveDeletePhrase(phrase)) === null) this.deletePhraseDraft = '';
+  }
+  /** Text selected in a pitch and made a delete phrase from the selection modal: null once saved, '' if cancelled, else why not. */
+  readonly deleteSelection = (phrase: string) => this.saveDeletePhrase(phrase);
+  /** Saved only after the owner has seen how much mail the phrase reaches. */
+  private async saveDeletePhrase(phrase: string): Promise<string | null> {
+    if (this.busy() || this.checkingDelete()) return 'Still saving the last change; try again in a moment.';
     this.checkingDelete.set(true);
+    let refused: string | null;
     try {
-      if (await this.checkDeletePhrase(phrase)) return;
+      refused = await this.checkDeletePhrase(phrase);
     } finally {
       this.checkingDelete.set(false);
     }
-    if (await this.changeDeletePhrases(() => this.request<DeletePhrase[]>('delete-phrases', 'POST', { phrase }))) {
-      this.deletePhraseDraft = '';
-      this.toast(`Deleting mail with “${phrase}”`);
-      // The pitches it passed leave the Inbox now, not at the next background refresh.
-      void this.refresh();
-    }
+    if (refused !== null) return refused;
+    if (!(await this.changeDeletePhrases(() => this.request<DeletePhrase[]>('delete-phrases', 'POST', { phrase }))))
+      return this.error() || 'The delete phrase was not added.';
+    this.toast(`Deleting mail with “${phrase}”`);
+    // The pitches it passed leave the Inbox now, not at the next background refresh.
+    void this.refresh();
+    return null;
   }
   removeDeletePhrase(row: DeletePhrase) {
     void this.changeDeletePhrases(() => this.request<DeletePhrase[]>(`delete-phrases/${encodeURIComponent(row.id)}`, 'DELETE'));
