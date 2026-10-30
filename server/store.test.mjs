@@ -771,3 +771,76 @@ test('a delete phrase in the subject of a later email passes the thread when the
     assert.equal(rowOf().deletedBy.phrase, 'C2C only');
     assert.ok(store.deletePhrases()[0].sweptAt);
   }));
+test('once, every passed pitch is queued for its Gmail delete, however it was passed', () =>
+  withStore((store, dir) => {
+    store.import([
+      { ...message, id: 'a@x', threadId: 'a@x', source: 'mail-worker' },
+      { ...message, id: 'b@x', threadId: 'b@x', source: 'mail-worker', subject: 'Angular Developer two' },
+      { ...message, id: 'c@x', threadId: 'c@x', subject: 'Angular Developer three', account: null },
+    ]);
+    const [a, b, c] = store.snapshot().opportunities;
+    for (const row of [a, c]) store.update(row.id, { status: 'Passed' });
+    // Saved before the sweep existed: passed, nothing pending.
+    const path = join(dir, 'opportunities.json');
+    const saved = JSON.parse(readFileSync(path, 'utf8'));
+    delete saved.passedMailSwept;
+    for (const row of saved.opportunities) delete row.trashPending;
+    writeFileSync(path, JSON.stringify(saved));
+    const rows = createStore(dir).snapshot().opportunities;
+    const pending = (id) => rows.find((row) => row.id === id).trashPending;
+    assert.equal(pending(a.id), true);
+    assert.equal(pending(b.id), undefined, 'not passed');
+    assert.equal(pending(c.id), undefined, 'a pasted email has nothing in Gmail');
+    // Only once: a delete that finished stays finished across restarts.
+    const reopened = createStore(dir);
+    reopened.settleTrash(a.id, reopened.snapshot().opportunities.find((row) => row.id === a.id).messageIds);
+    assert.equal('trashPending' in createStore(dir).snapshot().opportunities.find((row) => row.id === a.id), false);
+  }));
+test('an answer to my reply brings a passed pitch back as Maybe and keeps its mail', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@pp', threadId: 'root@pp', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.recordReply(id, { id: 'mine@me', from: 'me@example.com', to: message.from, subject: 'Re', body: 'Hi', sentAt: '2026-09-18T10:00:00.000Z' });
+    store.update(id, { status: 'Passed' });
+    store.setTrashPending(id, false);
+    store.import([{ ...message, id: 'answer@pp', threadId: 'root@pp', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Maybe');
+    assert.equal('trashPending' in row, false);
+  }));
+test('later mail in a passed thread that is not an answer to me is deleted with it', () =>
+  withStore((store) => {
+    store.import([{ ...message, id: 'root@pq', threadId: 'root@pq', source: 'mail-worker' }]);
+    const id = store.snapshot().opportunities[0].id;
+    store.update(id, { status: 'Passed' });
+    store.setTrashPending(id, false);
+    store.import([{ ...message, id: 'again@pq', threadId: 'root@pq', source: 'mail-worker', receivedAt: '2026-09-18T12:00:00.000Z' }]);
+    const row = store.snapshot().opportunities[0];
+    assert.equal(row.status, 'Passed');
+    assert.equal(row.trashPending, true);
+  }));
+test('once, every delete phrase sweeps again, so a pitch a voicemail once exempted is passed', () =>
+  withStore((store, dir) => {
+    store.import([
+      { ...message, id: 'vm@x', threadId: 'vm@x', source: 'mail-worker', body: 'Java Developer onsite' },
+      { ...message, id: 'back@x', threadId: 'back@x', source: 'mail-worker', subject: 'Angular Developer two', body: 'Java Developer onsite' },
+    ], { synced: true });
+    const [vm, back] = store.snapshot().opportunities;
+    // The first sweep skipped the pitch with a voicemail; the other was passed and moved back to New by hand.
+    store.addDeletePhrase({ phrase: 'Java Developer' }, new Set([vm.id]));
+    store.update(back.id, { status: 'New' });
+    store.import([], { synced: true, exclude: new Set([vm.id]) });
+    assert.equal(store.snapshot().opportunities.find((row) => row.id === vm.id).status, 'New');
+    assert.ok(store.deletePhrases().every((row) => row.sweptAt));
+    const path = join(dir, 'opportunities.json');
+    const saved = JSON.parse(readFileSync(path, 'utf8'));
+    delete saved.passedMailSwept;
+    writeFileSync(path, JSON.stringify(saved));
+    const reopened = createStore(dir);
+    reopened.import([], { synced: true });
+    const rows = reopened.snapshot().opportunities;
+    assert.equal(rows.find((row) => row.id === vm.id).status, 'Passed');
+    assert.equal(rows.find((row) => row.id === vm.id).deletedBy.phrase, 'Java Developer');
+    assert.equal(rows.find((row) => row.id === back.id).status, 'New', 'moved back by hand stays');
+    assert.ok(reopened.deletePhrases().every((row) => row.sweptAt));
+  }));
