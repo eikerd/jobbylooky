@@ -261,6 +261,9 @@
                   @if (row.status === 'Passed' && row.repeatOf) {
                     <span class="rejected-by" [attr.title]="'Repeats the ' + (row.repeatOf.receivedAt | date: 'MMM d') + ' pitch you passed'">Repeat</span>
                   }
+                  @if (row.status === 'Passed' && row.goneFromGmail) {
+                    <span class="rejected-by" title="Its emails were deleted in Gmail">🗑 Gmail</span>
+                  }
                   @if (row.replyReceivedAt && folder() !== 'Pursuing') {
                     <span class="replied" [attr.title]="'Replied ' + (row.replyReceivedAt | date: 'MMM d, h:mm a')">↩ replied <app-age [at]="row.replyReceivedAt" /></span>
                   }
@@ -363,6 +366,9 @@
             }
             @if (row.repeatOf && row.status === 'Passed') {
               <p class="auto-passed">Passed automatically {{ row.repeatOf.at | date: 'MMM d' }} (<app-age [at]="row.repeatOf.at" />): it repeats the {{ row.repeatOf.receivedAt | date: 'MMM d' }} pitch you passed.</p>
+            }
+            @if (row.goneFromGmail && row.status === 'Passed') {
+              <p class="auto-passed">Passed automatically {{ row.goneFromGmail.at | date: 'MMM d' }} (<app-age [at]="row.goneFromGmail.at" />): its emails were deleted in Gmail.</p>
             }
             <p class="received-detail">
               <strong><app-age [at]="row.receivedAt" /></strong>

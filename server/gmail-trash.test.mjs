@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { createTrasher, gmailIds } from './gmail-trash.mjs';
+import { createPresence, createTrasher, gmailIds } from './gmail-trash.mjs';
 
 function fakeImap(inbox) {
   const calls = { moved: [], searched: [], loggedOut: false, released: false };
@@ -76,4 +76,51 @@ test('a refused Gmail login is reported, not an uncaught error event that kills 
   const trasher = createTrasher({ SMTP_USER: 'me@gmail.com', SMTP_PASS: 'x' }, null, RefusingImap);
   await assert.rejects(trasher.trash(['a@recruiter.com']), /Connection not available/);
   await new Promise((resolve) => setImmediate(resolve));
+});
+
+/** All Mail holding `mail` (uid → Message-ID), searched the way Gmail's IMAP answers OR'd header terms. */
+function fakeAllMail(mail, { failSearch = false } = {}) {
+  const calls = { locked: null, searches: 0, loggedOut: false, released: false };
+  const terms = (query) => (query.or ?? [query]).map((term) => term.header['message-id']);
+  const client = {
+    list: async () => [{ path: 'INBOX' }, { path: '[Gmail]/All Mail', specialUse: '\\All' }],
+    getMailboxLock: async (path, options) => {
+      calls.locked = { path, options };
+      return { release: () => (calls.released = true) };
+    },
+    search: async (query) => {
+      calls.searches++;
+      if (failSearch) return false;
+      const wanted = terms(query);
+      return Object.entries(mail).filter(([, id]) => wanted.includes(id)).map(([uid]) => Number(uid));
+    },
+    async *fetch(range) {
+      for (const uid of range.split(',')) yield { uid: Number(uid), envelope: { messageId: `<${mail[uid]}>` } };
+    },
+    logout: async () => (calls.loggedOut = true),
+  };
+  return { calls, connect: async () => client };
+}
+
+test('presence names the emails All Mail no longer holds, read-only, in batches', async () => {
+  const mail = Object.fromEntries(Array.from({ length: 30 }, (_, n) => [n + 1, `kept${n}@recruiter.com`]));
+  const { calls, connect } = fakeAllMail(mail);
+  const asked = [...Object.values(mail), '<gone@recruiter.com>', 'Kept0@Recruiter.com', '6f1c2b9e-0000-4000-8000-000000000000'];
+  assert.deepEqual(await createPresence({}, connect).missing(asked), ['gone@recruiter.com']);
+  assert.deepEqual(calls.locked, { path: '[Gmail]/All Mail', options: { readOnly: true } });
+  assert.equal(calls.searches, 2);
+  assert.ok(calls.released && calls.loggedOut);
+});
+
+test('a failed Gmail search is an error, never "every email was deleted"', async () => {
+  const { calls, connect } = fakeAllMail({}, { failSearch: true });
+  await assert.rejects(createPresence({}, connect).missing(['a@recruiter.com']), /did not answer/);
+  assert.ok(calls.released && calls.loggedOut);
+});
+
+test('presence without credentials is off, and pasted emails never open Gmail', async () => {
+  assert.equal(createPresence({}), null);
+  let opened = false;
+  assert.deepEqual(await createPresence({}, async () => (opened = true)).missing(['6f1c2b9e-0000-4000-8000-000000000000']), []);
+  assert.equal(opened, false);
 });
