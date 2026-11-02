@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { validRule, liveRejection, ruleBudget } from './reject-rules.mjs';
+import { gmailIds } from './gmail-trash.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -68,7 +69,7 @@ const engaged = (row) =>
   row.status !== 'New' ||
   Boolean(row.replies?.some((reply) => !reply.preview)) ||
   Boolean(row.notes || row.nextAction || row.followUp) ||
-  Boolean(row.rejectedBy || row.repeatOf || row.deletedBy);
+  Boolean(row.rejectedBy || row.repeatOf || row.deletedBy || row.goneFromGmail);
 
 /** A pitch a delete phrase may pass from the mail already here: synced, untouched, and no answer to the owner. */
 const sweepable = (row, exclude = new Set()) => row.source !== 'manual' && !row.respondsTo && !engaged(row) && !exclude.has(row.id);
@@ -431,6 +432,24 @@ export function createStore(directory) {
       if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
       const covered = new Set(trashedIds);
       return this.setTrashPending(id, !row.messageIds.every((messageId) => covered.has(messageId)));
+    },
+    /**
+     * Passes every listed pitch (New or Maybe) whose emails Gmail no longer has, all of them, so
+     * deleting a pitch's mail in Gmail takes it off the list. `missing`: the Message-IDs Gmail could
+     * not find. Nothing is left to delete, so nothing is pending. The marker stays when the owner
+     * moves the pitch back, so the next check leaves it alone. The owner, 2026-11-02: "I'd like for a
+     * delete from the emails to remove it from jobbylooky in a reasonable amount of time."
+     */
+    passGone(missing) {
+      const next = structuredClone(state);
+      const at = new Date().toISOString();
+      const gone = next.opportunities.filter((row) => {
+        const ids = gmailIds(row.messageIds);
+        return ['New', 'Maybe'].includes(row.status) && !row.goneFromGmail && ids.length && ids.every((id) => missing.has(id));
+      });
+      for (const row of gone) Object.assign(row, { status: 'Passed', goneFromGmail: { at } });
+      if (gone.length) commit(next);
+      return gone.map((row) => row.id);
     },
     rejectRules: () => structuredClone(state.rejectRules ?? []),
     addRejectRule(input) {
