@@ -553,10 +553,11 @@ export class App implements OnDestroy {
     const name = row.from.match(/^\s*"?([A-Za-z][A-Za-z'-]*)[^<]*</)?.[1] ?? '';
     const role = row.title.split(' @ ')[0].trim();
     const about = role ? `about the ${role} role` : 'about this role';
+    const signOff = `Thanks,\nErnie\nUS Citizen - w2 + benefits only`;
     const body = {
-      plain: `I'd like more information about this position.\n\n`,
-      resume: `Thanks for reaching out ${about}. I'm interested, and I've attached my latest resume.\n\nHappy to find a time to talk.\n\nThanks,\nErnie`,
-      client: `Thanks for reaching out ${about}. It sounds interesting.\n\nBefore we go further, could you share who the end client is? It helps me make sure I haven't already been submitted there through another firm, and lets me tailor my resume to their environment.\n\nThanks,\nErnie`,
+      plain: `I'd like more information about this position.\n\n${signOff}`,
+      resume: `Thanks for reaching out ${about}. I'm interested, and I've attached my latest resume.\n\nHappy to find a time to talk.\n\n${signOff}`,
+      client: `Thanks for reaching out ${about}. It sounds interesting.\n\nBefore we go further, could you share who the end client is? It helps me make sure I haven't already been submitted there through another firm, and lets me tailor my resume to their environment.\n\n${signOff}`,
     }[kind];
     this.replyTemplate = `Hi${name ? ` ${name}` : ''},\n\n${body}`;
     this.replyDraft = this.replyTemplate;
