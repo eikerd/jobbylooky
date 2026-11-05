@@ -27,6 +27,15 @@
         "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && d=$(mktemp -d) && cp data/opportunities.json \"$d/\" && DATA_DIR=\"$d\" MAIL_SEND_MODE=preview PORT=4319 npm start"
       ],
       "port": 4319
+    },
+    {
+      "name": "jobbylooky-chungus-copy",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "set -o pipefail && source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run build && d=$(mktemp -d) && trap 'rm -rf \"$d\"' EXIT && trap 'exit 143' TERM INT && ssh chungus 'docker exec jobbylooky tar -C /app/data -cf - opportunities.json voicemails.json voicemail-audio link-checks.json' | tar -C \"$d\" -xf - && DATA_DIR=\"$d\" MAIL_SEND_MODE=preview PORT=4320 npm start"
+      ],
+      "port": 4320
     }
   ]
 }
