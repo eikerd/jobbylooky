@@ -25,6 +25,7 @@ import { Postings } from './postings.component';
 import { Clients, clearClientDraft, hasClientDraft } from './clients.component';
 import { clientLabel, clientsByPitch, fingerprintKey } from './clients';
 import { ConvoTrail } from './convo-trail.component';
+import { folderRows } from './folder';
 
 interface Connection {
   configured: boolean;
@@ -152,13 +153,8 @@ export class App implements OnDestroy {
   private poll: ReturnType<typeof setInterval>;
   private revision = 0;
   /**
-   * The pitch whose voicemail was just seen: its job keeps its place until another job is opened.
-   * A pitch id, not a group id, because a likely group's id changes when a newer pitch joins it.
-   */
-  private readonly pinnedWhileOpen = signal('');
-  /**
    * Voicemails marked seen in this page ("pitchId voicemailId"). A poll that read the server just
-   * before the seen request committed cannot pin them again; a voicemail that arrives later can.
+   * before the seen request committed cannot make them unseen again; a voicemail that arrives later can.
    */
   private readonly seenHere = new Set<string>();
   private withSeenHere(groups: JobGroup[]): JobGroup[] {
@@ -170,29 +166,12 @@ export class App implements OnDestroy {
     };
     return groups.map((group) => ({ ...group, pitches: group.pitches.map(apply) }));
   }
-  readonly visible = computed(() => {
-    const folder = this.folder();
-    const matchesFolder = (row: Opportunity) =>
-      folder === 'All opportunities' ||
-      (folder === 'Inbox' && row.status === 'New') ||
-      (folder === 'Pursuing' && ['Pursue', 'Applied', 'Interviewing', 'Offer'].includes(row.status)) ||
-      row.status === folder;
-    return this.jobGroups()
-      .filter(group => group.pitches.some(matchesFolder))
-      .map(group => ({ ...group, representative: group.pitches.find(matchesFolder)! }))
-      // A job with an unseen voicemail is pinned above everything else, newest first within each.
-      .sort((a, b) =>
-        Number(this.pinned(b)) - Number(this.pinned(a)) ||
-        Date.parse(b.representative.receivedAt) - Date.parse(a.representative.receivedAt));
-  });
+  readonly visible = computed(() => folderRows(this.jobGroups(), this.folder()));
   /** Ticks on rows that left the folder since, or were passed already, are ignored, not counted. */
   readonly checkedRows = computed(() => {
     const ids = this.checked();
     return this.visible().map((group) => group.representative).filter((row) => ids.has(row.id) && row.status !== 'Passed');
   });
-  private pinned(group: JobGroup) {
-    return group.pitches.some((row) => row.id === this.pinnedWhileOpen() || row.voicemailUnseen);
-  }
   /** The newest voicemail across a job's pitches, for its row badge. */
   groupVoicemail(group: JobGroup) {
     const all = group.pitches.flatMap((row) => row.voicemails ?? []);
@@ -445,16 +424,15 @@ export class App implements OnDestroy {
     return !this.hasUnsavedWork() || window.confirm('Discard your unsaved changes?');
   }
   /**
-   * A click or a pick from the group list. Opening a pitch unpins it: the voicemails it shows count
-   * as seen. A queue row opens the job's pitch that has an unseen voicemail, so what is marked seen
-   * is what is on screen; another pitch's voicemail keeps the job pinned until it is opened too.
-   * Load, folder changes and moving on after a Pass call select() and leave the pin alone.
+   * A click or a pick from the group list. Opening a pitch marks the voicemails it shows as seen.
+   * A queue row opens the job's pitch that has an unseen voicemail, so what is marked seen is what
+   * is on screen; another pitch's voicemail keeps the job's badge yellow until it is opened too.
+   * Load, folder changes and moving on after a Pass call select() and mark nothing seen.
    */
   open(row: Opportunity, fromQueue = false) {
     const group = this.jobGroups().find((item) => item.pitches.some((pitch) => pitch.id === row.id));
     const target = (fromQueue && !row.voicemailUnseen && group?.pitches.find((pitch) => pitch.voicemailUnseen)) || row;
     if (!this.select(target) || !target.voicemailUnseen || !group) return;
-    this.pinnedWhileOpen.set(target.id);
     void this.markVoicemailsSeen(target);
   }
   private async markVoicemailsSeen({ id, voicemails = [] }: Opportunity) {
@@ -464,7 +442,7 @@ export class App implements OnDestroy {
     try {
       await this.request(`opportunities/${encodeURIComponent(id)}/voicemails-seen`, 'POST', {});
     } catch (error) {
-      // Pinned again at once, with the reason, rather than reappearing unexplained at the next poll.
+      // Unseen again at once, with the reason, rather than reappearing unexplained at the next poll.
       keys.forEach((key) => this.seenHere.delete(key));
       this.revision++;
       void this.refresh();
@@ -483,9 +461,6 @@ export class App implements OnDestroy {
   /** False when nothing changed: busy, or the user kept their unsaved work. */
   select(row: Opportunity) {
     if (this.busy() || !this.canLeave()) return false;
-    const pinned = this.pinnedWhileOpen();
-    if (pinned && !this.jobGroups().find((group) => group.pitches.some((pitch) => pitch.id === row.id))?.pitches.some((pitch) => pitch.id === pinned))
-      this.pinnedWhileOpen.set('');
     this.selectedId.set(row.id);
     this.detailPane()?.nativeElement.scrollTo({ top: 0 });
     this.notes = row.notes;

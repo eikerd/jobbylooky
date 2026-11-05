@@ -29,7 +29,7 @@ export interface Opportunity {
   rejectedBy?: { id: string; name: string; at: string };
   /** Voicemails the Mac's sweep tied to this pitch, newest first. */
   voicemails?: PitchVoicemail[];
-  /** A voicemail not yet seen: the pitch is pinned to the top until it is opened. */
+  /** A voicemail not yet seen: the pitch's ☎ badge is yellow until it is opened. */
   voicemailUnseen?: boolean;
   /** What the Mac's daily link sweep found at each visitable link in the body. */
   linkChecks?: LinkCheck[];

@@ -49,7 +49,7 @@ The UI refreshes every 30 seconds. Every folder sorts newest received first, reg
 
 ## Voicemails from recruiters
 
-A Claude routine on the owner's Mac sweeps the Phone app's visual voicemail at noon and midnight ([mac/README.md](mac/README.md)). A voicemail whose caller's number appears in a pitch's email is pushed to the app with its transcript and audio; job-sounding voicemails without a number match are judged by the routine and pushed as a "likely match" when they name a pitch's recruiter or company. A job with an unseen voicemail is pinned to the top with a yellow ☎ until it is opened. Voicemails live in `data/voicemails.json` and `data/voicemail-audio/`, apart from `opportunities.json`; nothing else from the phone leaves the Mac.
+A Claude routine on the owner's Mac sweeps the Phone app's visual voicemail at noon and midnight ([mac/README.md](mac/README.md)). A voicemail whose caller's number appears in a pitch's email is pushed to the app with its transcript and audio; job-sounding voicemails without a number match are judged by the routine and pushed as a "likely match" when they name a pitch's recruiter or company. A job with an unseen voicemail shows a yellow ☎ until it is opened; it keeps its newest-first place in the list. Voicemails live in `data/voicemails.json` and `data/voicemail-audio/`, apart from `opportunities.json`; nothing else from the phone leaves the Mac.
 
 ## Recruiter profiles and posting history
 
