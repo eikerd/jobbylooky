@@ -18,10 +18,14 @@ test('a folder lists jobs newest first, an unseen voicemail does not jump the qu
   assert.deepEqual(rows.map((row) => row.representative.id), ['today', 'yesterday', 'mid', 'old-voicemail']);
 });
 
-test('a job is placed by its newest pitch in that folder', () => {
+test('a job is placed by its newest pitch in that folder, not an older match or another folder\'s pitch', () => {
   const rows = folderRows(
     [
-      group(pitch('a-new', '2026-11-05T10:00:00Z', { status: 'New' }), pitch('a-pursue', '2026-10-01T10:00:00Z')),
+      group(
+        pitch('a-new', '2026-11-05T10:00:00Z', { status: 'New' }),
+        pitch('a-pursue', '2026-10-01T10:00:00Z'),
+        pitch('a-older', '2026-09-01T10:00:00Z', { status: 'Applied' }),
+      ),
       group(pitch('b-pursue', '2026-10-15T10:00:00Z')),
     ],
     'Pursuing',
