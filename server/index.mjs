@@ -9,7 +9,8 @@ import { readWorker, countPhraseMail } from './mail-worker.mjs';
 import { latestResume } from './resume.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { createMailer, replyRecipient } from './mailer.mjs';
-import { createTrasher, gmailIds } from './gmail-trash.mjs';
+import { createTrasher, createPresence, gmailIds } from './gmail-trash.mjs';
+import { createGoneCheck, GONE_CHECK_MS } from './gone-mail.mjs';
 import { createGmailLinker, threadUrl, searchUrl } from './gmail-link.mjs';
 import { awaitingTrash, createPassTrash, trashFailureText } from './pass-trash.mjs';
 import { createVoicemails, phoneNumbers, MAX_AUDIO_BYTES } from './voicemails.mjs';
@@ -23,6 +24,8 @@ const trasher = createTrasher();
 const gmailLinker = createGmailLinker();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const passTrash = createPassTrash({ store, trasher });
+const presence = createPresence();
+const goneCheck = presence && createGoneCheck({ store, presence, account: process.env.SMTP_USER });
 const voicemails = createVoicemails(resolve(root, process.env.DATA_DIR || 'data'));
 const linkChecks = createLinkChecks(resolve(root, process.env.DATA_DIR || 'data'));
 /** Rows as the page sees them: with their voicemails and what the link sweep found. */
@@ -133,6 +136,19 @@ function autoTrashError() {
   // Un-passed, or deleted by a later Pass, since it failed: no longer ours to report.
   const pending = new Set(store.snapshot().opportunities.filter((row) => row.status === 'Passed' && row.trashPending).map((row) => row.id));
   return trashFailureText([...autoTrashFailures].filter(([id]) => pending.has(id)).map(([, failure]) => failure));
+}
+/** Passes listed pitches whose emails were deleted in Gmail; a failure shows in the connection banner. */
+let goneError = '';
+function scheduleGoneCheck() {
+  setTimeout(async () => {
+    try {
+      await goneCheck.check();
+      goneError = '';
+    } catch (error) {
+      goneError = `Jobbylooky could not ask Gmail which emails were deleted: ${error.message}. It tries again in ${GONE_CHECK_MS / 60000} minutes.`;
+    }
+    scheduleGoneCheck();
+  }, GONE_CHECK_MS).unref();
 }
 function schedule() {
   nextCheck = new Date(Date.now() + intervalMs).toISOString();
@@ -277,7 +293,7 @@ export const server = createServer(async (req, res) => {
         canReply: Boolean(mailer),
         replyPreview: Boolean(mailer?.preview),
         syncing,
-        error: syncError || autoTrashError(),
+        error: syncError || autoTrashError() || goneError,
         account,
         lastSync,
         importedAt,
@@ -474,6 +490,7 @@ export const server = createServer(async (req, res) => {
 server.listen(port, process.env.BIND_HOST || '127.0.0.1', () =>
   console.log(`Jobbylooky: ${publicOrigin}${BASE}/`),
 );
+if (goneCheck) scheduleGoneCheck();
 if (workerUrl) {
   sync()
     .catch(() => {})

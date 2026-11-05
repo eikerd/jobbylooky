@@ -34,6 +34,49 @@ export function imapOpener(env = process.env, Imap = ImapFlow) {
   };
 }
 
+// How many Message-IDs one IMAP search asks Gmail about.
+const PRESENCE_BATCH = 25;
+
+/**
+ * Asks Gmail which emails it no longer has: deleted (in Trash or gone for good) or marked spam.
+ * All Mail holds everything else, archived mail included, and is opened read-only. Same app
+ * password as replies; null when that is not set up.
+ */
+export function createPresence(env = process.env, connect = null, Imap = ImapFlow) {
+  const open = connect || imapOpener(env, Imap);
+  if (!open) return null;
+  return {
+    /** The ones of `messageIds` All Mail does not hold, normalised as gmailIds() does. */
+    async missing(messageIds) {
+      const ids = gmailIds(messageIds);
+      if (!ids.length) return [];
+      const client = await open();
+      try {
+        const allMail = (await client.list()).find((box) => box.specialUse === '\\All')?.path;
+        if (!allMail) throw new Error('Gmail shows no All Mail folder over IMAP');
+        const lock = await client.getMailboxLock(allMail, { readOnly: true });
+        try {
+          const found = new Set();
+          for (let start = 0; start < ids.length; start += PRESENCE_BATCH) {
+            const terms = ids.slice(start, start + PRESENCE_BATCH).map((id) => ({ header: { 'message-id': id } }));
+            const uids = await client.search(terms.length === 1 ? terms[0] : { or: terms }, { uid: true });
+            // ImapFlow answers a failed search with false, which must not read as "all deleted".
+            if (!Array.isArray(uids)) throw new Error('Gmail did not answer the search');
+            if (!uids.length) continue;
+            for await (const message of client.fetch(uids.join(','), { envelope: true }, { uid: true }))
+              found.add(String(message.envelope?.messageId ?? '').replace(/[<>]/g, '').toLowerCase());
+          }
+          return ids.filter((id) => !found.has(id.toLowerCase()));
+        } finally {
+          lock.release();
+        }
+      } finally {
+        await client.logout().catch(() => client.close?.());
+      }
+    },
+  };
+}
+
 /**
  * Moves a passed pitch's emails out of the Gmail inbox into Trash, where Gmail keeps
  * them for 30 days. Same app password as replies (SMTP_USER/SMTP_PASS). Returns null
