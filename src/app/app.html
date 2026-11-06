@@ -472,9 +472,9 @@
                 </div>
                 @for (branch of t.branches; track branch.nodes[0].key) {
                   <ol class="branch">
+                    @if (branch.tip; as tip) {<li class="tip" [class.yours]="tip.yours">{{ tip.yours ? '⏳ waiting on you' : '… no answer yet' }} · {{ tip.since }}</li>}
                     @for (node of branch.nodes; track node.key) {
-                      <li [class.root]="$first">
-                        @if (node.gap) {<p class="gap">↓ {{ node.gap }}</p>}
+                      <li [class.root]="$last">
                         <button type="button" class="node" [class.preview]="node.preview" [class.current]="node.rowId === row.id" [attr.aria-current]="node.rowId === row.id || null"
                           [attr.aria-expanded]="node.rowId ? null : openNodeKey() === node.key" [disabled]="busy() || (!node.rowId && !node.sent && !node.voicemail)" (click)="openNode(node)">
                           <span class="dot" [class.in]="node.way === 'in'" [class.pitch]="node.kind === 'pitch'" aria-hidden="true">{{ node.kind === 'pitch' ? '✉' : node.kind === 'call' ? '☎' : node.kind === 'voicemail' ? '🎙' : '↩' }}</span>
@@ -489,7 +489,7 @@
                             }
                             <ng-container *ngTemplateOutlet="bodyBlocks; context: { $implicit: emailBlocks() }" />
                             @if (quoteAt() > 0) {
-                              <button type="button" class="link-button quoted-toggle" [attr.aria-expanded]="showQuoted()" (click)="showQuoted.set(!showQuoted())">{{ showQuoted() ? 'Hide the quoted earlier emails' : '··· earlier emails hidden, already in the thread above' }}</button>
+                              <button type="button" class="link-button quoted-toggle" [attr.aria-expanded]="showQuoted()" (click)="showQuoted.set(!showQuoted())">{{ showQuoted() ? 'Hide the quoted earlier emails' : '··· earlier emails hidden, already in the thread below' }}</button>
                             }
                           </div>
                         } @else if (openNodeKey() === node.key) {
@@ -502,9 +502,9 @@
                             <p class="node-body">{{ voicemail.transcript || 'No transcript.' }}</p>
                           }
                         }
+                        @if (node.gap) {<p class="gap">↑ {{ node.gap }}</p>}
                       </li>
                     }
-                    @if (branch.tip; as tip) {<li class="tip" [class.yours]="tip.yours">{{ tip.yours ? '⏳ waiting on you' : '… no answer yet' }} · {{ tip.since }}</li>}
                   </ol>
                 }
               </section>

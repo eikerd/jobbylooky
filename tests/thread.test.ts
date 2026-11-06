@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { elapsed, quoteStart, snippet, threadOf } from '../src/app/thread.ts';
+import { elapsed, newestFirst, quoteStart, snippet, threadOf } from '../src/app/thread.ts';
 
 const pitch = (id: string, extra = {}) => ({ id, messageIds: [`${id}@m`], receivedAt: '2026-10-29T14:14:00Z', from: 'Dayakar K <dayakar@rapidit.com>', body: 'Hi Ernie,\n\nWe have an immediate need.', ...extra });
 const reply = (sentAt: string, extra = {}) => ({ id: `r${sentAt}`, to: 'dayakar@rapidit.com', from: 'me@gmail.com', subject: '', body: 'Hi,\n\nThanks for reaching out.', sentAt, ...extra });
@@ -97,4 +97,21 @@ test('a preview reply shows, marked, but opens no conversation and counts for no
   const branch = threadOf([mixed], [mixed], now)!.branches[0];
   assert.equal(branch.nodes[2].gap, 'you answered 2 h later');
   assert.deepEqual(branch.tip, { yours: false, since: '4 h 18 m' });
+});
+
+test('newest first: the newest branch on top, each pitch at the foot of its branch', () => {
+  const a = pitch('a', { receivedAt: '2026-10-25T13:02:00Z', replies: [reply('2026-10-26T15:40:00Z')] });
+  const b = pitch('c', { receivedAt: '2026-10-26T20:30:00Z', replies: [reply('2026-10-27T09:00:00Z')] });
+  const thread = threadOf([a, b], [a, b], now)!;
+  const shown = newestFirst(thread);
+  assert.deepEqual(shown.branches.map((item) => item.nodes.map((node) => node.key)), [['sent:r2026-10-27T09:00:00Z', 'row:c'], ['sent:r2026-10-26T15:40:00Z', 'row:a']]);
+  assert.deepEqual(shown.turn, thread.turn);
+  assert.equal(thread.branches[0].nodes[0].kind, 'pitch');
+});
+
+test('newest first: an older pitch answered later sits above a newer pitch gone quiet', () => {
+  const a = pitch('a', { receivedAt: '2026-10-25T13:02:00Z', replies: [reply('2026-10-29T09:00:00Z')] });
+  const b = pitch('c', { receivedAt: '2026-10-26T20:30:00Z', replies: [reply('2026-10-27T09:00:00Z')] });
+  const shown = newestFirst(threadOf([a, b], [a, b], now)!);
+  assert.deepEqual(shown.branches.map((item) => item.nodes.at(-1)!.key), ['row:a', 'row:c']);
 });

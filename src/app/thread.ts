@@ -178,3 +178,13 @@ export function threadOf(pitches: readonly Row[], all: readonly Row[] | Conversa
     turn: newest && { yours: newest.yours, since: newest.since },
   };
 }
+
+/**
+ * The thread as it reads on screen, newest at the top (the owner, 2026-10-30): the pitch at the foot of its branch, and
+ * the branch with the newest message first, so an old pitch answered today sits above a newer one gone quiet.
+ */
+export function newestFirst(thread: Thread): Thread {
+  const latest = (item: ThreadBranch) => item.nodes.filter((node) => !node.preview).reduce((at, node) => (node.at > at ? node.at : at), '');
+  const branches = thread.branches.map((item) => ({ item, at: latest(item) })).sort((a, b) => b.at.localeCompare(a.at));
+  return { ...thread, branches: branches.map(({ item }) => ({ ...item, nodes: [...item.nodes].reverse() })) };
+}
