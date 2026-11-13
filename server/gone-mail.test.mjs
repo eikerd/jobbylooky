@@ -109,3 +109,51 @@ test('checks asked for while one runs join it', () =>
     assert.equal(calls, 1);
     assert.deepEqual(a, b);
   }));
+
+test('new mail in a thread passed for Gmail deletion brings the pitch back, and nothing is queued to delete', () =>
+  withStore(async (store) => {
+    store.import([message(1)]);
+    store.update(rowFor(store, 1).id, { status: 'Maybe' });
+    await createGoneCheck({ store, presence: gmail() }).check();
+    assert.equal(rowFor(store, 1).status, 'Passed');
+    store.import([message(2, 'thread1')]);
+    const row = rowFor(store, 1);
+    assert.equal(row.status, 'Maybe');
+    assert.equal(row.trashPending, undefined);
+    assert.equal(row.goneFromGmail, undefined);
+  }));
+
+test('a pitch the owner passes by hand loses the Gmail marker, so new mail on it is deleted as usual', () =>
+  withStore(async (store) => {
+    store.import([message(1)]);
+    store.update(rowFor(store, 1).id, { status: 'Maybe' });
+    await createGoneCheck({ store, presence: gmail() }).check();
+    store.update(rowFor(store, 1).id, { status: 'New' });
+    store.update(rowFor(store, 1).id, { status: 'Passed' });
+    assert.equal(rowFor(store, 1).goneFromGmail, undefined);
+    store.import([message(2, 'thread1')]);
+    assert.equal(rowFor(store, 1).status, 'Passed');
+    assert.equal(rowFor(store, 1).trashPending, true);
+  }));
+
+test('a sent reply still in Gmail keeps the pitch, though the pitch itself was deleted', () =>
+  withStore(async (store) => {
+    store.import([message(1)]);
+    store.recordReply(rowFor(store, 1).id, { id: 'sent1@gmail.com', to: 'recruiter@example.com', sentAt: '2026-09-12T12:00:00.000Z' });
+    const presence = gmail(['sent1@gmail.com']);
+    assert.deepEqual(await createGoneCheck({ store, presence }).check(), []);
+    assert.ok(presence.asked.includes('sent1@gmail.com'));
+    assert.equal(rowFor(store, 1).status, 'New');
+  }));
+
+test('a pitch from another account sharing a Message-ID is never passed by this account\'s check', () =>
+  withStore(async (store) => {
+    store.import([{ ...message(1), account: 'me@gmail.com' }]);
+    store.import([{ ...message(1, 'otherthread'), id: '<m1@recruiter.com>', account: 'other@gmail.com', source: undefined }]);
+    const rows = store.snapshot().opportunities;
+    assert.equal(rows.length, 2);
+    const passed = await createGoneCheck({ store, presence: gmail(), account: 'me@gmail.com' }).check();
+    const after = store.snapshot().opportunities;
+    assert.deepEqual(after.filter((row) => row.status === 'Passed').map((row) => row.account), ['me@gmail.com']);
+    assert.equal(passed.length, 1);
+  }));

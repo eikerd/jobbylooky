@@ -67,7 +67,7 @@ export function passedOriginal(rows, row) {
     other.replies?.some((reply) => !reply.preview) ||
     (other.status === 'New' && (other.notes || other.nextAction || other.followUp)) ||
     // An automatic pass the owner undid: keeping it New is a decision about this job.
-    (other.status === 'New' && Boolean(other.repeatOf || other.rejectedBy || other.deletedBy));
+    (other.status === 'New' && Boolean(other.repeatOf || other.rejectedBy || other.deletedBy || other.goneFromGmail));
   if (engaged(row)) return null;
   const item = features(row);
   const from = sender(row.from);

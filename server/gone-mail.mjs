@@ -1,4 +1,4 @@
-import { gmailIds } from './gmail-trash.mjs';
+import { threadMailIds } from './store.mjs';
 
 // How often Gmail is asked whether the listed pitches' emails still exist.
 export const GONE_CHECK_MS = 10 * 60 * 1000;
@@ -12,7 +12,7 @@ export const listedInGmail = (rows, account = '') =>
       ['New', 'Maybe'].includes(row.status) &&
       !row.goneFromGmail &&
       (!row.account || !account || row.account.toLowerCase() === account.toLowerCase()) &&
-      gmailIds(row.messageIds).length,
+      threadMailIds(row).length,
   );
 
 /**
@@ -22,13 +22,14 @@ export const listedInGmail = (rows, account = '') =>
 export function createGoneCheck({ store, presence, account = '' }) {
   let running = null;
   async function run() {
-    const ids = [...new Set(listedInGmail(store.snapshot().opportunities, account).flatMap((row) => gmailIds(row.messageIds)))];
+    const rows = listedInGmail(store.snapshot().opportunities, account);
+    const ids = [...new Set(rows.flatMap(threadMailIds))];
     if (!ids.length) return [];
     const missing = new Set(await presence.missing(ids));
     if (ids.length >= IMPLAUSIBLE && missing.size === ids.length)
       throw new Error(`Gmail found none of the ${ids.length} emails on the list, so none were taken off it`);
     // Re-read inside the store: mail that arrived during the check was never asked about, so it keeps its pitch.
-    return store.passGone(missing);
+    return store.passGone(missing, new Set(rows.map((row) => row.id)));
   }
   return {
     check() {
