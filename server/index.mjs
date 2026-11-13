@@ -25,7 +25,7 @@ const gmailLinker = createGmailLinker();
 const store = createStore(resolve(root, process.env.DATA_DIR || 'data'));
 const passTrash = createPassTrash({ store, trasher });
 const presence = createPresence();
-const goneCheck = presence && createGoneCheck({ store, presence, account: process.env.SMTP_USER });
+const goneCheck = presence && createGoneCheck({ store, presence, account: process.env.SMTP_USER, kept: (id) => linkChecks.wasKept(id) });
 const voicemails = createVoicemails(resolve(root, process.env.DATA_DIR || 'data'));
 const linkChecks = createLinkChecks(resolve(root, process.env.DATA_DIR || 'data'));
 /** Rows as the page sees them: with their voicemails and what the link sweep found. */

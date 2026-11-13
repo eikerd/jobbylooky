@@ -157,3 +157,31 @@ test('a pitch from another account sharing a Message-ID is never passed by this 
     assert.deepEqual(after.filter((row) => row.status === 'Passed').map((row) => row.account), ['me@gmail.com']);
     assert.equal(passed.length, 1);
   }));
+
+test('a pitch the owner moves back from an automatic pass is never asked about: that pass may have deleted its mail', () => {
+  const at = '2026-09-20T00:00:00.000Z';
+  const rows = [
+    { id: 'a', status: 'New', messageIds: ['a@x.com'], deletedBy: { id: 'p', phrase: 'x', at } },
+    { id: 'b', status: 'New', messageIds: ['b@x.com'], rejectedBy: { id: 'r', name: 'x', at } },
+    { id: 'c', status: 'Maybe', messageIds: ['c@x.com'], repeatOf: { id: 'o', receivedAt: at, at } },
+    { id: 'd', status: 'New', messageIds: ['d@x.com'] },
+    { id: 'e', status: 'New', messageIds: ['e@x.com'] },
+  ];
+  assert.deepEqual(listedInGmail(rows, '', (id) => id === 'e').map((row) => row.id), ['d']);
+});
+
+test('mail jobbylooky deleted itself is not the owner deleting it; later mail the owner deletes is', () =>
+  withStore(async (store) => {
+    store.import([message(1)]);
+    const id = rowFor(store, 1).id;
+    store.update(id, { status: 'Passed' });
+    store.settleTrash(id, ['m1@recruiter.com']);
+    store.update(id, { status: 'New' });
+    const check = createGoneCheck({ store, presence: gmail() });
+    assert.deepEqual(await check.check(), []);
+    assert.equal(rowFor(store, 1).status, 'New');
+    store.import([message(2, 'thread1')]);
+    const presence = gmail();
+    assert.deepEqual(await createGoneCheck({ store, presence }).check(), [id]);
+    assert.deepEqual(presence.asked, ['m2@recruiter.com']);
+  }));
