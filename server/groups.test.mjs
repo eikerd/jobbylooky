@@ -100,6 +100,11 @@ test('a repeat the owner moved back to New vetoes later copies of the same posti
   const undone = rep('b', { status: 'New', repeatOf: { id: 'a', receivedAt: '2026-10-08T12:00:00Z', at: '2026-10-09T12:00:00Z' } });
   assert.equal(passedOriginal([passed, undone], rep('c', { subject: 'RE: Angular developer' })), null);
 });
+test('a pitch passed for Gmail deletion that the owner moved back to New vetoes later copies too', () => {
+  const passed = rep('a', { status: 'Passed', receivedAt: '2026-10-08T12:00:00Z' });
+  const kept = rep('b', { status: 'New', goneFromGmail: { at: '2026-10-09T12:00:00Z', from: 'New' } });
+  assert.equal(passedOriginal([passed, kept], rep('c', { subject: 'RE: Angular developer' })), null);
+});
 test('a different job title under the same generic subject is never a repeat', () => {
   const passed = rep('a', { status: 'Passed', subject: 'Immediate Requirement', title: 'Java Developer' });
   assert.equal(passedOriginal([passed], rep('c', { subject: 'Immediate Requirement', title: 'Angular Developer' })), null);

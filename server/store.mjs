@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { address as emailAddress } from './mailer.mjs';
 import { originalReceivedAt } from './received-date.mjs';
 import { validRule, liveRejection, ruleBudget } from './reject-rules.mjs';
+import { gmailIds } from './gmail-trash.mjs';
 
 /** Every import path (seed file, HTTP, mail-worker sync) passes through here. */
 function validMessages(messages) {
@@ -68,7 +69,29 @@ const engaged = (row) =>
   row.status !== 'New' ||
   Boolean(row.replies?.some((reply) => !reply.preview)) ||
   Boolean(row.notes || row.nextAction || row.followUp) ||
-  Boolean(row.rejectedBy || row.repeatOf || row.deletedBy);
+  Boolean(row.rejectedBy || row.repeatOf || row.deletedBy || row.goneFromGmail);
+
+/** The emails of a pitch's thread Gmail can be asked about: what came in and what the owner sent. */
+export const threadMailIds = (row) =>
+  gmailIds([...row.messageIds, ...(row.replies ?? []).filter((reply) => !reply.preview && reply.id).map((reply) => reply.id)]);
+
+/** The thread's emails, less any jobbylooky deleted itself: only the rest going missing is the owner's doing. */
+export function askableIds(row) {
+  const own = new Set(gmailIds(row.trashedIds ?? []));
+  return threadMailIds(row).filter((id) => !own.has(id));
+}
+
+/**
+ * New mail in a thread passed only because its emails were deleted in Gmail: the thread is alive
+ * again, so the pitch comes back as it was and the new mail is not queued for deletion. The marker
+ * goes, so deleting the thread again passes it again.
+ */
+function reviveGone(row) {
+  if (row.status !== 'Passed' || !row.goneFromGmail) return;
+  row.status = row.goneFromGmail.from ?? 'New';
+  delete row.goneFromGmail;
+  delete row.trashPending;
+}
 
 /** A pitch a delete phrase may pass from the mail already here: synced, untouched, and no answer to the owner. */
 const sweepable = (row, exclude = new Set()) => row.source !== 'manual' && !row.respondsTo && !engaged(row) && !exclude.has(row.id);
@@ -244,6 +267,7 @@ export function createStore(directory) {
             // A later email in a thread already deleted for a phrase joins that row, and its delete,
             // unless the owner undid that pass: then it joins the row and nothing is re-passed.
             threadRow.messageIds.push(message.id);
+            reviveGone(threadRow);
             threadRow.history = [...(threadRow.history ?? []), { id: message.id, receivedAt: message.receivedAt, from: message.from }];
             // Passed again by hand drops the marker; the delete queue needs it to pick the row up.
             if (threadRow.status === 'Passed')
@@ -292,6 +316,7 @@ export function createStore(directory) {
         }
         if (existing) {
           existing.messageIds.push(message.id);
+          reviveGone(existing);
           // New mail on a passed pitch is still in the inbox: the next mail check deletes it too.
           if (existing.status === 'Passed') existing.trashPending = true;
           noteReplyBack(existing, message);
@@ -427,10 +452,36 @@ export function createStore(directory) {
      * pending and the next mail check deletes it.
      */
     settleTrash(id, trashedIds) {
-      const row = state.opportunities.find((item) => item.id === id);
+      const next = structuredClone(state);
+      const row = next.opportunities.find((item) => item.id === id);
       if (!row) throw Object.assign(new Error('Opportunity not found.'), { status: 404 });
       const covered = new Set(trashedIds);
-      return this.setTrashPending(id, !row.messageIds.every((messageId) => covered.has(messageId)));
+      // Remembered so a pitch the owner moves back is never read as deleted by the owner in Gmail.
+      row.trashedIds = gmailIds([...(row.trashedIds ?? []), ...trashedIds]);
+      if (row.messageIds.every((messageId) => covered.has(messageId))) delete row.trashPending;
+      else row.trashPending = true;
+      commit(next);
+      return structuredClone(row);
+    },
+    /**
+     * Passes every listed pitch (New or Maybe) whose emails Gmail no longer has, all of them, so
+     * deleting a pitch's mail in Gmail takes it off the list. `missing`: the Message-IDs Gmail could
+     * not find; `checked`: the ids of the rows that were asked about, so a row from another account
+     * sharing a Message-ID is never passed. A sent reply still in Gmail keeps the pitch. Nothing is
+     * left to delete, so nothing is pending. The marker stays when the owner
+     * moves the pitch back, so the next check leaves it alone. The owner, 2026-11-02: "I'd like for a
+     * delete from the emails to remove it from jobbylooky in a reasonable amount of time."
+     */
+    passGone(missing, checked) {
+      const next = structuredClone(state);
+      const at = new Date().toISOString();
+      const gone = next.opportunities.filter((row) => {
+        const ids = askableIds(row);
+        return checked.has(row.id) && ['New', 'Maybe'].includes(row.status) && !row.goneFromGmail && ids.length && ids.every((id) => missing.has(id));
+      });
+      for (const row of gone) Object.assign(row, { status: 'Passed', goneFromGmail: { at, from: row.status } });
+      if (gone.length) commit(next);
+      return gone.map((row) => row.id);
     },
     rejectRules: () => structuredClone(state.rejectRules ?? []),
     addRejectRule(input) {
@@ -507,6 +558,7 @@ export function createStore(directory) {
           delete row.rejectedBy;
           delete row.repeatOf;
           delete row.deletedBy;
+          delete row.goneFromGmail;
         }
         row[key] = value;
       }

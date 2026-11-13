@@ -39,6 +39,8 @@ export interface Opportunity {
   deletedBy?: { id: string; phrase: string; at: string };
   /** Set when it arrived as the same posting, from the same recruiter, as a pitch already passed. */
   repeatOf?: { id: string; receivedAt: string; at: string };
+  /** Set when every one of its emails was deleted in Gmail, which passed it. */
+  goneFromGmail?: { at: string };
 }
 export interface LinkCheck {
   url: string;
